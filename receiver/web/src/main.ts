@@ -192,3 +192,5 @@ window.setInterval(()=>{
   el('audio-status').textContent=t(audio.isPlaying?'playing':'paused');media.setPlaying(audio.isPlaying);
 },750);
 render();fit();if(token) connection.connect();
+
+el('browser-check-show').onclick = () => (window as unknown as { F50BrowserCheck: { show(): void } }).F50BrowserCheck.show();
