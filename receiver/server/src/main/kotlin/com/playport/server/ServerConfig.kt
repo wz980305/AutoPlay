@@ -15,7 +15,10 @@ data class ServerConfig(
     val displayWidth: Int = 1280,
     val displayHeight: Int = 720,
     val displayFps: Int = 60,
-    val uiScale: Int = com.shilapi.xcertplay.airplay.CarPlayUiScale.DEFAULT,
+    /** CarPlay's size as the physical width told to the phone (DisplayState.SIZE_MM): 85 = 300 mm, the Tesla default.
+     *  A Model 3/Y panel is 332 mm wide; its borderless 1920 px stream at 300 mm draws controls ~11 % larger than
+     *  true, which read better from the driver's seat than the 250 mm "standard" (tesla_only_web_delta item 9). */
+    val uiScale: Int = DEFAULT_UI_SCALE,
     val hevc: Boolean = false,
     /** View areas of the display (the page's window shapes) and the one CarPlay starts in. */
     val displayAreas: List<ViewArea> = emptyList(),
@@ -40,6 +43,7 @@ data class ServerConfig(
 
     companion object {
         private const val TOKEN_BYTES = 16
+        const val DEFAULT_UI_SCALE = 85
 
         fun generateToken(): String {
             val bytes = ByteArray(TOKEN_BYTES).also(SecureRandom()::nextBytes)
@@ -126,7 +130,7 @@ data class ServerConfig(
                   --width <px>              Display width negotiated with the phone (default: 1280)
                   --height <px>             Display height negotiated with the phone (default: 720)
                   --fps <n>                 Display refresh rate (default: 60)
-                  --ui-scale <75|85|100|115>  CarPlay control size: larger canvas, smaller controls (default: 100)
+                  --ui-scale <75|85|100|115>  CarPlay size as physical width 350|300|250|200 mm (default: 85 = 300 mm)
                   --hevc                    Offer H.265/HEVC video (sharper at the same bitrate; browser must support it)
                   --rhd                     Right-hand-drive layout
                   --bind <address>          Bind address (default: auto-detect LAN address)

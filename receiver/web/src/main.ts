@@ -42,10 +42,17 @@ let urgentChange = '';
 let expectRestart = false, expectTimer = 0;
 interface Display { width: number; height: number; fps: number; uiScale: number; hevc: boolean; areas?: Area[]; area?: number; pending?: boolean; }
 let display: Display | null = null;
-/** Performance mode (the default): upsize each window to the sharpest size (long side at least 1280), then shrink it
- *  into the window. Off: the window's own size (minimum width 720), lighter but softer. 2026-10-23, in Display. */
+/** Performance mode: upsize each window to the sharpest size (long side at least 1280), then shrink it into the
+ *  window. Off (the Tesla default, 2026-10-26: the F50 and the iPhone run cooler, and a Tesla's panel is dense enough
+ *  at the window's own pixels): the window's own size (minimum width 720). 2026-10-23, in Advanced. */
 const performanceMode = el<HTMLInputElement>('performance-mode');
-performanceMode.checked = readFlag('f50-performance-mode') !== '0';
+performanceMode.checked = readFlag('f50-performance-mode') === '1';
+/** The 2560 long side (a 2.5K screen's own pixels) only when this browser proved fast AND the owner allowed it in
+ *  Advanced (f50-allow-2560): a Tesla's borderless page at 1.53 is 1922 px wide anyway, and an MCU2 (Atom) Tesla
+ *  must never be sent 2560 (hardware review H1). */
+const allow2560 = el<HTMLInputElement>('allow-2560');
+allow2560.checked = readFlag('f50-allow-2560') === '1';
+allow2560.onchange = () => { saveFlag('f50-allow-2560', allow2560.checked ? '1' : '0'); lastAutoTarget = ''; urgentChange = 'manual'; scheduleAuto(); };
 const performanceOn = () => performanceMode.checked;
 const nightSelect = el<HTMLSelectElement>('night-mode');
 nightSelect.value = parseNightMode(localStorage.getItem('f50-night-mode'));
@@ -368,11 +375,12 @@ async function adapt() {
   fit();
 }
 /** The window's own size, at the sharpest the box offers: the CSS size times the pixels used (the device pixel ratio
- *  with a fast decoder), long side 1280 to 1920 (2560 with a fast decoder). Each window size is its own CarPlay
- *  session (2026-10-23: one stream shared by several window shapes made small windows soft and cramped). */
+ *  with a fast decoder), long side 1280 to 1920 (2560 only with a fast decoder and f50-allow-2560). Each window size
+ *  is its own CarPlay session (2026-10-23: one stream shared by several window shapes made small windows soft and
+ *  cramped). */
 function autoTarget() {
   const pixels=fastDecoder()?Math.min(2,Math.max(1,window.devicePixelRatio||1)):1;
-  const max=fastDecoder()?2560:1920, width=screen.clientWidth*pixels, height=screen.clientHeight*pixels;
+  const max=fastDecoder()&&allow2560.checked?2560:1920, width=screen.clientWidth*pixels, height=screen.clientHeight*pixels;
   return performanceOn() ? suggestedResolution(width,height,max) : windowResolution(width,height,max);
 }
 el<HTMLSelectElement>('codec').value = readFlag('f50-codec') || 'auto';

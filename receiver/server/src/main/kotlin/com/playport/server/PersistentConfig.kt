@@ -13,7 +13,7 @@ data class DisplayPrefs(
     val height: Int = 720,
     // 30 by default: at 60 the iPhone encodes twice the frames on the cable and ran hot (2026-10-12 drive).
     val fps: Int = 30,
-    val uiScale: Int = 100,
+    val uiScale: Int = ServerConfig.DEFAULT_UI_SCALE,
     val hevc: Boolean = false,
     val areas: List<ViewArea> = emptyList(),
     val area: Int = 0,
