@@ -1,4 +1,4 @@
-import { MusicOutput } from './music-output';
+import { MusicOutput, type SongTimeline } from './music-output';
 import { audioStartTime } from './audio-timing';
 import { AudioCodec, type AudioConfigMessage, type AudioPacketMessage } from './protocol';
 
@@ -171,6 +171,11 @@ export class AudioEngine {
       state.music = null;
     }
     this.closeStream(streamType);
+  }
+
+  /** Keeps the music element's timeline on the song (music-output.ts). */
+  followMusic(song: SongTimeline | null): void {
+    for (const state of this.streams.values()) state.music?.follow(song);
   }
 
   pauseMusic(): void {

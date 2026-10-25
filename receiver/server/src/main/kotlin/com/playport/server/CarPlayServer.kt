@@ -421,10 +421,14 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         val artwork = com.shilapi.xcertplay.iap2.message.Iap2ArtworkReceiver(
             send = { channel.sendFileTransfer(it) { current() } },
             complete = { revision, id, bytes ->
-                current() && metadata.value.revision == revision && metadata.artworkId == id && hub.artwork(revision, bytes)
+                (current() && metadata.value.revision == revision && metadata.artworkId == id && hub.artwork(revision, bytes)).also {
+                    log.info("artwork id={} revision={} bytes={} sent to the page={} (song revision now {})",
+                        id, revision, bytes.size, it, metadata.value.revision)
+                }
             },
             clock = { System.nanoTime() / 1_000_000 },
-            onDiagnostic = { log.debug(it) },
+            // A few lines a song: covers are sometimes missing on the car, and the debug log is not kept.
+            onDiagnostic = { log.info(it) },
         )
         Thread({
             try {

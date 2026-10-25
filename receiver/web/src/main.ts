@@ -128,7 +128,7 @@ function server(message: ServerMessage) {
   // Straight back, also before CarPlay starts: the box pauses the picture while this page lags behind.
   if (message.type === 'mark') { connection.send({ type: 'ack', mark: message.mark ?? 0 }); return; }
   if(message.type === 'artwork' && message.artwork) { media.setArtwork(message.revision ?? 0,message.artwork); return; }
-  if (message.type === 'now-playing' && message.nowPlaying) { media.setMetadata(message.nowPlaying); return; }
+  if (message.type === 'now-playing' && message.nowPlaying) { media.setMetadata(message.nowPlaying); audio.followMusic(media.timeline()); return; }
   if (message.type === 'host-ui' && active) {
     openPanel(); return;
   }
@@ -264,7 +264,7 @@ window.setInterval(()=>{
   const now=performance.now(),fps=frames*1000/Math.max(1,now-lastStats);frames=0;lastStats=now;
   el('stats').textContent=painted?`${canvas.width} × ${canvas.height} / ${fps.toFixed(0)} fps / ${t('latency')} ${video.decodeLatencyMs.toFixed(0)} ms`:t('noStream');
   el('audio-unlock').hidden=!active||audio.isUnlocked;
-  el('audio-status').textContent=t(audio.isPlaying?'playing':'paused');media.setPlaying(audio.isPlaying);
+  el('audio-status').textContent=t(audio.isPlaying?'playing':'paused');media.setPlaying(audio.isPlaying);audio.followMusic(media.timeline());
 },750);
 // Which browser the car runs and the music element's own timeline, which an OS media card may show instead of the song's.
 const chromeMajor=Number(/Chrome\/(\d+)/.exec(navigator.userAgent)?.[1] ?? 0),webView=/; wv\)/.test(navigator.userAgent)?1:0;

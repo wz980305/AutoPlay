@@ -3,6 +3,8 @@ import { FLAC_BLOCK, FLAC_MIME, flacFragment, flacFrame, flacInit } from './flac
 import type { AudioConfigMessage } from './protocol';
 /** aac: stream 102's AAC as sent. flac: the wired iPhone's LPCM, losslessly framed (flac-mp4.ts). */
 export type MusicKind = 'aac' | 'flac';
+/** The song as the iPhone reports it: position and duration in seconds, and what identifies the song. */
+export interface SongTimeline { position: number; duration: number; key: string; playing: boolean; }
 const MIMES: Record<MusicKind,string> = { aac: 'audio/mp4; codecs="mp4a.40.2"', flac: FLAC_MIME };
 /** A real HTML media timeline makes received music eligible for OS media controls. */
 export class MusicOutput {
@@ -22,6 +24,10 @@ export class MusicOutput {
   private pcm:Uint8Array[]=[];
   private pcmBytes=0;
   private block=0;
+  private song:(SongTimeline&{at:number})|null=null;
+  private alignedKey='';
+  private alignedAt=-Infinity;
+  private started=false;
   private readonly rate:number;
   private readonly channels:number;
   readonly configKey: string;
@@ -74,15 +80,37 @@ export class MusicOutput {
     if(this.pending.length>12){this.onError('Music buffer is not advancing');this.close();return;}
     this.pump();
   }
+  /** A car's media card may show this element's own timeline instead of the song's (2026-10-12 drive: it ran on
+   *  from the start of the music, 0 to 671 s, duration unknown, while the song was at 8 of 269 s). */
+  follow(song:SongTimeline|null){
+    this.song=song&&song.duration>0?{...song,at:performance.now()}:null;
+    this.pump();
+  }
+  /** Moves the element onto the song's timeline: on a new song, or when it is more than 3 s off. What is buffered
+   *  (about 0.65 s) is dropped, usually the gap between two songs. */
+  private align(b:SourceBuffer):boolean{
+    const song=this.song;if(!song||!this.started)return false;
+    const position=Math.min(song.duration,song.position+(song.playing?(performance.now()-song.at)/1000:0));
+    const now=performance.now();
+    if(song.key===this.alignedKey&&(Math.abs(this.element.currentTime-position)<=3||now-this.alignedAt<5000))return false;
+    if(b.buffered.length){b.remove(0,Infinity);return true;}
+    this.pending=[];
+    b.timestampOffset=position-this.samples/this.rate;
+    this.source.duration=Math.max(song.duration,position);
+    this.element.currentTime=position;
+    this.alignedKey=song.key;this.alignedAt=now;
+    return false;
+  }
   private pump(){
     const b=this.buffer;if(this.closed||!b||b.updating||this.source.readyState!=='open')return;
     try {
+      if(this.align(b))return;
       if(b.buffered.length){
         const end=b.buffered.end(b.buffered.length-1),now=this.element.currentTime;
         if(end-now>2)this.element.currentTime=Math.max(b.buffered.start(0),end-.65);
         if(now-b.buffered.start(0)>15){b.remove(0,now-10);return;}
       }
-      const next=this.pending.shift();if(next)b.appendBuffer(next as Uint8Array<ArrayBuffer>);
+      const next=this.pending.shift();if(next){b.appendBuffer(next as Uint8Array<ArrayBuffer>);this.started=true;}
     }catch(error){this.onError(String(error));}
   }
   close(){
