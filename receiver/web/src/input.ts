@@ -37,7 +37,7 @@ export class InputController {
     surface.addEventListener('pointermove', this.onPointerMove, { passive: false });
     surface.addEventListener('pointerup', this.onPointerUp, { passive: false });
     surface.addEventListener('pointercancel', this.onPointerUp, { passive: false });
-    surface.addEventListener('pointerleave', this.onPointerUp, { passive: false });
+    surface.addEventListener('lostpointercapture', this.onPointerUp, { passive: false });
     window.addEventListener('keydown', this.onKeyDown);
   }
 
@@ -47,13 +47,14 @@ export class InputController {
     surface.removeEventListener('pointermove', this.onPointerMove);
     surface.removeEventListener('pointerup', this.onPointerUp);
     surface.removeEventListener('pointercancel', this.onPointerUp);
-    surface.removeEventListener('pointerleave', this.onPointerUp);
+    surface.removeEventListener('lostpointercapture', this.onPointerUp);
+    this.reset();
     window.removeEventListener('keydown', this.onKeyDown);
   }
 
   private readonly onPointerDown = (event: PointerEvent): void => {
     event.preventDefault();
-    if (this.pointers.size >= MAX_CONTACTS) return;
+    if (this.surface.inert || (event.button !== undefined && event.button !== 0) || this.pointers.size >= MAX_CONTACTS) return;
     this.surface.focus({ preventScroll: true });
     this.surface.setPointerCapture(event.pointerId);
     this.pointers.set(event.pointerId, {
@@ -62,7 +63,7 @@ export class InputController {
       y: this.normalizeY(event.clientY),
       down: true,
     });
-    this.scheduleFlush();
+    this.flush();
   };
 
   private readonly onPointerMove = (event: PointerEvent): void => {
@@ -78,8 +79,15 @@ export class InputController {
     const pointer = this.pointers.get(event.pointerId);
     if (!pointer) return;
     event.preventDefault();
+    // Release at the last real position; (0,0) can cancel an iPhone button tap.
+    if (event.type === 'pointerup') {
+      pointer.x = this.normalizeX(event.clientX);
+      pointer.y = this.normalizeY(event.clientY);
+    }
+    pointer.down = false;
+    this.flush();
     this.pointers.delete(event.pointerId);
-    this.scheduleFlush();
+    if (this.surface.hasPointerCapture?.(event.pointerId)) this.surface.releasePointerCapture(event.pointerId);
   };
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
@@ -146,17 +154,31 @@ export class InputController {
     return 0;
   }
 
+  reset(): void {
+    if (this.pendingFlush) window.cancelAnimationFrame(this.pendingFlush);
+    this.pendingFlush = 0;
+    this.pointers.clear();
+  }
+
+  private flush(): void {
+    if (this.pendingFlush) window.cancelAnimationFrame(this.pendingFlush);
+    this.pendingFlush = 0;
+    // The receiver's HID report uses list position as contact slot. Keep holes.
+    const contacts: TouchContact[] = [];
+    for (const pointer of this.pointers.values()) {
+      while (contacts.length <= pointer.slot) {
+        contacts.push({ id: contacts.length, x: 0, y: 0, down: false });
+      }
+      contacts[pointer.slot] = { id: pointer.slot, x: pointer.x, y: pointer.y, down: pointer.down };
+    }
+    this.send({ type: 'touch', contacts });
+  }
+
   private scheduleFlush(): void {
     if (this.pendingFlush !== 0) return;
     this.pendingFlush = window.requestAnimationFrame(() => {
       this.pendingFlush = 0;
-      const contacts: TouchContact[] = Array.from(this.pointers.values()).map((pointer) => ({
-        id: pointer.slot,
-        x: pointer.x,
-        y: pointer.y,
-        down: pointer.down,
-      }));
-      this.send({ type: 'touch', contacts });
+      this.flush();
     });
   }
 

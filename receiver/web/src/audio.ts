@@ -1,3 +1,4 @@
+import { MusicOutput } from './music-output';
 import { audioStartTime } from './audio-timing';
 import { AudioCodec, type AudioConfigMessage, type AudioPacketMessage } from './protocol';
 
@@ -6,6 +7,7 @@ interface StreamState {
   sampleRate: number;
   channels: number;
   name: string;
+  music: MusicOutput | null;
   decoder: AudioDecoder | null;
   nextPlayTime: number;
   gain: GainNode;
@@ -18,7 +20,16 @@ export class AudioEngine {
   private readonly gain: GainNode;
   private readonly streams = new Map<number, StreamState>();
   private readonly streamGains = new Map<string, number>();
+  private retainedMusic: MusicOutput | null = null;
+  private retainedConfig = "";
   private unlocked = false;
+  private masterVolume = 1;
+  private lastAudioAt = -Infinity;
+
+  get isPlaying(): boolean {
+    return Array.from(this.streams.values()).some(s => s.music?.playing) ||
+      (this.context.state === 'running' && performance.now() - this.lastAudioAt < 1800);
+  }
 
   constructor(private readonly onError: (message: string) => void) {
     this.context = new AudioContext({ latencyHint: 'interactive' });
@@ -27,17 +38,19 @@ export class AudioEngine {
   }
 
   get isUnlocked(): boolean {
-    return this.unlocked;
+    return this.unlocked && this.context.state === 'running' && Array.from(this.streams.values()).every(s => !s.music || s.music.unlocked);
   }
 
   /** Must run inside a user gesture so the browser allows audio playback. */
   async unlock(): Promise<void> {
-    await this.context.resume();
-    this.unlocked = true;
+    await Promise.all([this.context.resume(), ...Array.from(this.streams.values()).flatMap(s => s.music ? [s.music.unlock()] : [])]);
+    this.unlocked = this.context.state === 'running';
   }
 
   setVolume(volume: number): void {
-    this.gain.gain.value = Math.min(1, Math.max(0, volume));
+    this.masterVolume = Math.min(1, Math.max(0, volume));
+    this.gain.gain.value = this.masterVolume;
+    for (const state of this.streams.values()) state.music?.volume(this.masterVolume * (this.streamGains.get(state.name) ?? 1));
   }
 
   setStreamGain(name: string, value: number): void {
@@ -62,10 +75,22 @@ export class AudioEngine {
       sampleRate: message.sampleRate,
       channels: message.channels,
       name: message.name,
+      music: null,
       decoder: null,
       nextPlayTime: 0,
       gain: streamGain,
     };
+    if (message.codec === AudioCodec.AacLc && message.name === 'media' && MusicOutput.supported()) {
+      try {
+        state.music = (this.retainedMusic && this.retainedConfig === JSON.stringify([message.sampleRate,message.channels,Array.from(message.description)]) ? this.retainedMusic : new MusicOutput(message, this.onError));
+        if (this.retainedMusic && this.retainedMusic !== state.music) this.retainedMusic.close();
+        this.retainedMusic = null;
+        state.music.volume(this.masterVolume * (this.streamGains.get(state.name) ?? 1));
+        this.streams.set(message.streamType, state);
+        void state.music.unlock().catch(() => {});
+        return;
+      } catch (error) { this.onError(`Music output configuration: ${describeError(error)}`); }
+    }
     if (message.codec === AudioCodec.AacLc || message.codec === AudioCodec.Opus) {
       if (typeof AudioDecoder === 'undefined') {
         this.onError(
@@ -111,6 +136,7 @@ export class AudioEngine {
   handlePacket(message: AudioPacketMessage): void {
     const state = this.streams.get(message.streamType);
     if (!state) return;
+    if (state.music) { state.music.packet(message.data); return; }
     if (state.decoder) {
       try {
         state.decoder.decode(
@@ -131,17 +157,32 @@ export class AudioEngine {
   }
 
   stopStream(streamType: number): void {
+    const state = this.streams.get(streamType);
+    if (state?.music) {
+      this.retainedMusic?.close();
+      this.retainedMusic = state.music;
+      this.retainedConfig = state.music.configKey;
+      state.music.pause();
+      state.music = null;
+    }
     this.closeStream(streamType);
+  }
+
+  pauseMusic(): void {
+    for (const state of this.streams.values()) state.music?.pause();
   }
 
   stopAll(): void {
     for (const streamType of this.streams.keys()) this.closeStream(streamType);
+    this.retainedMusic?.close(); this.retainedMusic = null;
+    this.lastAudioAt = -Infinity;
   }
 
   private closeStream(streamType: number): void {
     const state = this.streams.get(streamType);
     if (!state) return;
     this.streams.delete(streamType);
+    state.music?.close();
     runCatchingDisconnect(state.gain);
     if (state.decoder) {
       try {
@@ -192,6 +233,7 @@ export class AudioEngine {
     source.connect(state.gain);
     source.onended = () => source.disconnect();
     source.start(state.nextPlayTime);
+    this.lastAudioAt = performance.now();
     state.nextPlayTime += buffer.duration;
   }
 }

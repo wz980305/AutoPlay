@@ -1,5 +1,6 @@
 package com.playport.server
 
+import com.shilapi.xcertplay.airplay.AirPlayIcon
 import com.shilapi.xcertplay.airplay.AirPlayConfig
 import com.shilapi.xcertplay.airplay.AirPlayContact
 import com.shilapi.xcertplay.airplay.AirPlayDeviceInfo
@@ -88,7 +89,8 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             microphone = true,
             manufacturer = config.manufacturer,
             model = config.model,
-            oemLabel = config.deviceName,
+            oemLabel = "设置",
+            icons = listOf(AirPlayIcon(180, 180, checkNotNull(javaClass.getResourceAsStream("/f50-settings.png")).use { it.readBytes() })),
         )
 
     private val listener = object : AirPlaySessionListener {
@@ -100,7 +102,8 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
 
         override fun onSessionEnded(session: AirPlaySession) {
             log.info("CarPlay session ended peer={}", session.host)
-            if (activeSession === session) activeSession = null
+            if (activeSession !== session) return
+            activeSession = null
             bridge.endMicrophone()
             hub.setSessionState(false, null)
         }
@@ -108,6 +111,12 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         override fun onDeviceInfo(session: AirPlaySession, info: AirPlayDeviceInfo) {
             log.info("iPhone connected name={} model={} deviceId={}", info.name, info.model, info.deviceId)
             hub.setSessionState(true, info.name)
+        }
+
+        override fun onHostUiRequested(session: AirPlaySession) {
+            if (activeSession !== session) return
+            log.info("CarPlay requested receiver settings")
+            hub.hostUiRequested()
         }
 
         override fun onTransportError(message: String) {
@@ -236,6 +245,25 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             log.warn("could not open tunneled iAP2 link: {}", error.message)
             return false
         }
+        val metadata = NowPlayingState()
+        val tunnelSession = activeSession
+        val tunnelDone = java.util.concurrent.atomic.AtomicBoolean(false)
+        val artwork = com.shilapi.xcertplay.iap2.message.Iap2ArtworkReceiver(
+            send = { channel.sendFileTransfer(it) { !tunnelDone.get() && activeSession === tunnelSession } },
+            complete = { revision, id, bytes ->
+                activeSession === tunnelSession && metadata.value.revision == revision && metadata.artworkId == id && hub.artwork(revision, bytes)
+            },
+            clock = { System.nanoTime() / 1_000_000 },
+            onDiagnostic = { log.debug(it) },
+        )
+        Thread({
+            try {
+                while (!tunnelDone.get() && activeSession === tunnelSession && !channel.isClosed) {
+                    channel.recvFileTransfer(250)?.let(artwork::receive)
+                    artwork.expire()
+                }
+            } catch (_: Exception) { log.debug("Artwork transport ended") }
+        }, "wireless-artwork").apply { isDaemon = true; start() }
         Thread(
             {
                 try {
@@ -247,6 +275,15 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                         endpoint = endpoint,
                         timeoutMillis = Iap2WirelessControlClient.NO_TIMEOUT_MILLIS,
                         onReady = { log.info("wireless iAP2 tunnel ready; CarPlay is live") },
+                        onIncoming = { frame ->
+                            if (activeSession === tunnelSession) {
+                                try { metadata.accept(frame)?.let {
+                                    hub.nowPlaying(it)
+                                    artwork.expect(metadata.artworkId, it.revision)
+                                } }
+                                catch (_: Exception) { log.debug("Ignoring malformed NowPlaying update") }
+                            }
+                        },
                         onProgress = { log.debug("iAP tunnel $it") },
                     )
                     when (result.terminal) {
@@ -255,7 +292,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                     }
                 } catch (error: Exception) {
                     log.warn("tunneled iAP2 control failed: {}", error.message)
-                }
+                } finally { tunnelDone.set(true) }
             },
             "wireless-tunnel-control",
         ).apply {

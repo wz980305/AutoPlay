@@ -90,7 +90,12 @@ export type ClientMessage =
   | { type: 'keyframe' }
   | { type: 'ping' };
 
+export interface NowPlaying { title: string; artist: string; album: string; durationMs?: number; positionMs?: number; speed?: number; revision?: number; }
+
 export interface ServerMessage {
+  nowPlaying?: NowPlaying;
+  artwork?: string;
+  revision?: number;
   type: string;
   deviceName?: string;
   sessionActive?: boolean;

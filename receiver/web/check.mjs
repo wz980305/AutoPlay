@@ -21,6 +21,7 @@ globalThis.window = {
   addEventListener: (name, handler) => listeners.set(name, handler),
   removeEventListener: (name) => listeners.delete(name),
   requestAnimationFrame: (handler) => { frames.push(handler); return frames.length; },
+  cancelAnimationFrame: (id) => { frames[id - 1] = () => {}; },
 };
 const surface = Object.assign(new Element(), {
   inert: false, style: {}, focus() {}, setPointerCapture() {},
@@ -66,7 +67,24 @@ assert.deepEqual(messages.pop().contacts, [{ id: 0, x: .5, y: .5, down: true }, 
 listeners.get('pointerup')(pointer(1, 0, 0));
 listeners.get('pointercancel')(pointer(2, 0, 0));
 flush();
-assert.deepEqual(messages.pop().contacts, [], 'Release every contact, including cancelled touches');
+assert.ok(messages.pop().contacts.every(c => !c.down), 'Release every contact, including cancelled touches');
+messages.length = 0;
+// A complete quick click may happen before the next animation frame.
+messages.length = 0;
+listeners.get('pointerdown')(pointer(7, 212.5, 250));
+listeners.get('pointerup')(pointer(7, 212.5, 250));
+flush();
+assert.ok(messages.some(m => m.contacts?.some(c => c.down)), 'A quick tap must deliver a down report');
+assert.deepEqual(messages.at(-1).contacts, [{ id: 0, x: .5, y: .5, down: false }], 'Lift preserves the hit target');
+messages.length = 0;
+listeners.get('pointerdown')(pointer(8, 212.5, 250));
+listeners.get('pointerdown')(pointer(9, 212.5, 250));
+listeners.get('pointerup')(pointer(8, 212.5, 250));
+listeners.get('pointermove')(pointer(9, 212.5, 250));
+flush();
+assert.equal(messages.at(-1).contacts[1].id, 1, 'Second finger retains its HID slot');
+assert.equal(messages.at(-1).contacts[0].down, false);
+controller.reset();
 controller.detach();
 assert.equal(listeners.size, 0);
 console.log('Viewer input check passed: keyboard isolation, native controls, portrait/landscape coordinates, multi-touch, and release.');
