@@ -12,6 +12,9 @@ class OwnPageTest {
         assertTrue(WebHub.ownPage(null, "192.168.77.1:18443", "same-origin"))   // a same-origin GET carries no Origin
         assertTrue(WebHub.ownPage(null, "192.168.77.1:18443", null))            // not a browser: the token still applies
         assertTrue(WebHub.ownPage(null, null, "none"))                          // typed into the address bar
+        // HTTP/2 has no Host header: the address comes from the connection point (403 on a phone, 2026-10-13).
+        assertTrue(WebHub.ownPage("https://mycar.duckdns.org:18443", "mycar.duckdns.org:18443", "same-origin"))
+        assertTrue(WebHub.ownPage("https://dashplay.lan", "dashplay.lan:443", null))   // the default port left out
     }
 
     @Test fun anotherSiteIsRefused() {

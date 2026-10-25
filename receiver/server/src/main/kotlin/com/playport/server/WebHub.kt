@@ -521,12 +521,16 @@ class WebHub(
             if (fetchSite != null && fetchSite != "same-origin" && fetchSite != "none") return false
             if (origin == null) return true
             val uri = runCatching { java.net.URI(origin) }.getOrNull() ?: return false
-            val authority = (uri.host ?: return false) + if (uri.port == -1) "" else ":${uri.port}"
-            return host != null && authority.equals(host, ignoreCase = true)
+            val defaultPort = when (uri.scheme) { "https" -> 443; "http" -> 80; else -> return false }
+            val wanted = runCatching { java.net.URI("${uri.scheme}://$host") }.getOrNull() ?: return false
+            return uri.host != null && uri.host.equals(wanted.host, ignoreCase = true) &&
+                (if (uri.port == -1) defaultPort else uri.port) == (if (wanted.port == -1) defaultPort else wanted.port)
         }
 
+        // The address the request went to: the Host header (HTTP/1.1) or :authority (HTTP/2, no Host header,
+        // so the phone's display request got a 403 on 2026-10-13), from the connection point of either.
         private fun io.ktor.server.application.ApplicationCall.fromOwnPage(): Boolean = ownPage(
-            request.headers["Origin"], request.headers["Host"] ?: request.headers[":authority"], request.headers["Sec-Fetch-Site"])
+            request.headers["Origin"], "${request.local.serverHost}:${request.local.serverPort}", request.headers["Sec-Fetch-Site"])
 
         const val MIC_FRAME_LPCM = 0x10
         const val MIC_FRAME_OPUS = 0x11
