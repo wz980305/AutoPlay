@@ -52,6 +52,7 @@ data class PersistentConfig(
         wifiSecurity = when (wifiSecurity.lowercase()) {
             "open" -> com.shilapi.xcertplay.transport.Iap2WirelessSecurity.NONE
             "wpa3" -> com.shilapi.xcertplay.transport.Iap2WirelessSecurity.WPA3_ONLY
+            "wpa3-transition" -> com.shilapi.xcertplay.transport.Iap2WirelessSecurity.WPA3_TRANSITION
             else -> com.shilapi.xcertplay.transport.Iap2WirelessSecurity.WPA_WPA2
         },
         bluetoothDeviceAddress = bluetoothDeviceAddress,
@@ -81,6 +82,7 @@ data class PersistentConfig(
             wifiSecurity = when (config.wifiSecurity) {
                 com.shilapi.xcertplay.transport.Iap2WirelessSecurity.NONE -> "open"
                 com.shilapi.xcertplay.transport.Iap2WirelessSecurity.WPA3_ONLY -> "wpa3"
+                com.shilapi.xcertplay.transport.Iap2WirelessSecurity.WPA3_TRANSITION -> "wpa3-transition"
                 else -> "wpa2"
             },
             bluetoothDeviceAddress = config.bluetoothDeviceAddress,
@@ -105,7 +107,17 @@ class ConfigStore(private val stateDir: Path) {
         runCatching {
             Files.createDirectories(stateDir)
             val temporary = stateDir.resolve("$FILE_NAME.tmp")
-            Files.writeString(temporary, json.encodeToString(PersistentConfig.serializer(), config))
+            // Flushed before the rename: a power cut right after saving left an empty config.json that
+            // stopped every later start (2026-10-11).
+            java.nio.channels.FileChannel.open(
+                temporary,
+                java.nio.file.StandardOpenOption.CREATE,
+                java.nio.file.StandardOpenOption.WRITE,
+                java.nio.file.StandardOpenOption.TRUNCATE_EXISTING,
+            ).use { channel ->
+                channel.write(java.nio.ByteBuffer.wrap(json.encodeToString(PersistentConfig.serializer(), config).toByteArray()))
+                channel.force(true)
+            }
             restrictToOwner(temporary)
             Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING)
         }
