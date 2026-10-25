@@ -85,7 +85,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             port = config.airPlayPort,
             entertainmentSampleRate = 48_000,
             hevc = display.hevc,
-            microphone = false,
+            microphone = true,
             manufacturer = config.manufacturer,
             model = config.model,
             oemLabel = config.deviceName,
@@ -116,6 +116,15 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
 
         override fun onCommand(session: AirPlaySession, type: String, params: Map<String, Any?>) {
             log.debug("AirPlay command type={} params={}", type, params.keys.sorted().joinToString(","))
+            if (type == "modesChanged") {
+                val resources = (params["resources"] as? List<*>)?.take(8)?.mapNotNull { entry ->
+                    val resource = entry as? Map<*, *> ?: return@mapNotNull null
+                    listOf("resourceID", "entity", "owner", "borrower").mapNotNull { key ->
+                        (resource[key] as? Number)?.let { "$key=${it.toLong()}" }
+                    }.joinToString(",")
+                }
+                log.info("CarPlay resource ownership: {}", resources)
+            }
         }
 
         override fun onDebugLog(message: String) {
