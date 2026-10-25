@@ -34,7 +34,7 @@ data class PersistentConfig(
     val wifiChannel: Int = 0,
     val wifiSecurity: String = "wpa2",
     val bluetoothDeviceAddress: String? = null,
-    val mdns: String = "auto",
+    val mdns: String = "jmdns",
 ) {
     /** Server defaults from this file (CLI flags are applied on top and override). */
     fun toServerDefaults(identityDir: Path, stateDir: Path): ServerConfig = ServerConfig(

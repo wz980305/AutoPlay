@@ -36,7 +36,8 @@ data class ServerConfig(
     val wifiSecurity: Iap2WirelessSecurity = Iap2WirelessSecurity.WPA_WPA2,
     val bluetoothDeviceAddress: String? = null,
     val bluetoothBridge: Path? = null,
-    val mdns: String = "auto",
+    /** "jmdns" (the default; "auto" from an older config.json means the same) or "off". */
+    val mdns: String = "jmdns",
     val insecureHttp: Boolean = false,
     val accessToken: String = generateToken(),
 ) {
@@ -139,13 +140,13 @@ data class ServerConfig(
                   --mfi-server <url>        Remote MFi server address (alternative to offline identity)
                   --mfi-token <token>       Remote MFi bearer token
                   --wireless                Enable the Bluetooth wireless bootstrap
-                  --wifi-ssid <ssid>        Wi-Fi network the phone should join (default: auto-detect)
+                  --wifi-ssid <ssid>        Wi-Fi network the phone should join (the box's own access point)
                   --wifi-passphrase <pass>  Wi-Fi passphrase handed to the phone
                   --wifi-channel <n>        Wi-Fi channel (default: 0 = unknown)
                   --wifi-security <mode>    open | wpa | wpa2 (default: wpa2)
                   --bt-address <mac>        iPhone Bluetooth address for the wireless bootstrap
-                  --bt-bridge <path>        Path to the macOS bt-bridge helper
-                  --mdns <backend>          auto | dns-sd | jmdns (default: auto)
+                  --bt-bridge <path>        Path to the bt-bridge helper (the box's Bluetooth RFCOMM relay)
+                  --mdns <backend>          jmdns | off (default: jmdns)
                   --http                    Serve the UI over plain HTTP (WebCodecs then only works on localhost)
                   --token <token>           Browser access token (default: generated per start)
                 """.trimIndent(),

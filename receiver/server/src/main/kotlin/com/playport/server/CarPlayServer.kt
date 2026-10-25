@@ -257,8 +257,8 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         // ~5 s later, so mDNS (5.3 s to announce on the S805) need not delay the invitation. Without
         // wireless CarPlay nothing looks for the AirPlay service.
         if (config.wireless) Thread({
-            runCatching { Advertisers.create(config.mdns, airPlayConfig, identity, bindAddress).also { it.start() } }
-                .onSuccess { if (closed.get()) runCatching { it.close() } else advertiser = it }
+            runCatching { Advertisers.create(config.mdns, airPlayConfig, identity, bindAddress)?.also { it.start() } }
+                .onSuccess { if (closed.get()) runCatching { it?.close() } else advertiser = it }
                 .onFailure { log.warn("mDNS advertisement failed: {}", it.message) }
         }, "mdns-start").apply { isDaemon = true; start() }
         if (config.wireless && (presenceHelper == null || bootInvite || selectedPresent())) {

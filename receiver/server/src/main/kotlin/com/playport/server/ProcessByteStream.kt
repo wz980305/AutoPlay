@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * A [BlockingDuplexByteStream] over a child process' standard input/output.
  *
- * Used for the macOS Bluetooth bridge helper: the helper owns the RFCOMM channel and pipes its
+ * Used for the bt-bridge Bluetooth helper: the helper owns the RFCOMM channel and pipes its
  * bytes through stdin/stdout while this side speaks the iAP2 link.
  */
 class ProcessByteStream(
