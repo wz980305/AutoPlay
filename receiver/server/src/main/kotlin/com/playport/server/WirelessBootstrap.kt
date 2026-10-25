@@ -37,6 +37,7 @@ class WirelessBootstrap(private val server: CarPlayServer) : Closeable {
     }
 
     private fun run() {
+        var failed = false
         try {
             val config = server.config
             val wifi = WifiInfo.detect(config)
@@ -127,10 +128,14 @@ class WirelessBootstrap(private val server: CarPlayServer) : Closeable {
                 }
             }
         } catch (error: Exception) {
-            if (!stopped) log.warn("wireless bootstrap failed: {}", error.message)
+            if (!stopped) {
+                log.warn("wireless bootstrap failed: {}", error.message)
+                failed = true
+            }
         } finally {
             close()
         }
+        if (failed) server.bootstrapFailed(this)
     }
 
     @Synchronized

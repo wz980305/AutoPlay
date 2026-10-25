@@ -52,7 +52,16 @@ class JmDnsAdvertiser(
         val instance = dns
         serviceInfo = null
         dns = null
-        runCatching { info?.let { instance?.unregisterService(it) } }
-        runCatching { instance?.close() }
+        if (instance == null) return
+        // JmDNS waits up to 5 s, twice, for its announcer to cancel: every stop or restart of the receiver took 10 s
+        // more (F50, 2026-10-14). The goodbye goes out first; whatever is left finishes without holding the stop.
+        Thread({
+            runCatching { info?.let { instance.unregisterService(it) } }
+            runCatching { instance.close() }
+        }, "mdns-close").apply { isDaemon = true; start() }.join(CLOSE_WAIT_MS)
+    }
+
+    private companion object {
+        const val CLOSE_WAIT_MS = 1_000L
     }
 }

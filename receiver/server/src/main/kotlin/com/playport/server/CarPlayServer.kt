@@ -88,11 +88,42 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
     @Volatile private var invitedAt = 0L
     @Volatile private var handoffAcceptedAt = Long.MIN_VALUE / 2
     @Volatile private var handoffRetried = false
+    /** Until when, and how many more times, a failed invitation is repeated at once (after a display change). */
+    @Volatile private var quickRetryUntil = Long.MIN_VALUE / 2
+    @Volatile private var quickRetriesLeft = 0
 
     /** The invited iPhone accepted the Bluetooth bootstrap and is about to join the Wi-Fi. */
     fun handoffAccepted() {
         handoffAcceptedAt = System.nanoTime() / 1_000_000
     }
+    /**
+     * The invitation [link] failed. Right after a display change the phone is there and its Bluetooth link from the
+     * session just closed was still going down (br-connection-canceled): invite it again at once. The supervisor's
+     * next round took the reconnect from ~3 s to 11-13 s (XPeng, 2026-10-13: 3 of 9 display changes).
+     */
+    fun bootstrapFailed(link: WirelessBootstrap) {
+        val generation: Long
+        synchronized(this) {
+            if (closed.get() || link !== wireless || activeSession != null ||
+                !quickRetry(System.nanoTime() / 1_000_000, quickRetryUntil, quickRetriesLeft)) return
+            quickRetriesLeft--
+            generation = wirelessGeneration
+        }
+        log.info("invitation failed right after the display change; inviting again in {} ms", QUICK_RETRY_DELAY_MS)
+        Thread({
+            Thread.sleep(QUICK_RETRY_DELAY_MS)
+            synchronized(this@CarPlayServer) {
+                if (closed.get() || activeSession != null || generation != wirelessGeneration) return@Thread
+                restartWireless(confirmedPresent = true)
+            }
+        }, "wireless-quick-retry").apply { isDaemon = true; start() }
+    }
+
+    private fun armQuickRetry() {
+        quickRetryUntil = System.nanoTime() / 1_000_000 + QUICK_RETRY_WINDOW_MS
+        quickRetriesLeft = QUICK_RETRIES
+    }
+
     fun wirelessPhone(): String? = if (presenceHelper == null) config.bluetoothDeviceAddress else selectedPhone
 
     private fun presenceResult(command: String, vararg args: String): String? {
@@ -149,6 +180,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             invitedPhone = null
             handoffAcceptedAt = Long.MIN_VALUE / 2
             handoffRetried = false
+            quickRetriesLeft = 0
             lastPeer = session.host
             presenceLearned = false
             hub.setSessionState(true, null)
@@ -696,6 +728,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                 synchronized(this@CarPlayServer) {
                     if (closed.get() || activeSession != null || generation != wirelessGeneration) return@Thread
                     log.info("phone did not reopen CarPlay within {} ms after the display change; inviting it", keepLink)
+                    armQuickRetry()
                     restartWireless(confirmedPresent = true)
                 }
             }, "display-keep-link").apply { isDaemon = true; start() }
@@ -705,6 +738,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         // Wired: start the USB side over (identification, then CarPlayStartSession with the new display).
         wired?.restart()
         // The phone was just using CarPlay, so skip the ~2.4 s presence re-check before re-inviting it.
+        if (wasActive) armQuickRetry()
         restartWireless(confirmedPresent = wasActive)
         return DisplayOutcome()
     }
@@ -752,11 +786,13 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
+        // The session first: the phone learns at once that CarPlay is over (it stayed open through the 10 s mDNS
+        // goodbye on every stop or restart, F50 2026-10-14).
+        runCatching { activeSession?.close() }
         runCatching { wireless?.close() }
         runCatching { wired?.close() }
         runCatching { wiredSocket?.close() }
         runCatching { advertiser?.close() }
-        runCatching { activeSession?.close() }
         runCatching { serverSocket?.close() }
     }
 
@@ -804,9 +840,15 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         internal fun shouldRestartWireless(active: Boolean, running: Boolean, elapsedMs: Long, present: Boolean, justEnded: Boolean = false): Boolean =
             !active && present && (justEnded || elapsedMs >= (if (running) 15_000L else 5_000L))
 
+        /** A failed invitation is repeated at once while [now] is before [until] and retries are [left]. */
+        internal fun quickRetry(now: Long, until: Long, left: Int): Boolean = left > 0 && now < until
+
         /** AirPlay pair-setup PIN advertised for first-time connections. */
         const val PAIRING_PIN = "3939"
         private const val SUPERVISOR_INTERVAL_MS = 2_000L
+        private const val QUICK_RETRY_DELAY_MS = 1_500L
+        internal const val QUICK_RETRY_WINDOW_MS = 15_000L
+        internal const val QUICK_RETRIES = 2
         private const val BOOTSTRAP_COOLDOWN_MS = 20_000L
         private const val BOOTSTRAP_STALE_MS = 60_000L
         private const val DECLINE_AFTER_MS = 45_000L

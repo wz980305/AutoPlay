@@ -38,6 +38,14 @@ class WirelessReconnectTest {
         assertFalse(CarPlayServer.shouldRestartWireless(false, true, 90_000, false, true))
         assertFalse(CarPlayServer.shouldRestartWireless(true, true, 90_000, true, true))
     }
+    @Test fun aFailedInvitationRightAfterADisplayChangeIsRepeatedAFewTimesOnly() {
+        val armed = 100_000L + CarPlayServer.QUICK_RETRY_WINDOW_MS
+        assertTrue(CarPlayServer.quickRetry(100_000L + 1_200, armed, CarPlayServer.QUICK_RETRIES))
+        assertTrue(CarPlayServer.quickRetry(100_000L + 4_000, armed, 1))
+        assertFalse("retries used up", CarPlayServer.quickRetry(100_000L + 5_000, armed, 0))
+        assertFalse("too long after the change", CarPlayServer.quickRetry(armed, armed, CarPlayServer.QUICK_RETRIES))
+        assertFalse("never armed", CarPlayServer.quickRetry(100_000L, Long.MIN_VALUE / 2, 0))
+    }
     @Test fun bridgeCloseAllowsProfileCleanupBeforeDestroy() {
         val child = object : Process() {
             var stdinClosed = false
