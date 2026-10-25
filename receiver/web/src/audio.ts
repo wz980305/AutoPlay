@@ -178,6 +178,13 @@ export class AudioEngine {
     for (const state of this.streams.values()) state.music?.follow(song);
   }
 
+  /** Music element counters for the viewer log (music-output.ts). */
+  musicReport(): Record<string, number> {
+    const total: Record<string, number> = {};
+    for (const state of this.streams.values()) for (const [k, v] of Object.entries(state.music?.report() ?? {})) total[k] = (total[k] ?? 0) + v;
+    return total;
+  }
+
   pauseMusic(): void {
     for (const state of this.streams.values()) state.music?.pause();
   }
