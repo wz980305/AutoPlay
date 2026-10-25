@@ -20,6 +20,7 @@ import io.ktor.server.websocket.webSocket
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -51,6 +52,8 @@ data class ClientMessage(
     val telephony: Int? = null,
     /** "stats": the viewer's own playback counters (frames drawn, decode delay, ...), numbers only. */
     val stats: Map<String, Double>? = null,
+    /** "ack": the page answering the box's "mark" of the same number at once (see LagGate). */
+    val mark: Long? = null,
 )
 
 @Serializable
@@ -66,6 +69,7 @@ data class DisplayRequest(
 @Serializable
 data class ServerMessage(
     val type: String,
+    val mark: Long? = null,
     val nowPlaying: NowPlaying? = null,
     val artwork: String? = null,
     val revision: Long? = null,
@@ -87,6 +91,14 @@ private class WsClient(
     val channel: Channel<Frame>,
 ) {
     val imageReady = java.util.concurrent.atomic.AtomicBoolean(false)
+    /** Picture at most 300 ms behind; 192 kB always fits (a fresh session's first keyframe). */
+    val lag = LagGate(300_000_000L, 192_000L)
+    val nextMark = AtomicLong(0)
+    /** Every byte offered to [channel], what [LagGate] counts against what the page confirmed. */
+    val queuedBytes = AtomicLong(0)
+    fun offer(frame: Frame) = channel.trySend(frame).also {
+        if (it.isSuccess) queuedBytes.addAndGet(frame.data.size.toLong())
+    }
     val keyframeRequested = AtomicLong(0)
     val id = nextClientId.incrementAndGet()
     val videoSent = AtomicLong(0)
@@ -196,6 +208,12 @@ class WebHub(
     fun broadcastVideoFrame(type: Int, keyframe: Boolean, naluBytes: ByteArray) {
         val frame = Wire.videoFrame(type, keyframe, naluBytes)
         for (client in clients) {
+            if (!client.lag.open(System.nanoTime(), client.queuedBytes.get())) {
+                // The page is behind: no picture until it catches up, then a fresh keyframe (below).
+                client.imageReady.set(false)
+                client.videoDropped.incrementAndGet()
+                continue
+            }
             if (keyframe) {
                 client.imageReady.set(true)
             } else if (!client.imageReady.get()) {
@@ -203,7 +221,7 @@ class WebHub(
                 maybeRequestKeyframe(client, type)
                 continue
             }
-            if (client.channel.trySend(Frame.Binary(true, frame)).isSuccess) {
+            if (client.offer(Frame.Binary(true, frame)).isSuccess) {
                 client.videoSent.incrementAndGet()
                 client.bytesSent.addAndGet(frame.size.toLong())
             } else {
@@ -232,14 +250,14 @@ class WebHub(
 
     private fun broadcastBinary(bytes: ByteArray) {
         for (client in clients) {
-            client.channel.trySend(Frame.Binary(true, bytes))
+            client.offer(Frame.Binary(true, bytes))
         }
     }
 
     private fun broadcastJson(message: ServerMessage) {
         val text = json.encodeToString(ServerMessage.serializer(), message)
         for (client in clients) {
-            client.channel.trySend(Frame.Text(text))
+            client.offer(Frame.Text(text))
         }
     }
 
@@ -318,6 +336,16 @@ class WebHub(
                         // The reader loop below handles disconnects.
                     }
                 }
+                val marker = launch {
+                    while (true) {
+                        delay(MARK_INTERVAL_MS)
+                        val id = client.nextMark.incrementAndGet()
+                        val frame = Frame.Text("""{"type":"mark","mark":$id}""")
+                        // Counted with the mark itself, so its answer confirms everything up to here.
+                        client.lag.marked(id, System.nanoTime(), client.queuedBytes.get() + frame.data.size)
+                        client.offer(frame)
+                    }
+                }
                 try {
                     wsSession.send(
                         Frame.Text(
@@ -340,12 +368,12 @@ class WebHub(
                     )
                     // Replay codec/audio setup so a viewer that joins late can decode.
                     configByStream.forEach { (type, value) ->
-                        client.channel.trySend(
+                        client.offer(
                             Frame.Binary(true, Wire.videoConfig(type, value.first, display.width, display.height, value.second)),
                         )
                     }
                     audioFormatByStream.forEach { (type, format) ->
-                        client.channel.trySend(Frame.Binary(true, Wire.audioConfig(type, format)))
+                        client.offer(Frame.Binary(true, Wire.audioConfig(type, format)))
                     }
                     configByStream.keys.forEach { streamType -> onViewerJoined?.invoke(streamType) }
                     for (frame in incoming) {
@@ -367,13 +395,15 @@ class WebHub(
                         } catch (_: Exception) {
                             continue
                         }
-                        if (message.type == "keyframe") {
+                        if (message.type == "ack") {
+                            message.mark?.let { client.lag.acked(it, System.nanoTime()) }
+                        } else if (message.type == "keyframe") {
                             configByStream.keys.forEach { streamType -> onViewerJoined?.invoke(streamType) }
                         } else if (message.type == "stats") {
                             log.info(statsLine(client.id, client.videoSent.get(), client.videoDropped.get(),
                                 client.bytesSent.get(), message.stats.orEmpty()))
                         } else if (message.type == "ping") {
-                            client.channel.trySend(Frame.Text("""{"type":"pong"}"""))
+                            client.offer(Frame.Text("""{"type":"pong"}"""))
                         } else {
                             inputHandler?.invoke(message)
                         }
@@ -382,6 +412,7 @@ class WebHub(
                     clients.remove(client)
                     client.channel.close()
                     writer.cancel()
+                    marker.cancel()
                 }
             }
             get("/{path...}") {
@@ -473,5 +504,6 @@ class WebHub(
         const val MIC_FRAME_OPUS = 0x11
         private const val SEND_QUEUE_CAPACITY = 1024
         private const val KEYFRAME_REQUEST_INTERVAL_NS = 1_000_000_000L
+        private const val MARK_INTERVAL_MS = 200L
     }
 }

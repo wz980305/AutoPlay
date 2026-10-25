@@ -125,6 +125,8 @@ function reset() {
 }
 function server(message: ServerMessage) {
   if (message.type === 'pong') { lag.pong(performance.now()); return; }
+  // Straight back, also before CarPlay starts: the box pauses the picture while this page lags behind.
+  if (message.type === 'mark') { connection.send({ type: 'ack', mark: message.mark ?? 0 }); return; }
   if(message.type === 'artwork' && message.artwork) { media.setArtwork(message.revision ?? 0,message.artwork); return; }
   if (message.type === 'now-playing' && message.nowPlaying) { media.setMetadata(message.nowPlaying); return; }
   if (message.type === 'host-ui' && active) {

@@ -55,6 +55,9 @@ fun main(args: Array<String>) {
                     host = webHost
                     port = config.httpPort
                 }
+                // The kernel grows a socket's send buffer to megabytes, seconds of picture on a slow car Wi-Fi
+                // that WebHub's age check cannot see; a fixed 128 KiB (Linux doubles it) keeps that part short.
+                configureBootstrap = { childOption(io.netty.channel.ChannelOption.SO_SNDBUF, 128 * 1024) }
             },
         ) {
             server.hub.install(this, webRoot)
