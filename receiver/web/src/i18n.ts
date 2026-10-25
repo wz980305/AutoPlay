@@ -34,6 +34,9 @@ const messages = {
   error: ['播放遇到问题', 'Playback problem'], technical: ['详细信息', 'Details'],
   savedHere: ['语言、音量与自动匹配偏好保存在此浏览器。CarPlay 内部语言跟随 iPhone。', 'Language, volume and auto-fit preferences are saved in this browser. CarPlay itself follows the iPhone language.'],
   privacy: ['首次登录后无需再次进入设置；自动播放被浏览器拦截时，只需轻点画面一次。', 'No need to reopen settings after setup. If autoplay is blocked, tap the screen once.'],
+  follow: ['关注作者 · 一只小黑狗', 'Follow the author'],
+  followDouyin: ['抖音扫一扫', 'Scan in Douyin'], followXiaohongshu: ['小红书扫一扫', 'Scan in Xiaohongshu'],
+  followHint: ['DashPlay 的更新和教程会发在这里；主页有讨论群，有任何问题欢迎在群里讨论。', 'DashPlay updates and how-tos are posted here; the profile links to a discussion group for any questions.'],
 } as const;
 export type Key = keyof typeof messages;
 export let language: 'zh' | 'en' = localStorage.getItem('f50-language') === 'en' ? 'en' : 'zh';
