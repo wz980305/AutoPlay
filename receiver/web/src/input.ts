@@ -8,6 +8,8 @@ interface ActivePointer {
   x: number;
   y: number;
   down: boolean;
+  startX: number;
+  startY: number;
 }
 
 const emptyKnob = (overrides: Partial<KnobState> = {}): KnobState => ({
@@ -39,7 +41,6 @@ export class InputController {
     surface.addEventListener('pointermove', this.onPointerMove, { passive: false });
     surface.addEventListener('pointerup', this.onPointerUp, { passive: false });
     surface.addEventListener('pointercancel', this.onPointerUp, { passive: false });
-    surface.addEventListener('lostpointercapture', this.onPointerUp, { passive: false });
     window.addEventListener('keydown', this.onKeyDown);
   }
 
@@ -49,7 +50,6 @@ export class InputController {
     surface.removeEventListener('pointermove', this.onPointerMove);
     surface.removeEventListener('pointerup', this.onPointerUp);
     surface.removeEventListener('pointercancel', this.onPointerUp);
-    surface.removeEventListener('lostpointercapture', this.onPointerUp);
     this.reset();
     window.removeEventListener('keydown', this.onKeyDown);
   }
@@ -59,12 +59,8 @@ export class InputController {
     if (this.surface.inert || (event.button !== undefined && event.button !== 0) || this.pointers.size >= MAX_CONTACTS) return;
     this.surface.focus({ preventScroll: true });
     this.surface.setPointerCapture(event.pointerId);
-    this.pointers.set(event.pointerId, {
-      slot: this.nextSlot(),
-      x: this.normalizeX(event.clientX),
-      y: this.normalizeY(event.clientY),
-      down: true,
-    });
+    const x = this.normalizeX(event.clientX), y = this.normalizeY(event.clientY);
+    this.pointers.set(event.pointerId, { slot: this.nextSlot(), x, y, down: true, startX: x, startY: y });
     this.flush();
     this.lastDownAt = performance.now();
   };
@@ -86,6 +82,9 @@ export class InputController {
     if (event.type === 'pointerup') {
       pointer.x = this.normalizeX(event.clientX);
       pointer.y = this.normalizeY(event.clientY);
+      // A swipe that moved sends its final point as a move before the up: the animation-frame flush can be
+      // starved while the page decodes, and an up alone at the end reads as a tap on the phone (2026-10-23).
+      if (Math.abs(pointer.x - pointer.startX) > 0.01 || Math.abs(pointer.y - pointer.startY) > 0.01) this.flush();
     }
     pointer.down = false;
     this.flush();
