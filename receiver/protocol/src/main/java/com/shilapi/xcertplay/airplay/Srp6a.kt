@@ -86,7 +86,8 @@ class Srp6aSession internal constructor(
 
         val u = Srp6a.toBigInt(AirPlayCrypto.sha512(Srp6a.pad(a), Srp6a.pad(publicKeyB)))
         val s = (a * verifier.modPow(u, n)).mod(n).modPow(privateExponent, n)
-        val sessionKey = AirPlayCrypto.sha512(Srp6a.toBytes(s))
+        // K = H(PAD(S)) as the iPhone computes it; an unpadded S broke ~1 in 256 pair-setups (2026-10-11).
+        val sessionKey = AirPlayCrypto.sha512(Srp6a.pad(s))
 
         val hashN = AirPlayCrypto.sha512(Srp6a.toBytes(n))
         val hashG = AirPlayCrypto.sha512(Srp6a.toBytes(Srp6a.generator()))
