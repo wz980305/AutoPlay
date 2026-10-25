@@ -198,8 +198,19 @@ console.log('Car checks passed: aspect fit, media keys, disconnect state, single
   const s=areaSize(1920,1080,windowed,773,601);
   assert.ok(Math.abs(s.width-773*1920/1280)<1e-6 && Math.abs(s.height-601*1080/996)<1e-6,'the area fills the view');
   assert.deepEqual(areaSize(1280,996,undefined,773,601),{width:773,height:601},'without areas as before');
-  const four=areaPlan(start,{width:800,height:1280},true,[{width:1280,height:720},{width:1280,height:996},{width:1920,height:1080},{width:1280,height:640}]);
+  const four=areaPlan(start,{width:1280,height:400},true,[{width:1280,height:720},{width:1280,height:996},{width:1920,height:1080},{width:1280,height:640}]);
   assert.equal(four.display.areas.length,4,'at most four areas');
+  // Turning the window (xcertplay 1836c27): only the window's orientation is declared, so the stream is never the
+  // near-square envelope of a landscape and a portrait shape; the other orientation's shapes stay remembered.
+  const portrait={width:1082,height:1280};
+  const turned=areaPlan(learn.display,portrait,true,learn.shapes);
+  assert.deepEqual([turned.display.width,turned.display.height,turned.display.areas.length],[1082,1280,0],'portrait alone, not 1920x1280');
+  assert.deepEqual(turned.shapes,[windowed,full,portrait],'the landscape shapes are kept');
+  const again=areaPlan(turned.display,full,true,turned.shapes);
+  assert.deepEqual([again.display.width,again.display.height],[1920,1080],'turning back is landscape only');
+  assert.deepEqual(again.display.areas,[windowed,full],'with the shapes learned before');
+  assert.equal(again.display.area,1);
+  assert.deepEqual(again.shapes,[portrait,windowed,full],'and the portrait one is kept in turn');
 }
 console.log('View areas: shapes learned once, switched without reconnecting.');
 { // Tesla fullscreen leaves the page only when its video sites answer (offline Tesla, simulated 2026-10-14).

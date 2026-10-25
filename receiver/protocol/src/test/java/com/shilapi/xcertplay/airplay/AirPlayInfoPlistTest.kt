@@ -35,6 +35,28 @@ class AirPlayInfoPlistTest {
     }
 
     @Test
+    fun everyDisplayDeclaresAutomaticAppearance() {
+        val info = AirPlayInfoPlist.build(
+            AirPlayConfig(
+                deviceName = "test",
+                deviceId = "02:00:00:00:00:02",
+                btMac = "02:00:00:00:00:02",
+                sourceVersion = "366.0",
+                main = AirPlayDisplayConfig(widthPixels = 1280, heightPixels = 720),
+                cluster = AirPlayDisplayConfig(widthPixels = 800, heightPixels = 480),
+            ),
+        )
+
+        val displays = info["displays"] as List<*>
+        assertEquals(2, displays.size)
+        for (display in displays.map { it as Map<*, *> }) {
+            for (key in listOf("uiAppearanceMode", "uiAppearanceSetting", "mapAppearanceMode", "mapAppearanceSetting")) {
+                assertEquals(key, 0, display[key])
+            }
+        }
+    }
+
+    @Test
     fun severalViewAreasAreDeclaredAndSwitchedWithoutReconnecting() {
         // A browser whose window changes shape (a Tesla windowed 1280x996 and fullscreen 1920x1080): the stream
         // covers both, each shape is an area at its top left, and the car switches with updateViewArea.

@@ -21,14 +21,20 @@ export function shownSize(width: number, height: number, viewWidth: number, view
 
 export interface Area { width: number; height: number }
 export interface AreaDisplay { width: number; height: number; hevc: boolean; areas?: Area[]; area?: number }
-/** Window shapes kept per browser as CarPlay view areas (protocol: at most 4). */
+/** Window shapes kept per browser and orientation as CarPlay view areas (protocol: at most 4). */
 export const MAX_AREAS = 4;
-/** View areas (2026-10-14): each window shape this browser has shown (normal, fullscreen, the car's dock shown or not)
+/** View areas (2026-10-14): each window shape of this orientation the browser has shown (normal, fullscreen, the car's dock shown or not)
  *  becomes an area at the stream's top left, the stream as large as all of them. A shape seen before is reached by
  *  switching area, without reconnecting CarPlay; a new shape, or one that wants a clearly sharper size, declares the
  *  areas again (one reconnect). Returns what to send and the shapes to keep, or null when nothing changes. */
 export function areaPlan<T extends AreaDisplay>(display: T, target: Area, hevc: boolean, known: Area[]): { display: T; shapes: Area[] } | null {
-  const shapes = known.filter(s => s.width > 0 && s.height > 0).slice(-MAX_AREAS).map(s => ({ width: s.width, height: s.height }));
+  // Only shapes of the target's orientation are declared: a landscape and a portrait shape together make the stream
+  // as large as both, a near-square frame the iPhone has to encode (xcertplay 1836c27). Shapes of the other
+  // orientation stay remembered for when the window turns back; turning is one reconnect.
+  const landscape = (s: Area) => s.width >= s.height, wide = landscape(target);
+  const valid = known.filter(s => s.width > 0 && s.height > 0).map(s => ({ width: s.width, height: s.height }));
+  const other = valid.filter(s => landscape(s) !== wide).slice(-MAX_AREAS);
+  const shapes = valid.filter(s => landscape(s) === wide).slice(-MAX_AREAS);
   let at = shapes.findIndex(s => !aspectChanged(s, target));
   if (at < 0) {
     shapes.push({ ...target });
@@ -42,8 +48,9 @@ export function areaPlan<T extends AreaDisplay>(display: T, target: Area, hevc: 
   const declared = display.areas ?? [];
   const same = display.width === width && display.height === height && display.hevc === hevc &&
     declared.length === areas.length && declared.every((a, i) => a.width === areas[i].width && a.height === areas[i].height);
-  if (same) return areas.length && (display.area ?? 0) !== at ? { display: { ...display, area: at }, shapes } : null;
-  return { display: { ...display, width, height, hevc, areas, area: areas.length ? at : 0 }, shapes };
+  const kept = [...other, ...shapes];
+  if (same) return areas.length && (display.area ?? 0) !== at ? { display: { ...display, area: at }, shapes: kept } : null;
+  return { display: { ...display, width, height, hevc, areas, area: areas.length ? at : 0 }, shapes: kept };
 }
 /** The picture element's size so that the area in use fills the view (the rest of the stream lies outside it, to the
  *  right and below; touches, normalized over the element, stay in stream coordinates). Without areas: shownSize. */

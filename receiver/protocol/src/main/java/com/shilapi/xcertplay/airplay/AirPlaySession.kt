@@ -631,8 +631,8 @@ class AirPlaySession(
     private fun acceptEvent(server: ServerSocket) {
         try {
             val socket = server.accept()
-            socket.setSoLinger(true, 0)
-            debugLog("airplay event connection accepted from ${socket.remoteSocketAddress}")
+            prepareEventSocket(socket)
+            debugLog("airplay event connection accepted from ${socket.remoteSocketAddress} noDelay=${socket.tcpNoDelay}")
             eventSocket = socket
             val shared = pairVerify.shared
             if (shared == null) {
@@ -739,6 +739,16 @@ class AirPlaySession(
         const val EVENT_READY_POLL_MILLIS = 25L
         const val NANOS_PER_MILLISECOND = 1_000_000L
     }
+}
+
+/**
+ * The event channel carries touches: small messages sent many times a second that the iPhone does not answer, so
+ * with Nagle's algorithm each one waited for the delayed ACK of the previous one and moves arrived in bunches
+ * (DiPlay 4b5e0bb7).
+ */
+internal fun prepareEventSocket(socket: Socket) {
+    socket.setSoLinger(true, 0)
+    socket.tcpNoDelay = true
 }
 
 internal fun safeClose(closeable: Closeable?) {

@@ -3,6 +3,7 @@ package com.shilapi.xcertplay.airplay
 import java.net.InetAddress
 import java.net.Socket
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -51,6 +52,19 @@ class AirPlayIapTunnelStreamTest {
             Socket(InetAddress.getByName("::1"), port).use { }
         } finally {
             bridge.close()
+        }
+    }
+
+    @Test
+    fun eventChannelSendsTouchesWithoutNagleDelay() {
+        java.net.ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
+            Socket(InetAddress.getLoopbackAddress(), server.localPort).use {
+                server.accept().use { accepted ->
+                    assertFalse(accepted.tcpNoDelay)
+                    prepareEventSocket(accepted)
+                    assertTrue(accepted.tcpNoDelay)
+                }
+            }
         }
     }
 

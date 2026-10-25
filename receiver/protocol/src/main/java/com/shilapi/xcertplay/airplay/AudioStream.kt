@@ -17,6 +17,9 @@ data class AudioFormat(
     val channels: Int,
     val payloadType: Int,
     val audioType: String = "media",
+    /** The clock the stream's RTP timestamps count in. Opus decodes to 48 kHz, but its timestamps follow the
+     *  negotiated format: 16 kHz for calls and navigation prompts, 24 kHz for Siri (F50 drive 2026-10-13). */
+    val rtpClockRate: Int = sampleRate,
 )
 
 /**
@@ -206,7 +209,7 @@ object AudioStreamCodec {
         val isOpus = (bits and OPUS_MONO) != 0L
         val pcm = PCM_FORMAT[bits]
         return when {
-            isOpus -> AudioFormat(AudioCodecKind.OPUS, 48_000, 1, payloadType, audioType)
+            isOpus -> AudioFormat(AudioCodecKind.OPUS, 48_000, 1, payloadType, audioType, opusClockRate(bits))
             isAacLc -> AudioFormat(
                 AudioCodecKind.AAC_LC,
                 if ((bits and AAC_LC_48K_STEREO) != 0L) 48_000 else 44_100,
@@ -219,9 +222,20 @@ object AudioStreamCodec {
         }
     }
 
+    /** RTP clock of an Opus format; only the 16 and 24 kHz bits have been seen alone, anything else counts 48 kHz. */
+    fun opusClockRate(bits: Long): Int = when {
+        bits and OPUS_48K != 0L -> 48_000
+        bits and OPUS_24K != 0L -> 24_000
+        bits and OPUS_16K != 0L -> 16_000
+        else -> 48_000
+    }
+
+    private const val OPUS_16K = 0x10000000L
+    private const val OPUS_24K = 0x20000000L
+    private const val OPUS_48K = 0x40000000L
     private const val AAC_LC_44K_STEREO = 0x400000L
     private const val AAC_LC_48K_STEREO = 0x800000L
-    private const val OPUS_MONO = 0x10000000L or 0x20000000L or 0x40000000L
+    private const val OPUS_MONO = OPUS_16K or OPUS_24K or OPUS_48K
 
     private val PCM_FORMAT = mapOf(
         0x4L to (8_000 to 1),

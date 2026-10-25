@@ -18,6 +18,26 @@ class CarPlayMediaEngineTest {
     }
 
     @Test
+    fun feedbackCountsSpeechInItsOwnRtpClock() {
+        // audioFormat values from an F50 drive (2026-10-13): navigation prompts and Siri, both Opus decoded at 48 kHz.
+        val navigation = AudioStreamCodec.fromFormatBits(268_435_456L, 101, "default")
+        val siri = AudioStreamCodec.fromFormatBits(536_870_912L, 100, "speechrecognition")
+        assertEquals(48_000, navigation.sampleRate)
+        assertEquals(16_000, navigation.rtpClockRate)
+        assertEquals(24_000, siri.rtpClockRate)
+        assertEquals(1_000L + 320_000L, feedbackSampleTime(1_000, 20.0, navigation))
+        assertEquals(480_000L, feedbackSampleTime(0, 20.0, siri))
+    }
+
+    @Test
+    fun feedbackKeepsMusicAndWrapsLikeRtp() {
+        val music = AudioStreamCodec.fromFormatBits(0x800000L, 102, "media")
+        assertEquals(48_000, music.rtpClockRate)
+        assertEquals(96_000L - 1L, feedbackSampleTime(-1, 2.0, music))   // 0xffffffff + 96000 wraps
+        assertEquals(48_000, AudioStreamCodec.fromFormatBits(0x40000000L, 100).rtpClockRate)
+    }
+
+    @Test
     fun screenStreamTeardownReportsInactive() {
         val events = mutableListOf<Pair<Int, Boolean>>()
         val sink = object : MediaSink {

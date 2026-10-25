@@ -255,7 +255,7 @@ class CarPlayMediaEngine(
         val streams = active.map { meta ->
             val entry = linkedMapOf<String, Any?>(
                 "type" to meta.type,
-                "sampleRate" to meta.format.sampleRate,
+                "sampleRate" to meta.format.rtpClockRate,
             )
             val firstSample = meta.firstSample
             val originNs = meta.originNs
@@ -265,9 +265,7 @@ class CarPlayMediaEngine(
                     0.0,
                     (nowNs - originNs) / 1e9 - meta.playoutLatencyMs / 1000.0,
                 )
-                val firstUnsigned = firstSample.toLong() and 0xffff_ffffL
-                val sampleTime = (firstUnsigned + Math.round(elapsedSec * meta.format.sampleRate)) and
-                    0xffff_ffffL
+                val sampleTime = feedbackSampleTime(firstSample, elapsedSec, meta.format)
                 entry["streamConnectionID"] = unsignedPlistInteger(meta.connectionId ?: 0L)
                 entry["timestamp"] = session.syncedNtp()
                 entry["timestampRawNs"] = nowNs
@@ -357,12 +355,7 @@ class CarPlayMediaEngine(
             key = key,
             codec = format.codec,
             bitrate = if (format.codec == AudioCodecKind.OPUS) opusBitrate else null,
-            clockRate = when {
-                format.codec != AudioCodecKind.OPUS -> format.sampleRate
-                formatBits and OPUS_16K != 0L -> 16_000
-                formatBits and OPUS_24K != 0L -> 24_000
-                else -> 48_000
-            },
+            clockRate = format.rtpClockRate,
         )
     }
 
@@ -393,11 +386,18 @@ class CarPlayMediaEngine(
         const val DATASTREAM_OUTPUT_KEY = "DataStream-Output-Encryption-Key"
         const val DATASTREAM_INPUT_KEY = "DataStream-Input-Encryption-Key"
         const val IAP_DATASTREAM_UUID = "E9459FD0-BCAD-4C45-820F-1E72447EF2F2"
-        const val OPUS_16K = 0x10000000L
         const val OPUS_24K = 0x20000000L
         const val OPUS_48K = 0x40000000L
     }
 }
+
+/**
+ * The RTP time a stream has played up to, as /feedback reports it: counted in the stream's own RTP clock. Counting
+ * 16 kHz calls and navigation prompts at their 48 kHz decode rate ran three times ahead of the received audio
+ * (DiPlay #473: 14.5 s ahead after 20 s of a call the driver could not understand).
+ */
+internal fun feedbackSampleTime(firstSample: Int, elapsedSec: Double, format: AudioFormat): Long =
+    ((firstSample.toLong() and 0xffff_ffffL) + Math.round(elapsedSec * format.rtpClockRate)) and 0xffff_ffffL
 
 internal fun unsignedPlistDecimal(value: Any?): String? = when (value) {
     is Long -> java.lang.Long.toUnsignedString(value)

@@ -185,6 +185,13 @@ object AirPlayInfoPlist {
             "heightPhysical" to heightPhysical,
             "features" to (display.features ?: (DISPLAY_FEATURE_HIGH_FIDELITY_TOUCH or DISPLAY_FEATURE_KNOBS)),
             "primaryInputDevice" to display.primaryInputDevice,
+            // Automatic UI and map appearance (0), declared before any setNightMode. Without these a BYD Tang's
+            // CarPlay did not follow its runtime day/night commands; with them it did (DiPlay 4be0fa39,
+            // docs/TANG21_APPEARANCE.md). Our "always day" had not brightened the picture either (F50 2026-10-10).
+            "uiAppearanceMode" to 0,
+            "uiAppearanceSetting" to 0,
+            "mapAppearanceMode" to 0,
+            "mapAppearanceSetting" to 0,
         )
 
         // Several areas let the car move CarPlay between them (a browser window that changes shape) with

@@ -46,7 +46,7 @@ class WebBridge(private val hub: WebHub) : MediaSink {
 
     override fun onAudioRtp(type: Int, format: AudioFormat, rtp: ByteArray, sample: Int) {
         if (rtp.size <= RTP_HEADER_BYTES) return
-        val timestampUs = (sample.toLong() and 0xffff_ffffL) * 1_000_000L / format.sampleRate
+        val timestampUs = (sample.toLong() and 0xffff_ffffL) * 1_000_000L / format.rtpClockRate
         val payload = when (format.codec) {
             com.shilapi.xcertplay.airplay.AudioCodecKind.LPCM -> {
                 val tail = rtp.copyOfRange(RTP_HEADER_BYTES, rtp.size)
