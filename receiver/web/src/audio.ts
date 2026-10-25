@@ -221,6 +221,12 @@ export class AudioEngine {
     this.sleepWhenIdle();
   }
 
+  /** The streams now open, for the debug overlay (debug-hud.ts). */
+  describe(): { name: string; codec: string; sampleRate: number; channels: number }[] {
+    const codecs: Record<number, string> = { [AudioCodec.AacLc]: 'AAC', [AudioCodec.Opus]: 'Opus', [AudioCodec.Lpcm]: 'PCM' };
+    return Array.from(this.streams.values(), s => ({ name: s.name, codec: codecs[s.codec] ?? String(s.codec), sampleRate: s.sampleRate, channels: s.channels }));
+  }
+
   /** Music element counters for the viewer log (music-output.ts). */
   musicReport(): Record<string, number> {
     const total: Record<string, number> = {};

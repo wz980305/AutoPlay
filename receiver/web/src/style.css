@@ -104,6 +104,11 @@ fieldset { border:0; padding:0; margin:0; min-width:0; }
   background:rgba(44,44,46,.92); -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); border:.5px solid rgba(255,255,255,.14);
   color:#fff; font-size:16px; line-height:1.45; text-align:center; box-shadow:0 8px 30px rgba(0,0,0,.4); }
 #toast { top:max(16px,env(safe-area-inset-top)); pointer-events:none; animation:drop .3s cubic-bezier(.2,.8,.2,1); }
+/* Debug overlay (debug-hud.ts): bottom right, away from the CarPlay dock on the left; takes no touches. */
+#debug-hud { position:absolute; right:max(8px,env(safe-area-inset-right)); bottom:max(8px,env(safe-area-inset-bottom)); z-index:2;
+  padding:6px 9px; border-radius:8px; background:rgba(0,0,0,.55); color:#fff; pointer-events:none; white-space:pre;
+  font:12px/1.45 ui-monospace,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums; }
+#debug-hud[hidden] { display:none; }
 #audio-unlock { bottom:max(20px,env(safe-area-inset-bottom)); white-space:nowrap; font-weight:600; min-height:48px; }
 @keyframes drop { from { opacity:0; transform:translate(-50%,-10px); } }
 #error-banner { position:absolute; bottom:max(16px,env(safe-area-inset-bottom)); left:16px; right:16px; max-width:560px; max-height:40vh; margin:auto;

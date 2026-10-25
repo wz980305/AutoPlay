@@ -10,9 +10,11 @@ export class LagProbe {
     this.queue.push(now);
     if (this.queue.length > 30) this.queue.shift();
   }
+  /** The latest round trip, for the debug overlay; -1 before the first pong. */
+  last = -1;
   pong(now: number) {
     const at = this.queue.shift();
-    if (at !== undefined) this.worst = Math.max(this.worst, now - at);
+    if (at !== undefined) { this.last = now - at; this.worst = Math.max(this.worst, this.last); }
   }
   /** The window's worst round trip, counting a pong still on its way by its age; then a new window. */
   take(now: number): Record<string, number> {
@@ -21,5 +23,5 @@ export class LagProbe {
     this.worst = -1;
     return lag >= 0 ? { lagMs: Math.round(lag) } : {};
   }
-  reset() { this.queue.length = 0; this.worst = -1; }
+  reset() { this.queue.length = 0; this.worst = -1; this.last = -1; }
 }

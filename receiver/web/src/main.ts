@@ -10,6 +10,7 @@ import { suggestedResolution, areaPlan, areaSize, type Area } from './display-fi
 import { t, language, setLanguage, type Key } from './i18n';
 import { isNight, parseNightMode } from './night';
 import { reachable, TESLA_HOPS } from './tesla-fullscreen';
+import { hudLines } from './debug-hud';
 import type { ServerMessage, ClientMessage } from './protocol';
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
@@ -30,6 +31,8 @@ let reportFrames = 0, reportBytes = 0, reportStart = performance.now();
 let lastPaintAt = 0, handledDownAt = 0, touchSum = 0, touchCount = 0;
 // Music as the iPhone sends it (stream 102, AAC): its bitrate is the iPhone's choice.
 let musicBytes = 0;
+// The same, per second, for the debug overlay (debug-hud.ts).
+let hudFrames = 0, hudBytes = 0, hudMusicBytes = 0, hudStart = performance.now();
 let state: Key = token ? 'connecting' : 'access';
 let hint: Key = token ? 'waitingHint' : 'accessHint';
 let lastAutoTarget = '', autoTimer = 0, displayBusy = false;
@@ -110,7 +113,7 @@ function send(message: ClientMessage) { if (active) connection.send(message); }
 const video = new VideoPlayer(canvas, error, () => {
   if (!active) return;
   if (!shownOnce) { startup.mark('firstFrameMs'); connection.send({type:'stats', stats:{ev:16,...startupStats()}}); }
-  frames++; reportFrames++; painted = true; shownOnce = true; el('overlay').hidden = true; el('app').dataset.live = 'true';
+  frames++; reportFrames++; hudFrames++; painted = true; shownOnce = true; el('overlay').hidden = true; el('app').dataset.live = 'true';
   if (holding) { holding = false; el('toast').hidden = true; }
   if (wokeAt) { lifeEvent(14, { pictureMs: Math.round(performance.now() - wokeAt) }); wokeAt = 0; }
   const now = performance.now();
@@ -159,12 +162,12 @@ const connection = new Connection(token, {
       case 'video-config': video.configure(message); break;
       case 'video-frame': video.pushFrame(message); break;
       case 'audio-config': audio.handleConfig(message); voiceStarted(message.streamType, message.name); break;
-      case 'audio-packet': if (message.streamType === 102) musicBytes += message.data.length; audio.handlePacket(message); break;
+      case 'audio-packet': if (message.streamType === 102) { musicBytes += message.data.length; hudMusicBytes += message.data.length; } audio.handlePacket(message); break;
       case 'audio-stopped': audio.stopStream(message.streamType); voiceStopped(message.streamType); break;
     }
   },
   onServer(message) { lastHeard = performance.now(); server(message); },
-  onBytes(count) { reportBytes += count; lastHeard = performance.now(); },
+  onBytes(count) { reportBytes += count; hudBytes += count; lastHeard = performance.now(); },
   onState(value) {
     if (value === 'open' && closedAt) { lifeEvent(11, { downMs: Math.round(performance.now() - closedAt), failures: connection.failures }); closedAt = 0; }
     if (value === 'closed') { if (!closedAt) closedAt = performance.now(); if (!wokeAt) wokeAt = closedAt; reset(shownOnce); state = 'reconnecting'; }
@@ -405,7 +408,7 @@ function pageEvent(ev: number) {
   connection.send({type:'stats',stats:{ev,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,width:screen.clientWidth,height:screen.clientHeight,want:wantFullscreen?1:0,...viewport()}});
 }
 /** Which page build runs (raised with each build tried in the car). */
-const BUILD = 202610142250;
+const BUILD = 202610161700;
 /** What the browser says of the space it gives the page, to find the car's bar over a fullscreen page (2026-10-13):
  *  window, visual viewport (and its offset), screen, available screen, outer window, pixel ratio. */
 function viewport(): Record<string, number> {
@@ -498,6 +501,20 @@ window.setInterval(()=>{
   judgeDecoder(video.decodeLatencyMs, reportFrames/seconds);
   reportFrames=0;reportBytes=0;reportStart=now;touchSum=0;touchCount=0;musicBytes=0;
 },10000);
+// Debug overlay: off unless turned on in Display (kept in this browser); nothing is counted differently while it is off.
+const hud = el('debug-hud'), hudSwitch = el<HTMLInputElement>('debug-hud-on');
+hudSwitch.checked = readFlag('f50-debug-hud') === '1';
+hudSwitch.onchange = () => { saveFlag('f50-debug-hud', hudSwitch.checked ? '1' : '0'); hud.hidden = !hudSwitch.checked; updateHud(); };
+hud.hidden = !hudSwitch.checked;
+function updateHud() {
+  const now = performance.now(), seconds = Math.max(0.25, (now - hudStart) / 1000);
+  if (!hud.hidden) hud.textContent = hudLines({ width: painted ? canvas.width : 0, height: canvas.height, fps: hudFrames / seconds,
+    hevc: display ? display.hevc : null, videoKbps: hudBytes * 8 / 1000 / seconds, decodeMs: video.decodeLatencyMs,
+    queue: video.decodeQueueSize, rttMs: lag.last, audio: audio.describe(), musicKbps: hudMusicBytes * 8 / 1000 / seconds,
+    playing: audio.isPlaying }, language === 'zh').join('\n');
+  hudFrames = 0; hudBytes = 0; hudMusicBytes = 0; hudStart = now;
+}
+window.setInterval(updateHud, 1000);
 render();fit();if(token) connection.connect();
 
 nightSelect.onchange = () => { localStorage.setItem('f50-night-mode', nightSelect.value); syncNight(); render(); };

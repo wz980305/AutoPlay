@@ -237,3 +237,13 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
   }
   globalThis.window=savedWindow;globalThis.fetch=savedFetch;globalThis.localStorage=savedStorage;
 }
+
+{ // Debug overlay (2026-10-16): three short lines, the music bitrate on the music stream, nothing for no picture yet.
+  const {hudLines}=await load('debug-hud');
+  const sample={width:1280,height:846,fps:29.6,hevc:false,videoKbps:2412,decodeMs:63.4,queue:1,rttMs:41.2,
+    audio:[{name:'media',codec:'AAC',sampleRate:44100,channels:2},{name:'default',codec:'PCM',sampleRate:16000,channels:1}],musicKbps:256.4,playing:true};
+  assert.deepEqual(hudLines(sample,true),['1280×846 · 30 fps · H.264 · 2.4 Mbps','解码 63 ms · 队列 1 · 往返 41 ms','声音 音乐 AAC 44.1 kHz 256 kbps · 播报 PCM 16 kHz 单声道']);
+  assert.deepEqual(hudLines({...sample,width:0,hevc:null,rttMs:-1,audio:[],musicKbps:0,playing:false},false),
+    ['No picture yet','Decode 63 ms · Queue 1 · RTT –','Sound none']);
+  assert.equal(hudLines({...sample,playing:false},true)[2].endsWith('（静音中）'),true);
+}
