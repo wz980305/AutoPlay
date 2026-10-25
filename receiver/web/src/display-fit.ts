@@ -26,6 +26,14 @@ export interface AreaDisplay { width: number; height: number; hevc: boolean; are
  *  not a protocol limit: DiPlay sets none); 8 since a car with a split screen shows more (user 2026-10-21). The
  *  receiver's DisplayState.MAX_AREAS must allow as many. */
 export const MAX_AREAS = 8;
+/** 60 fps the browser's decoder cannot keep up with: the page catches up at a keyframe now and then (video.ts), each a
+ *  visible jump. This many 10 s reports in a row with at least two catch-ups each take automatic display to 30 fps
+ *  (a Zeekr 7X decodes about 50 a second, 2026-10-19). Returns the new run of such reports and whether to lower now. */
+export const BEHIND_REPORTS = 2;
+export function frameRateCheck(run: number, caughtUp: number, fps: number): { run: number; lower: boolean } {
+  const next = caughtUp >= 2 && fps === 60 ? run + 1 : 0;
+  return next >= BEHIND_REPORTS ? { run: 0, lower: true } : { run: next, lower: false };
+}
 /** Both orientations are declared together only while the stream grows by at most this much over one orientation's. */
 export const MIXED_GROWTH = 1.1;
 /** View areas (2026-10-14): each window shape the browser has shown (normal, fullscreen, the car's dock shown or not)

@@ -6,7 +6,7 @@ import { VideoPlayer } from './video';
 import { Connection } from './ws';
 import { SystemMedia } from './media-session';
 import { LagProbe } from './lag';
-import { suggestedResolution, areaPlan, areaSize, areaFor, sameStream, showsShape, type Area } from './display-fit';
+import { suggestedResolution, areaPlan, areaSize, areaFor, sameStream, showsShape, frameRateCheck, type Area } from './display-fit';
 import { t, language, setLanguage, type Key } from './i18n';
 import { isNight, parseNightMode } from './night';
 import { reachable, TESLA_HOPS } from './tesla-fullscreen';
@@ -115,6 +115,14 @@ function judgeDecoder(decodeMs: number, fps: number) {
   slowReports = decodeMs > 40 ? slowReports + 1 : 0;
   if (fastReports >= 3 && !fastDecoder()) { saveFlag('f50-fast-decoder', '1'); lastAutoTarget = ''; scheduleAuto(); }
   if (slowReports >= 3 && fastDecoder()) { saveFlag('f50-fast-decoder', '0'); lastAutoTarget = ''; scheduleAuto(); }
+}
+/** Automatic display only, once per browser: 60 fps chosen again by hand afterwards stays. */
+let behindRun = 0;
+function judgeFrameRate(caughtUp: number) {
+  const check = frameRateCheck(behindRun, caughtUp, display?.fps ?? 0); behindRun = check.run;
+  if (!check.lower || !display || !autoFit.checked || displayBusy || readFlag('f50-fps-lowered') === '1') return;
+  saveFlag('f50-fps-lowered', '1'); toast(t('fpsLowered'));
+  void saveDisplay({ ...display, fps: 30 }, { reason: 'decoder' });
 }
 function send(message: ClientMessage) { if (active) connection.send(message); }
 // Compatible display (compat-display.ts): automatic by the browser's version, or the switch in Display; chosen once
@@ -457,7 +465,7 @@ function pageEvent(ev: number) {
   connection.send({type:'stats',stats:{ev,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,width:screen.clientWidth,height:screen.clientHeight,want:wantFullscreen?1:0,...viewport()}});
 }
 /** Which page build runs (raised with each build tried in the car). */
-const BUILD = 202610171100;
+const BUILD = 202610212300;
 /** What the browser says of the space it gives the page, to find the car's bar over a fullscreen page (2026-10-13):
  *  window, visual viewport (and its offset), screen, available screen, outer window, pixel ratio. */
 function viewport(): Record<string, number> {
@@ -542,12 +550,13 @@ window.setInterval(() => {
   else if (!document.hidden && closedAt && now - closedAt > RELOAD_AFTER_MS) reloadWhenBoxAnswers();
 }, 1000);
 window.setInterval(()=>{
-  const now=performance.now(),seconds=Math.max(1,(now-reportStart)/1000);
+  const now=performance.now(),seconds=Math.max(1,(now-reportStart)/1000),stalls=video.takeStalls();
   send({type:'stats',stats:{fps:reportFrames/seconds,decodeMs:video.decodeLatencyMs,queue:video.decodeQueueSize,
     kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,
     width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),...(musicBytes?{musicKbps:musicBytes*8/1000/seconds}:{}),
-    ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,build:BUILD,webView,carMusic:carMusic?1:0,teslaMode:teslaMode?1:0,promptGain,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...microphone.report(),...audio.farReport(),...media.report(),...musicTimeline(),...audio.musicReport(),...video.takeStalls(),...lag.take(performance.now())}});
+    ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,build:BUILD,webView,carMusic:carMusic?1:0,teslaMode:teslaMode?1:0,promptGain,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...microphone.report(),...audio.farReport(),...media.report(),...musicTimeline(),...audio.musicReport(),...stalls,...lag.take(performance.now())}});
   judgeDecoder(video.decodeLatencyMs, reportFrames/seconds);
+  if (active) judgeFrameRate(stalls.caughtUp);
   reportFrames=0;reportBytes=0;reportStart=now;touchSum=0;touchCount=0;musicBytes=0;
 },10000);
 // Debug overlay: off unless turned on in Display (kept in this browser); nothing is counted differently while it is off.

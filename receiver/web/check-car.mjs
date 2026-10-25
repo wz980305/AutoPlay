@@ -6,7 +6,12 @@ async function load(name, transform = s => s) {
   const {outputText}=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}});
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 }
-const {suggestedResolution,aspectChanged,shownSize,areaPlan,areaSize,areaFor,sameStream,showsShape,MAX_AREAS}=await load('display-fit');
+const {suggestedResolution,aspectChanged,shownSize,areaPlan,areaSize,areaFor,sameStream,showsShape,MAX_AREAS,frameRateCheck}=await load('display-fit');
+{ // 60 fps the decoder cannot keep up with (Zeekr 7X): two 10 s reports in a row with two catch-ups each go to 30 fps.
+  let c=frameRateCheck(0,3,60);assert.deepEqual(c,{run:1,lower:false},'one report is not enough');
+  assert.deepEqual(frameRateCheck(c.run,2,60),{run:0,lower:true},'two in a row lower it');
+  assert.deepEqual(frameRateCheck(c.run,1,60),{run:0,lower:false},'a single catch-up in between starts over');
+  assert.deepEqual(frameRateCheck(1,5,30),{run:0,lower:false},'30 fps is never lowered'); }
 { // XPeng fullscreen is 876x579 or 876x641 CSS px (dock shown or not): 1280x846 or 1280x936 (F50 drive 2026-10-13).
   // With view areas the page (1280x756) and both fullscreen heights are areas: learned once, then switched.
   const s846=suggestedResolution(876,579),s936=suggestedResolution(876,641),page=suggestedResolution(876,518);
@@ -94,8 +99,55 @@ assert.deepEqual(media.report(),{positionState:1,songPos:62,songDur:200,art:0},'
   const player=new VideoPlayer({getContext(){return null;}},()=>{},()=>{},()=>{});
   player.state={usesDescription:false,timestampUs:0,frameIntervalUs:16667,decoder:{decode(){},decodeQueueSize:0}};
   for(const t of [0,20,40,400,420,1400,2400]){clock=t;player.pushFrame({data:new Uint8Array([1]),keyframe:false});}
-  assert.deepEqual(player.takeStalls(),{stalls:1,stallMaxMs:360,slowFrames:0,paintMaxMs:0},'Only a gap with frames flowing on both sides counts; motion ending into an idle screen (1 frame/s) does not');
-  assert.deepEqual(player.takeStalls(),{stalls:0,stallMaxMs:0,slowFrames:0,paintMaxMs:0},'Counters restart for each report');
+  assert.deepEqual(player.takeStalls(),{stalls:1,stallMaxMs:360,slowFrames:0,paintMaxMs:0,skipped:0,caughtUp:0},'Only a gap with frames flowing on both sides counts; motion ending into an idle screen (1 frame/s) does not');
+  assert.deepEqual(player.takeStalls(),{stalls:0,stallMaxMs:0,slowFrames:0,paintMaxMs:0,skipped:0,caughtUp:0},'Counters restart for each report');
+  Object.defineProperty(performance,'now',{value:realNow,configurable:true,writable:true}); }
+{ // A decoder slower than the stream (Zeekr 7X, 2026-10-19: 60 fps asked, 504 to 1689 frames queued, seconds behind):
+  // the page skips picture frames up to the next keyframe and shows that one at once.
+  let clock=0;const realNow=performance.now;Object.defineProperty(performance,'now',{value:()=>clock,configurable:true,writable:true});
+  globalThis.EncodedVideoChunk=class {constructor(v){Object.assign(this,v);}};
+  globalThis.document={hidden:false};
+  const {VideoPlayer}=await load('video',s=>s.replace(/^import .*?;$/gm,''));
+  let asks=0;const canvas={getContext(){return {drawImage(){}};},width:1280,height:720};
+  const player=new VideoPlayer(canvas,()=>{},()=>{},()=>{asks++;});
+  const decoded=[];let resets=0;
+  const decoder={decodeQueueSize:0,decode(c){decoded.push(c);},reset(){resets++;decoded.length=0;},configure(){}};
+  player.state={decoder,config:{codec:'avc1'},usesDescription:false,timestampUs:0,frameIntervalUs:16667,width:1280,height:720};
+  const push=(t,keyframe=false)=>{clock=t;player.pushFrame({data:new Uint8Array([1]),keyframe});};
+  const paint=chunk=>player.paint({timestamp:chunk.timestamp,displayWidth:1280,displayHeight:720});
+  // Painted as fast as they come: never behind.
+  for(let t=0;t<2000;t+=17){push(t,t===0);paint(decoded.at(-1));}
+  assert.deepEqual([asks,player.takeStalls().skipped],[0,0],'a decoder that keeps up');
+  // The decoder stops painting: once 8 frames wait, the oldest over 200 ms, frames are skipped and a keyframe asked.
+  decoded.length=0;let t=2000;
+  for(;t<2400;t+=17)push(t);
+  const held=decoded.length;
+  assert.ok(held>=8&&held<=14,`skips from the 8th waiting frame over 200 ms (${held} decoded)`);
+  assert.equal(asks,1,'one keyframe asked');
+  for(;t<3500;t+=17)push(t);
+  assert.equal(decoded.length,held,'nothing more is decoded');
+  assert.equal(asks,2,'asked again after a second, no more often');
+  document.hidden=true;for(;t<5000;t+=17)push(t);
+  assert.equal(asks,2,'not asked while the page is hidden');
+  document.hidden=false;push(t+=17);
+  assert.equal(asks,3,'asked once shown again');
+  push(t+=17,true);
+  assert.equal(resets,1,'the keyframe drops what the decoder held');
+  assert.equal(decoded.length,1,'and is decoded at once');
+  paint(decoded[0]);push(t+=17);
+  assert.equal(decoded.length,2,'then frames are decoded again');
+  const stalls=player.takeStalls();
+  assert.equal(stalls.caughtUp,1);assert.ok(stalls.skipped>100,'the skipped frames are counted for the viewer log');
+  // A still screen keeps a frame or two in the decoder for a second each: never behind.
+  decoded.length=0;
+  for(let i=0;i<10;i++){push(t+=1000);if(decoded.length>2)paint(decoded.at(-3));}
+  assert.equal(decoded.length,10,'a still screen is never skipped');
+  // A burst after a hiccup: many frames at once, none old.
+  paint(decoded.at(-1));decoded.length=0;for(let i=0;i<12;i++)push(t+=1);
+  assert.equal(decoded.length,12,'a burst is decoded');
+  // A frame painted removes older ones the decoder let go, so they never count as waiting.
+  paint(decoded.at(-1));assert.equal(player.arrivals.size,0,'nothing older stays listed');
+  delete globalThis.document;
   Object.defineProperty(performance,'now',{value:realNow,configurable:true,writable:true}); }
 { // Each keyframe the box asks for comes with the same codec config again (twice, 110 times in a 42-minute drive):
   // tearing the decoder down and resizing the canvas blanked the picture until the car's slow decoder painted again.

@@ -2,6 +2,7 @@ import { annexBToAvcc, avcCodecString, VideoCodec, type VideoConfigMessage, type
 
 interface DecoderState {
   decoder: VideoDecoder;
+  config: VideoDecoderConfig;
   usesDescription: boolean;
   timestampUs: number;
   frameIntervalUs: number;
@@ -16,6 +17,15 @@ interface HevcCandidate {
 }
 
 const STALL_TIMEOUT_MS = 2500;
+/** The page is behind once this many frames given to the decoder are still not painted, the oldest of them for over
+ *  BEHIND_MS: it then skips picture frames up to the next keyframe, which it shows at once (stale frames dropped). The
+ *  box only sees what reached the page (LagGate), not a decoder slower than the stream: a Zeekr 7X (Chrome 124,
+ *  2026-10-19, 60 fps asked, ~17-20 ms a frame) had 504 to 1689 frames queued, seconds behind and never catching up.
+ *  A still screen leaves one or two frames held in the decoder, a burst after a hiccup is young: neither counts. */
+const BEHIND_FRAMES = 8;
+const BEHIND_MS = 200;
+/** While skipping, the phone is asked for a keyframe at most this often (the box passes every ask on). */
+const KEYFRAME_ASK_MS = 1000;
 
 /** Decodes CarPlay's H.264/H.265 stream with WebCodecs and paints it to a canvas. */
 export class VideoPlayer {
@@ -56,10 +66,14 @@ export class VideoPlayer {
   /** Smoothed time from frame arrival to canvas paint (decoder delay), in ms. */
   decodeLatencyMs = 0;
   private readonly arrivals = new Map<number, number>();
-  /** For the box's viewer log: gaps in an otherwise flowing stream (network or box) and frames the decoder held long. */
-  private stall = { stalls: 0, stallMaxMs: 0, slowFrames: 0, paintMaxMs: 0 };
+  /** For the box's viewer log: gaps in an otherwise flowing stream (network or box), frames the decoder held long,
+   *  frames skipped to catch up and the keyframes it caught up at. */
+  private stall = VideoPlayer.noStalls();
   private lastGaps = [Infinity, Infinity];
-  takeStalls() { const stall = this.stall; this.stall = { stalls: 0, stallMaxMs: 0, slowFrames: 0, paintMaxMs: 0 }; return stall; }
+  private skipping = false;
+  private keyframeAskedAt = -Infinity;
+  private static noStalls() { return { stalls: 0, stallMaxMs: 0, slowFrames: 0, paintMaxMs: 0, skipped: 0, caughtUp: 0 }; }
+  takeStalls() { const stall = this.stall; this.stall = VideoPlayer.noStalls(); return stall; }
 
   configure(message: VideoConfigMessage): void {
     void this.configureAsync(message);
@@ -108,7 +122,7 @@ export class VideoPlayer {
       decoder.close();
       return;
     }
-    this.adopt(decoder, descriptionPresent, message);
+    this.adopt(decoder, config, descriptionPresent, message);
   }
 
   private async configureH265(message: VideoConfigMessage, generation: number): Promise<void> {
@@ -133,7 +147,7 @@ export class VideoPlayer {
         decoder.close();
         continue;
       }
-      this.adopt(decoder, candidate.description !== undefined, message);
+      this.adopt(decoder, config, candidate.description !== undefined, message);
       return;
     }
     this.onError(
@@ -143,9 +157,11 @@ export class VideoPlayer {
     this.onRequestKeyframe();
   }
 
-  private adopt(decoder: VideoDecoder, usesDescription: boolean, message: VideoConfigMessage): void {
+  private adopt(decoder: VideoDecoder, config: VideoDecoderConfig, usesDescription: boolean, message: VideoConfigMessage): void {
+    this.skipping = false;
     this.state = {
       decoder,
+      config,
       usesDescription,
       timestampUs: 0,
       frameIntervalUs: Math.round(1_000_000 / 60),
@@ -171,6 +187,20 @@ export class VideoPlayer {
     this.lastArrivalAt = now;
     const data = state.usesDescription ? annexBToAvcc(message.data) : message.data;
     if (data.length === 0) return;
+    const oldest = this.arrivals.size >= BEHIND_FRAMES ? this.arrivals.values().next().value : undefined;
+    const behind = oldest !== undefined && now - oldest > BEHIND_MS;
+    if (message.keyframe) {
+      if (this.skipping || behind) this.catchUp(state);
+    } else if (this.skipping || behind) {
+      this.skipping = true;
+      this.stall.skipped++;
+      // Not asked while the page is hidden (the car shows something else): the next frame once shown asks.
+      if (now - this.keyframeAskedAt >= KEYFRAME_ASK_MS && !document.hidden) {
+        this.keyframeAskedAt = now;
+        this.onRequestKeyframe();
+      }
+      return;
+    }
     state.timestampUs += state.frameIntervalUs;
     this.arrivals.set(state.timestampUs, this.lastArrivalAt);
     if (this.arrivals.size > 120) this.arrivals.delete(this.arrivals.keys().next().value!);
@@ -184,6 +214,19 @@ export class VideoPlayer {
       );
     } catch (error) {
       this.fail(`Video decode failed: ${describeError(error)}`);
+    }
+  }
+
+  /** Drops what the decoder still holds (all older than this keyframe), so the keyframe is painted next. */
+  private catchUp(state: DecoderState): void {
+    this.skipping = false;
+    this.stall.caughtUp++;
+    this.arrivals.clear();
+    try {
+      state.decoder.reset();
+      state.decoder.configure(state.config);
+    } catch {
+      // A decoder that cannot reset decodes the keyframe after what it holds.
     }
   }
 
@@ -261,8 +304,12 @@ export class VideoPlayer {
     }
     context.drawImage(frame, 0, 0, this.canvas.width, this.canvas.height);
     const arrived = this.arrivals.get(frame.timestamp);
+    // Frames come out in order: any older still listed were never painted (the decoder let them go).
+    for (const timestamp of this.arrivals.keys()) {
+      if (timestamp > frame.timestamp) break;
+      this.arrivals.delete(timestamp);
+    }
     if (arrived !== undefined) {
-      this.arrivals.delete(frame.timestamp);
       const latency = performance.now() - arrived;
       this.decodeLatencyMs = this.decodeLatencyMs ? this.decodeLatencyMs * 0.9 + latency * 0.1 : latency;
       if (latency > 150) this.stall.slowFrames++;
