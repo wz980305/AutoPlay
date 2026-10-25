@@ -49,6 +49,8 @@ data class ClientMessage(
     val knob: KnobMessage? = null,
     val night: Boolean? = null,
     val telephony: Int? = null,
+    /** "stats": the viewer's own playback counters (frames drawn, decode delay, ...), numbers only. */
+    val stats: Map<String, Double>? = null,
 )
 
 @Serializable
@@ -85,6 +87,14 @@ private class WsClient(
 ) {
     val imageReady = java.util.concurrent.atomic.AtomicBoolean(false)
     val keyframeRequested = AtomicLong(0)
+    val id = nextClientId.incrementAndGet()
+    val videoSent = AtomicLong(0)
+    val videoDropped = AtomicLong(0)
+    val bytesSent = AtomicLong(0)
+
+    private companion object {
+        val nextClientId = AtomicLong(0)
+    }
 }
 
 /** Fan-out hub: browsers connect here and the media bridge pushes CarPlay frames to all of them. */
@@ -192,7 +202,12 @@ class WebHub(
                 maybeRequestKeyframe(client, type)
                 continue
             }
-            client.channel.trySend(Frame.Binary(true, frame))
+            if (client.channel.trySend(Frame.Binary(true, frame)).isSuccess) {
+                client.videoSent.incrementAndGet()
+                client.bytesSent.addAndGet(frame.size.toLong())
+            } else {
+                client.videoDropped.incrementAndGet()   // send queue full: this viewer cannot keep up
+            }
         }
     }
 
@@ -353,6 +368,9 @@ class WebHub(
                         }
                         if (message.type == "keyframe") {
                             configByStream.keys.forEach { streamType -> onViewerJoined?.invoke(streamType) }
+                        } else if (message.type == "stats") {
+                            log.info(statsLine(client.id, client.videoSent.get(), client.videoDropped.get(),
+                                client.bytesSent.get(), message.stats.orEmpty()))
                         } else if (message.type == "ping") {
                             client.channel.trySend(Frame.Text("""{"type":"pong"}"""))
                         } else {
@@ -434,6 +452,22 @@ class WebHub(
     }.toString()
 
     companion object {
+        private val log = org.slf4j.LoggerFactory.getLogger("viewer")
+
+        /** One diagnostics line per viewer report: receiver-side totals, then the viewer's own numbers. */
+        internal fun statsLine(id: Long, sent: Long, dropped: Long, bytes: Long, stats: Map<String, Double>): String =
+            buildString {
+                append("viewer stats client=").append(id)
+                append(" sentFrames=").append(sent).append(" droppedFrames=").append(dropped)
+                append(" sentKB=").append(bytes / 1024)
+                stats.toSortedMap().forEach { (key, value) ->
+                    if (key.matches(Regex("[A-Za-z]{1,24}")) && value.isFinite()) {
+                        append(' ').append(key).append('=')
+                        append(if (value == Math.rint(value)) value.toLong().toString() else String.format(java.util.Locale.ROOT, "%.1f", value))
+                    }
+                }
+            }
+
         const val MIC_FRAME_LPCM = 0x10
         const val MIC_FRAME_OPUS = 0x11
         private const val SEND_QUEUE_CAPACITY = 1024

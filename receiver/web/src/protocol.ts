@@ -88,6 +88,7 @@ export type ClientMessage =
   | { type: 'night'; night: boolean }
   | { type: 'telephony'; telephony: number }
   | { type: 'keyframe' }
+  | { type: 'stats'; stats: Record<string, number> }
   | { type: 'ping' };
 
 export interface NowPlaying { title: string; artist: string; album: string; durationMs?: number; positionMs?: number; speed?: number; revision?: number; }

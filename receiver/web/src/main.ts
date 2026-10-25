@@ -19,6 +19,8 @@ const fromUrl = url.searchParams.get('token');
 if (fromUrl) { localStorage.setItem('playport-token', fromUrl); url.searchParams.delete('token'); history.replaceState(null, '', url); }
 const token = fromUrl || localStorage.getItem('playport-token') || '';
 let active = false, painted = false, frames = 0, lastStats = performance.now();
+// Reported to the box every 10 s for its persistent drive diagnostics (no personal data).
+let reportFrames = 0, reportBytes = 0, reportStart = performance.now();
 let state: Key = token ? 'connecting' : 'access';
 let hint: Key = token ? 'waitingHint' : 'accessHint';
 let lastAutoTarget = '', autoTimer = 0, displayBusy = false;
@@ -67,7 +69,7 @@ function error(message: string) { el('error-text').textContent = message; el('er
 function send(message: ClientMessage) { if (active) connection.send(message); }
 const video = new VideoPlayer(canvas, error, () => {
   if (!active) return;
-  frames++; painted = true; el('overlay').hidden = true; el('app').dataset.live = 'true';
+  frames++; reportFrames++; painted = true; el('overlay').hidden = true; el('app').dataset.live = 'true';
 }, () => send({ type:'keyframe' }), fit);
 const audio = new AudioEngine(error);
 const media = new SystemMedia(send, () => { void audio.unlock().catch(error); }, () => audio.pauseMusic());
@@ -85,6 +87,7 @@ const connection = new Connection(token, {
     }
   },
   onServer: server,
+  onBytes(count) { reportBytes += count; },
   onState(value) {
     if (value === 'closed') { reset(); state = 'reconnecting'; }
     else if (value === 'connecting') state = 'connecting';
@@ -243,6 +246,13 @@ window.setInterval(()=>{
   el('audio-unlock').hidden=!active||audio.isUnlocked;
   el('audio-status').textContent=t(audio.isPlaying?'playing':'paused');media.setPlaying(audio.isPlaying);
 },750);
+window.setInterval(()=>{
+  const now=performance.now(),seconds=Math.max(1,(now-reportStart)/1000);
+  send({type:'stats',stats:{fps:reportFrames/seconds,decodeMs:video.decodeLatencyMs,queue:video.decodeQueueSize,
+    kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,
+    width:canvas.width,height:canvas.height}});
+  reportFrames=0;reportBytes=0;reportStart=now;
+},10000);
 render();fit();if(token) connection.connect();
 
 nightSelect.onchange = () => { localStorage.setItem('f50-night-mode', nightSelect.value); syncNight(); render(); };
