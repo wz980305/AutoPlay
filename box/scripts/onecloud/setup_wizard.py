@@ -23,7 +23,6 @@ import subprocess
 import threading
 import time
 
-MDNS_NAME = "dashplay.local"
 SCAN_CACHE_SECONDS = 20
 # One scan with the box hotspot up misses hotspots, a different few each time (2026-10-12, N1: 9, 8, 11 and 11
 # names in four scans, 12 together; the OneCloud listed 7-10). The list adds scans up and keeps a hotspot until
@@ -31,24 +30,10 @@ SCAN_CACHE_SECONDS = 20
 SCAN_KEEP_SECONDS = 120
 
 
-# Tesla's browser opens no private address (10/8, 172.16/12, 192.168/16), by name or not, and its Wi-Fi does
-# not use IPv6 there; the shared address space 100.64.0.0/10 (RFC 6598) is not private, and a LAN numbered
-# 100.96.0.1/24 opens (a friend's F50, 2026-10-14). OpenWrt moves its LAN there (shared_lan), the box its own
-# hotspot (Tesla mode, box_hotspot_address); a joined hotspot is numbered by its owner.
-SHARED_LAN = ipaddress.IPv4Interface("100.96.0.1/24")
-SHARED_SPACE = ipaddress.IPv4Network("100.64.0.0/10")
-
-
-# F2, Tesla drive 2026-10-15: connman alone is insufficient. The China car asked for the .cn connman name and the
-# next three; the others (2026-10-16, from a user's working fix) are the overseas firmware's connman name, baidu.com
-# and the Chromium/Android check, answered in case a car or browser asks for them.
-CONNMAN_NAMES = ("connman.vn.cloud.tesla.cn", "connman.vn.tesla.services")
-TESLA_CHECK_NAMES = (CONNMAN_NAMES[0], "www.baidu.cn", "www.qq.com", "www.tesla.cn",
-                     CONNMAN_NAMES[1], "www.baidu.com", "connectivitycheck.gstatic.com")
-# The real connman servers' reply (2026-10-16: .services 200 with this body; .cn a 403 that still carries the
-# status header, so ConnMan reads only the header). X-Cache is copied from them.
-CONNMAN_BODY = b"<html>\n<head>\n</head>\n<body>\n</body>\n</html>\n\n"
-CONNMAN_HEADERS = {"X-ConnMan-Status": "online", "X-Cache": "Hit from cloudfront"}
+# Tesla's browser opens no private address; the shared address space 100.64.0.0/10 is not private (state.py).
+from state import SHARED_LAN, SHARED_SPACE, MDNS_NAME, save_json, tesla_reaches  # noqa: E402,F401
+from tesla_checks import (CONNMAN_NAMES, TESLA_CHECK_NAMES, CONNMAN_BODY, CONNMAN_HEADERS,  # noqa: E402,F401
+                          check_name, check_response)
 
 
 def options(state):
@@ -67,23 +52,6 @@ def options(state):
 
 def tesla_offline(setup, chosen, online=False):
     return chosen.get("tesla") is True and setup.get("mode") == "box_hotspot" and not online
-
-
-def check_name(host):
-    name = host.split(":", 1)[0].lower().rstrip(".")
-    return name if name in TESLA_CHECK_NAMES else None
-
-
-def check_response(host, path="/"):
-    """(status, body, headers) for a connectivity check, or None when host is not a check name."""
-    name = check_name(host)
-    if name in CONNMAN_NAMES:
-        return 200, CONNMAN_BODY, dict(CONNMAN_HEADERS)
-    if name == "connectivitycheck.gstatic.com" and path.split("?")[0] in ("/generate_204", "/gen_204"):
-        return 204, b"", {}
-    if name:
-        return 200, b"<html><body>online</body></html>\n", {}
-    return None
 
 
 # The phones' and computers' own connectivity checks, answered "online" for a phone that was shown the setup portal
@@ -125,14 +93,6 @@ def box_hotspot_address(usual, tesla, local_addresses):
     raise RuntimeError("没有可用的特斯拉共享网段；保留域名记录，请断开冲突的上游")
 
 
-def tesla_reaches(address):
-    """Whether a Tesla's browser opens this box address (not a private one)."""
-    try:
-        return ipaddress.IPv4Address(address) in SHARED_SPACE
-    except ValueError:
-        return False
-
-
 MODES = ("car_hotspot", "mifi", "box_hotspot")
 JOINS = ("car_hotspot", "mifi")   # modes in which the box joins a hotspot (state/car-hotspot.json)
 
@@ -157,18 +117,6 @@ def load(state: Path):
     if value.get("iphone") not in ("any", "wired", "wireless"):
         value["iphone"] = "wired" if value.get("mode") == "car_hotspot" else "any"
     return value
-
-
-def save_json(path: Path, value):
-    """Replace a small state file so that a power cut leaves the old or the new content."""
-    temporary = path.with_suffix(".tmp")
-    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as out:
-        json.dump(value, out)
-        out.flush()
-        os.fsync(out.fileno())
-    temporary.replace(path)
-    os.sync()   # the root fs commits only every 120 s; setup progress must survive switching the car off
 
 
 def save(state: Path, value):
@@ -222,7 +170,9 @@ def wireless(setup, chosen=None, capable=False):
     return setup.get("mode") != "car_hotspot" or direct_phone(chosen, capable, "car_hotspot")
 
 
-from platform_api import get_platform
+def get_platform(interface="", **paths):
+    from platform_debian import DebianPlatform
+    return DebianPlatform(interface, **paths)
 
 
 def wifi_interface(net=Path("/sys/class/net")):

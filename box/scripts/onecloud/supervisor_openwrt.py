@@ -27,7 +27,7 @@ import time
 
 from boxnet import ensure_leaf
 from settings_page import SettingsPage
-import setup_wizard
+import state as state_files
 import diagnostics
 import own_domain
 import update
@@ -76,9 +76,9 @@ def car_audio_args(config):
 
 RECHECK_EVERY = 10      # seconds between looks at the Wi-Fi handed to the iPhone
 WIRED_STATUS = RUN / "wired-status.json"
-# Where browsers refusing private addresses (Tesla) open the router (setup_wizard.SHARED_LAN). Tailscale's own
+# Where browsers refusing private addresses (Tesla) open the router (state.SHARED_LAN). Tailscale's own
 # firewall drops 100.64.0.0/10 from other interfaces unless told not to (shared_lan_conflict).
-SHARED_LAN = setup_wizard.SHARED_LAN
+SHARED_LAN = state_files.SHARED_LAN
 LAN_BEFORE = "lan-before.json"   # in state/: the LAN address to put back when shared_lan is turned off
 REBIND_NAME = "dns-rebind-name"  # in state/: the own name allowed through dnsmasq's rebind protection
 # LuCI applies with rollback: rpcd keeps the previous configuration here until the browser confirms it still
@@ -296,7 +296,7 @@ def refresh_network_warning(on, lan_device, status, base_warning="", path=None):
             warning = "暂时无法检查特斯拉网段冲突，请检查系统网络状态。"
     status["warning"] = "；".join(x for x in (base_warning, warning) if x)
     path = path or RUN / "network-status.json"
-    setup_wizard.save_json(path, {"warning": status["warning"], "checked_at": int(time.time())})
+    state_files.save_json(path, {"warning": status["warning"], "checked_at": int(time.time())}, sync=False)
 
 
 def wait_for_confirm(stopped, seconds=120):
@@ -356,7 +356,7 @@ def apply_shared_lan(on, network, state, say, stopped=None):
         say(f"shared LAN refused: {why}")
         return False, f"局域网地址不是单个静态 IPv4 地址，没有改成 {SHARED_LAN.ip}"
     if remember and remember != before:
-        setup_wizard.save_json(path, remember)   # before the change: a crash in between still puts it back
+        state_files.save_json(path, remember)   # before the change: a crash in between still puts it back
     if changes:
         wait_for_confirm(stopped or threading.Event())
         if stopped is not None and stopped.is_set():
@@ -490,7 +490,7 @@ def main():
     handoff_file = RUN / "handoff.json"
 
     def launch(network, wireless, wait=False):
-        setup_wizard.save_json(handoff_file, {"ssid": network["ssid"], "passphrase": network["key"]})
+        state_files.save_json(handoff_file, {"ssid": network["ssid"], "passphrase": network["key"]}, sync=False)
         os.environ["CARPLAY_NETWORK_EPOCH"] = secrets.token_hex(4)
         platform.start("receiver", [
             sys.executable, str(root / "run-receiver.py"), "--root", str(root), "--bind", str(network["address"].ip),
@@ -544,7 +544,7 @@ def main():
         if have_identity:
             early, _ = platform.handoff(config["wifi"], live=False, external=config)
             if early:
-                ensure_leaf(state, [config["name"], setup_wizard.MDNS_NAME], [str(early["address"].ip)])
+                ensure_leaf(state, [config["name"], state_files.MDNS_NAME], [str(early["address"].ip)])
                 launch(early, has_bluez, wait=True)
                 mark(f"receiver launched early for {early['ssid']}")
 
@@ -621,7 +621,7 @@ def main():
         public = platform.public_ipv6(network["device"]) if named and public_mode != "0" else None
         if named:
             point(public)
-        renewed = ensure_leaf(state, [config["name"], setup_wizard.MDNS_NAME], [host])
+        renewed = ensure_leaf(state, [config["name"], state_files.MDNS_NAME], [host])
         # The DuckDNS name also works on a client network (the head unit asks the public record), once its
         # certificate is in use.
         status.update(ssid=network["ssid"], home=f"http://{host}:{port}/",
@@ -651,7 +651,7 @@ def main():
         bluetooth_thread.join()
         wireless = bool(bluetooth and bluetooth[0])
         # setup.json carries the way of use the settings page shows: wireless (handoff) or cable only.
-        setup_wizard.save(state, {"done": True, "mode": "box_hotspot" if wireless else "car_hotspot"})
+        state_files.save_json(state / "setup.json", {"done": True, "mode": "box_hotspot" if wireless else "car_hotspot"})
         if have_identity:
             # A renewed certificate (or a new CA) needs a new receiver: it reads the keystore once (audit A6).
             if early and plan_of(early) == plan_of(network) and wireless == has_bluez and not renewed:

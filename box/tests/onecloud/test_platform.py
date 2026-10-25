@@ -9,7 +9,6 @@ import unittest
 from unittest.mock import Mock, call, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/onecloud'))
-from platform_api import Platform, get_platform
 from platform_debian import AP_VIF, DebianPlatform, ap_width, derived_address, five_ghz, hostapd_config, machine_key, supports_sta_ap, wifi_driver, wpa_network_lines
 from setup_wizard import Scanner
 
@@ -19,13 +18,12 @@ class PlatformTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
-        self.platform = get_platform('wlan-test', run=self.root, sta_network=self.root / 'sta.network')
+        self.platform = DebianPlatform('wlan-test', run=self.root, sta_network=self.root / 'sta.network')
 
     def test_adapter_implements_contract_without_import_side_effects(self):
         self.assertIsInstance(self.platform, DebianPlatform)
-        for name in Platform.__dict__:
-            if not name.startswith('_'):
-                self.assertTrue(callable(getattr(self.platform, name)), name)
+        for name in ('start', 'stop_child', 'stop_all', 'power_bluetooth', 'boot_id', 'diagnostics'):
+            self.assertTrue(callable(getattr(self.platform, name)), name)
         self.assertEqual(self.platform.children, [])
 
     @patch('platform_debian.subprocess.run')

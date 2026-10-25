@@ -25,6 +25,7 @@ from pairing_window import PairingWindow
 import settings_ui as ui
 import viewer_port
 import setup_wizard
+import tesla_checks
 from setup_flow import FirstSetup, iphone_choices, limitations, validation_table
 import diagnostics
 import update
@@ -244,12 +245,12 @@ class SettingsPage:
         status = self.status()
         enabled = status.get("tesla_offline") if self.managed else setup_wizard.tesla_offline(
             self.setup(), setup_wizard.options(self.state), status.get("uplink", {}).get("phase") == "online")
-        return setup_wizard.check_response(host, path) if enabled and status.get("mode") in ("ap", "openwrt") else None
+        return tesla_checks.check_response(host, path) if enabled and status.get("mode") in ("ap", "openwrt") else None
 
     def note_check(self, host, path, reply):
         """A car's request for a check name into state/diag/ (host, path, our reply or "off"), so a user's diagnostics
         show which checks the car makes and what it got. Only these names, never the settings page's own requests."""
-        name = setup_wizard.check_name(host)
+        name = tesla_checks.check_name(host)
         if not name:
             return
         key, now = (name, path.split("?")[0][:100], reply), time.monotonic()

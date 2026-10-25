@@ -6,7 +6,11 @@ answers the host name itself, with the address of whichever local subnet the que
 import ipaddress
 import socket
 import struct
-from platform_api import get_platform
+from platform_debian import DebianPlatform as _DebianPlatform
+
+
+def get_platform(interface="", **paths):
+    return _DebianPlatform(interface, **paths)
 import threading
 
 GROUP, PORT = "224.0.0.251", 5353

@@ -10,7 +10,9 @@ from pathlib import Path
 import socket
 import subprocess
 import threading
-import setup_wizard
+
+import state as state_files
+import tesla_checks
 
 TABLE = 'dashplay_tesla_checks'
 # Any one answering means the upstream works. A Chinese SIM may drop 1.1.1.1:443 and 8.8.8.8:443 while the
@@ -31,7 +33,7 @@ def offline_fields(sections, network, host, own_name):
     alias = str(address.network.network_address + 2)
     if alias == str(address.ip):
         raise ValueError('联网检查别名地址已被 LAN 使用')
-    entries = [f'/{name}/{alias}' for name in setup_wizard.TESLA_CHECK_NAMES]
+    entries = [f'/{name}/{alias}' for name in tesla_checks.TESLA_CHECK_NAMES]
     if own_name:
         entries.append(f'/{own_name}/{address.ip}')
     # Preserve unrelated DHCP options, replacing only router and DNS. The box is the router: Teslas left a network
@@ -150,7 +152,7 @@ class OfflineChecks:
         sections = self.sections()
         alias, fields = offline_fields(sections, network['network'], str(network['address']), own_name)
         before = {key: sections[key.split('.')[0]].get(key.split('.')[1]) for key in fields}
-        setup_wizard.save_json(self.path, {'before': before, 'alias': alias, 'device': network['device']})
+        state_files.save_json(self.path, {'before': before, 'alias': alias, 'device': network['device']})
         try:
             self.command(['ip', 'addr', 'add', alias + '/32', 'dev', network['device']])
             self.command(['nft', '-f', '-'], input=redirect_rules(network['device'], alias, port))

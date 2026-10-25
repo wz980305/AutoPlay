@@ -9,13 +9,38 @@ No operations run at import time; the parsers take command output so they are te
 """
 import ipaddress
 import json
+import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 
-from platform_debian import DebianPlatform, parse_stations
-
 RUN = Path("/var/run/dashplay")
+BLUETOOTH_NAME = "DashPlay"   # what iPhones list under Bluetooth (bluetoothctl system-alias)
+
+
+def boot_id():
+    return Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+
+
+def _number(pattern, text, cast=float):
+    match = re.search(pattern, text, re.M)
+    return cast(match.group(1)) if match else None
+
+
+def parse_stations(text):
+    """`iw dev X station dump`: per peer signal, bit rates and cumulative retries/failures."""
+    peers = []
+    for block in re.split(r"^Station ", text, flags=re.M)[1:]:
+        peers.append({"peer": block.split()[0][-5:],
+                      "signal": _number(r"^\s*signal:\s*(-?\d+)", block, int),
+                      "rx_mbps": _number(r"rx bitrate:\s*([\d.]+)", block),
+                      "tx_mbps": _number(r"tx bitrate:\s*([\d.]+)", block),
+                      "tx_packets": _number(r"tx packets:\s*(\d+)", block, int),
+                      "tx_retries": _number(r"tx retries:\s*(\d+)", block, int),
+                      "tx_failed": _number(r"tx failed:\s*(\d+)", block, int),
+                      "inactive_ms": _number(r"inactive time:\s*(\d+)", block, int)})
+    return peers
 
 
 def _ubus(path, method="status"):
@@ -181,11 +206,86 @@ def hottest(zones=Path("/sys/class/thermal")):
     return round(max(temps) / 1000, 1) if temps else None
 
 
-class OpenWrtPlatform(DebianPlatform):
-    """Process handling, Bluetooth and addresses as on Debian; Wi-Fi is read from OpenWrt."""
+class OpenWrtPlatform:
+    """Child processes, the Bluetooth adapter and the Wi-Fi read from OpenWrt. Standalone: the process and
+    Bluetooth handling used to be inherited from DebianPlatform (code_inventory_trimming.md 2.1)."""
 
     def __init__(self, interface="", run=RUN):
-        super().__init__(interface, run=run)
+        self.interface, self.run = interface, Path(run)
+        self.ap_interface = interface   # the access point handed to the iPhone, once known
+        self.children = []
+        self.bluetooth_state = None     # state/ directory, set by the supervisor
+
+    boot_id = staticmethod(boot_id)
+
+    def start(self, name, argv):
+        """Start a child in its own session with its stdout/stderr in RUN/<name>.log."""
+        with (self.run / (name + ".log")).open("w") as log:
+            child = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log,
+                                     stderr=subprocess.STDOUT, start_new_session=True)
+        self.children.append((name, child))
+        return child
+
+    def child(self, name):
+        return next((child for child_name, child in self.children if child_name == name), None)
+
+    def stop_child(self, name, timeout=8):
+        for entry in list(self.children):
+            if entry[0] == name:
+                self.children.remove(entry)
+                if entry[1].poll() is None:
+                    os.killpg(entry[1].pid, signal.SIGTERM)
+                    try:
+                        entry[1].wait(timeout=timeout)
+                    except subprocess.TimeoutExpired:
+                        os.killpg(entry[1].pid, signal.SIGKILL)
+                        entry[1].wait()
+
+    def forget_child(self, name):
+        """Drop an exited child from the list (its restart is the supervisor's business)."""
+        self.children = [entry for entry in self.children if entry[0] != name]
+
+    def stop_all(self):
+        for name, child in reversed(self.children):
+            if child.poll() is None:
+                os.killpg(child.pid, signal.SIGTERM)
+                try:
+                    # The JVM writes its AppCDS archive while exiting; that took longer than 8 s here. The F50's
+                    # Bluetooth helper stops its own children within 6 s (board_zte_f50.py).
+                    child.wait(timeout={"receiver": 40, "bluetooth": 15}.get(name, 8))
+                except subprocess.TimeoutExpired:
+                    os.killpg(child.pid, signal.SIGKILL)
+                    child.wait()
+        self.children = []
+
+    @staticmethod
+    def bluetooth_bus_ready():
+        """The board helper's own D-Bus socket (DBUS_SYSTEM_BUS_ADDRESS) appears a few seconds into the boot;
+        bluetoothctl segfaults until it is there (2026-10-16), so callers wait for the socket instead of running it."""
+        bus = os.environ.get("DBUS_SYSTEM_BUS_ADDRESS", "")
+        if bus.startswith("unix:path="):
+            return os.path.exists(bus[len("unix:path="):].split(",", 1)[0])
+        return True
+
+    def power_bluetooth(self):
+        """Power the adapter on and name it; False while bluetoothd is not ready. The address is the board
+        helper's business (mu300-bt-init at btattach), so there is no btmgmt identity step here."""
+        if not self.bluetooth_bus_ready():
+            return False
+        if subprocess.run(["bluetoothctl", "power", "on"], capture_output=True, timeout=10).returncode != 0:
+            return False
+        # A phone link left over from the previous run (service restart, network rebuild) fails every
+        # invitation with br-connection-already-connected until the bridge's rate-limited recovery
+        # power-cycles the adapter (2026-10-11: 69 s). Nothing uses Bluetooth yet, so clear it now.
+        connected = subprocess.run(["bluetoothctl", "devices", "Connected"], capture_output=True, text=True, timeout=10)
+        if connected.stdout.lstrip().startswith("Device "):
+            subprocess.run(["bluetoothctl", "power", "off"], capture_output=True, timeout=10)
+            if subprocess.run(["bluetoothctl", "power", "on"], capture_output=True, timeout=10).returncode != 0:
+                return False
+        # BlueZ names the adapter after the host, which is what iPhones list under Bluetooth. Set on every
+        # start: a reset or a fresh image clears BlueZ's stored alias.
+        subprocess.run(["bluetoothctl", "system-alias", BLUETOOTH_NAME], capture_output=True, timeout=10)
+        return True
 
     def handoff(self, wanted="auto", live=True, external=None):
         """(network dict with channel, address and device, reason when not ready).

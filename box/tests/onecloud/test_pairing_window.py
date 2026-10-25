@@ -9,7 +9,7 @@ from settings_page import SettingsPage
 
 class PairingTests(unittest.TestCase):
     def setUp(self):
-        boot = patch('platform_debian.DebianPlatform.boot_id', return_value='synthetic-boot')
+        boot = patch('platform_openwrt.OpenWrtPlatform.boot_id', return_value='synthetic-boot')
         boot.start(); self.addCleanup(boot.stop)
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.root=Path(self.tmp.name)

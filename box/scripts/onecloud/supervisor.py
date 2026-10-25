@@ -39,7 +39,11 @@ import viewer_port
 import own_domain
 from settings_page import SettingsPage, network_label
 import setup_wizard
-from platform_api import get_platform
+from platform_debian import DebianPlatform as _DebianPlatform
+
+
+def get_platform(interface="", **paths):
+    return _DebianPlatform(interface, **paths)
 import diagnostics
 import update
 
