@@ -1,3 +1,4 @@
+import { audioStartTime } from './audio-timing';
 import { AudioCodec, type AudioConfigMessage, type AudioPacketMessage } from './protocol';
 
 interface StreamState {
@@ -10,8 +11,6 @@ interface StreamState {
   gain: GainNode;
 }
 
-const MIN_LATENCY_SECONDS = 0.12;
-const MAX_LATENCY_SECONDS = 0.35;
 
 /** Decodes and plays CarPlay audio streams (AAC-LC, Opus, LPCM) via Web Audio. */
 export class AudioEngine {
@@ -185,12 +184,13 @@ export class AudioEngine {
 
   private schedule(state: StreamState, buffer: AudioBuffer): void {
     const now = this.context.currentTime;
-    if (state.nextPlayTime < now + MIN_LATENCY_SECONDS || state.nextPlayTime > now + MAX_LATENCY_SECONDS) {
-      state.nextPlayTime = now + MIN_LATENCY_SECONDS;
-    }
+    const start = audioStartTime(now, state.nextPlayTime, state.name === 'media');
+    if (start === null) return;
+    state.nextPlayTime = start;
     const source = this.context.createBufferSource();
     source.buffer = buffer;
     source.connect(state.gain);
+    source.onended = () => source.disconnect();
     source.start(state.nextPlayTime);
     state.nextPlayTime += buffer.duration;
   }
