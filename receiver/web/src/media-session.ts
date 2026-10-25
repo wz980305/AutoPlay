@@ -9,7 +9,9 @@ export class SystemMedia {
   private position = 0;
   private speed = 1;
   private at = 0;
-  private positionNow() { return Math.min(this.duration, this.position + (this.playing ? (performance.now()-this.at)/1000*this.speed : 0)); }
+  /** The iPhone's own playing state; what the browser hears (navigation prompts, locked sound) only stands in when it is unknown. */
+  private phonePlaying: boolean | undefined;
+  private positionNow() { return Math.min(this.duration, this.position + ((this.phonePlaying ?? this.playing) ? (performance.now()-this.at)/1000*this.speed : 0)); }
   setMetadata(value: NowPlaying) {
     const revision = value.revision ?? 0;
     const changed = revision !== this.revision || value.title !== this.info.title || value.artist !== this.info.artist || value.album !== this.info.album;
@@ -18,6 +20,7 @@ export class SystemMedia {
     this.duration = Math.max(0,(value.durationMs ?? 0)/1000);
     this.position = Math.max(0,Math.min(this.duration,(value.positionMs ?? 0)/1000));
     this.speed = (value.speed ?? 1) > 0 ? value.speed! : 1;
+    this.phonePlaying = value.playing ?? undefined;
     if (!Number.isFinite(this.speed)) this.speed = 1;
     this.at = performance.now();
     if(changed) this.refreshMetadata();
@@ -51,7 +54,7 @@ export class SystemMedia {
   setActive(active: boolean) {
     this.active = active;
     if (!this.supported) return;
-    if (!active) { this.info = { title: "CarPlay" }; this.duration=0; this.revision=0; }
+    if (!active) { this.info = { title: "CarPlay" }; this.duration=0; this.revision=0; this.phonePlaying=undefined; }
     this.refreshMetadata();
     if (!active) this.playing = false;
     this.update(); this.updatePosition();

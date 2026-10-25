@@ -38,6 +38,13 @@ media.setArtwork(0,'data:image/jpeg;base64,/9j/');assert.equal(navigator.mediaSe
 media.setArtwork(1,'data:image/jpeg;base64,/9j/');assert.equal(navigator.mediaSession.metadata.artwork.length,1);
 media.setMetadata({title:'Another',artist:'',album:'',revision:2});assert.equal(navigator.mediaSession.metadata.artwork.length,0,'Clear old cover on track change');
 assert.equal(positions.at(-1),undefined,'Missing duration must clear old timeline');
+{ let clock=0;const realNow=performance.now;Object.defineProperty(performance,'now',{value:()=>clock,configurable:true,writable:true});
+  media.setPlaying(false);   // the browser hears nothing yet, e.g. sound not unlocked
+  media.setMetadata({title:'Run',artist:'',album:'',durationMs:200000,positionMs:50000,playing:true,revision:3});
+  clock=10000;media.setPlaying(true);assert.equal(positions.at(-1).position,60,"The iPhone's playing state moves the clock, not what the browser hears");
+  clock=12000;media.setMetadata({title:'Run',artist:'',album:'',durationMs:200000,positionMs:62000,playing:false,revision:3});
+  clock=20000;media.setPlaying(false);assert.equal(positions.at(-1).position,62,'Paused on the iPhone: the clock stands');
+  Object.defineProperty(performance,'now',{value:realNow,configurable:true,writable:true}); }
 media.setActive(false);assert.equal(navigator.mediaSession.playbackState,'none');assert.equal(navigator.mediaSession.metadata,null);
 // Music must take exactly one route; voice/navigation keep the existing Web Audio path.
 const edges=[];let music;let packets=0;

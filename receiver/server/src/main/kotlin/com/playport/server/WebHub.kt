@@ -156,7 +156,7 @@ class WebHub(
         if (!sessionActive || value == nowPlaying) return
         if (value.revision != nowPlaying.revision) artwork = null
         nowPlaying = value
-        broadcastJson(ServerMessage(type = "now-playing", nowPlaying = value))
+        broadcastJson(ServerMessage(type = "now-playing", nowPlaying = value.at(System.nanoTime() / 1_000_000)))
     }
 
     @Volatile private var phoneName: String? = null
@@ -325,7 +325,7 @@ class WebHub(
                                 ServerMessage.serializer(),
                                 ServerMessage(
                                     type = "hello",
-                                    nowPlaying = nowPlaying,
+                                    nowPlaying = nowPlaying.at(System.nanoTime() / 1_000_000),   // not where it was when reported
                                     artwork = artwork,
                                     revision = nowPlaying.revision,
                                     deviceName = config.deviceName,

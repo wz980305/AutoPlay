@@ -91,7 +91,7 @@ export type ClientMessage =
   | { type: 'stats'; stats: Record<string, number> }
   | { type: 'ping' };
 
-export interface NowPlaying { title: string; artist: string; album: string; durationMs?: number; positionMs?: number; speed?: number; revision?: number; }
+export interface NowPlaying { title: string; artist: string; album: string; durationMs?: number; positionMs?: number; speed?: number; playing?: boolean | null; revision?: number; }
 
 export interface ServerMessage {
   nowPlaying?: NowPlaying;
