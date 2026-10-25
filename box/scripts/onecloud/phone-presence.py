@@ -288,9 +288,6 @@ def main():
                 output = state.get('last_phone') or invite_phone(state, paired_cached(
                     state, now, lambda: asyncio.run(paired_phones())))
                 ok = bool(output)
-        elif command == 'unplugged':
-            output = invite_phone(state, paired_cached(state, now, lambda: asyncio.run(paired_phones())))
-            ok = bool(output)
         elif command == 'idle':
             state.pop('active', None)
             ok = True

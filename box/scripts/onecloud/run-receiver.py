@@ -97,9 +97,6 @@ def main():
     parser.add_argument("--web-host", default="",
                         help="address the viewer listens on, e.g. 0.0.0.0 when the head unit reaches the box "
                              "through the car hotspot while AirPlay stays on --bind")
-    parser.add_argument("--wired", action="store_true",
-                        help="offer wired CarPlay: an iPhone on the USB cable (iphone-usb-bridge.py)")
-    parser.add_argument("--wired-status", type=Path, help="where the receiver writes the wired CarPlay phase")
     parser.add_argument("--java", default="/usr/bin/java", help="Java 21 (OpenWrt: the dashplay-jre package)")
     parser.add_argument("--settings-port", type=int, default=80, help="port of the box settings page")
     parser.add_argument("--viewer-port", type=int, default=0,
@@ -118,7 +115,6 @@ def main():
                         help="no Bluetooth/Wi-Fi handoff (car_hotspot mode: the iPhone uses the cable only)")
     args = parser.parse_args()
     root = args.root.resolve()
-    wired = args.wired
     os.umask(0o077)
     state = root / "state" / "receiver"
     state.mkdir(parents=True, exist_ok=True)
@@ -137,7 +133,6 @@ def main():
         "deviceName": "DashPlay", "model": "DashPlay", "manufacturer": "DashPlay",
         "airPlayPort": 7000, "httpPort": viewer or saved.get("httpPort", 18443),
         "display": saved.get("display", {"width": 1280, "height": 720, "fps": 30, "uiScale": 100, "hevc": False}),
-        # While an iPhone is on the cable the receiver pauses wireless invitations (WiredBootstrap).
         "wireless": not args.no_wireless, "wifiSsid": ssid, "wifiPassphrase": password,
         "wifiChannel": args.channel, "wifiSecurity": args.security,
         "bluetoothDeviceAddress": args.phone or None, "mdns": "jmdns",
@@ -160,8 +155,6 @@ def main():
                CARPLAY_PRESENCE_STATE=str(state / "phone-presence.json"))
     if args.web_host:
         env["CARPLAY_WEB_HOST"] = args.web_host
-    if args.wired_status:
-        env["CARPLAY_WIRED_STATUS"] = str(args.wired_status)
     if args.bind_wait:
         env["CARPLAY_BIND_WAIT_MS"] = str(args.bind_wait * 1000)
     env["CARPLAY_IDLE_RELEASE_SECONDS"] = str(max(0, args.idle_release))
@@ -195,7 +188,7 @@ def main():
         "onecloud.Launcher", "--bind", args.bind, *(["--car-voice"] if args.car_voice or args.tesla else []),
         "--identity-dir", str(root / "identity"), "--state-dir", str(state),
         "--bt-bridge", str(root / "linux-bt-bridge/bt-bridge"), "--token", token,
-    ] + (["--usb-bridge", str(root / "iphone-usb-bridge.py")] if wired else [])
+    ]
     argfile = state / "java.args"
     argfile.write_text("\n".join(json.dumps(value) for value in options) + "\n")
     # The supervisor signals the whole process group; outlive the JVM so it can finish writing the

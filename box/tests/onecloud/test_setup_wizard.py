@@ -159,10 +159,9 @@ class WizardPageTests(unittest.TestCase):
         self.status = {'mode': 'ap', 'home': 'http://192.168.78.1/', 'box_ssid': 'DashPlay', 'entries': [],
                        'sim': False, 'modes': {'AP', 'managed'}}
         self.changes = []
-        self.wired = self.root / 'wired-status.json'
         class FakeScanner:
             def results(self, fresh=False): return setup_wizard.parse_scan(SCAN, 'DashPlay')
-        self.page = SettingsPage(self.state, lambda: self.status, self.changes.append, lambda: [], FakeScanner(), self.wired)
+        self.page = SettingsPage(self.state, lambda: self.status, self.changes.append, lambda: [], FakeScanner())
         self.page.apply_later = self.changes.append
         self.nonce = self.page.pairing.nonce
         setup_wizard.save(self.state, {"done": False})  # legacy unfinished setup
@@ -371,50 +370,13 @@ class WizardPageTests(unittest.TestCase):
         self.assertIn('没有连上「Hidden Car」', html)
         self.assertIn('密码不对', html)
 
-    def test_car_hotspot_way_connects_the_iphone_by_cable_only(self):
-        (self.state / 'car-hotspot.json').write_text('{"ssid": "xiaomi", "passphrase": "12345678"}')
-        setup_wizard.save(self.state, {'done': False, 'mode': 'car_hotspot', 'car': 'xiaomi'})
-        self.status.update(mode='sta', ssid='xiaomi', entries=['https://192.168.5.80:18443/'])
-        html = self.page.render('')
-        self.assertIn('第 3 步，共 3 步', html)
-        self.assertIn('有线 CarPlay', html)
-        self.assertIn('远离网口', html)
-        self.assertIn('未启动', html)
-        self.assertIn('只能用数据线', html)
-        self.assertNotIn('value=start', html)   # no Bluetooth pairing in this way of use
-        self.assertIn('完成设置', html)
-        save_json(self.wired, {'phase': 'cable'})
-        html = self.page.render('')
-        self.assertIn('等待插线', html)
-        self.assertIn('http-equiv=refresh', html)
-        save_json(self.wired, {'phase': 'trust'})
-        self.assertIn('等待信任', self.page.render(''))
-        save_json(self.wired, {'phase': 'live'})
-        html = self.page.render('')
-        self.assertIn('已连接', html)
-        self.assertIn('>完成设置<', html)
-        self.assertIn('https://192.168.5.80:18443/', html)
-        self.assertNotIn('http-equiv=refresh', html)
-        self.page.apply('/setup', {'action': 'finish', 'nonce': self.nonce})
-        self.assertTrue(setup_wizard.load(self.state)['done'])
-        full = self.page.render('')
-        self.assertIn('<h1 class=span>盒子设置</h1>', full)
-        self.assertIn('方式一：车机热点', full)
-        self.assertIn('href="/?view=car"', full)
-        self.assertIn('当前通过车机热点连接', full)
-        self.assertNotIn('添加 iPhone', full)
-        self.assertNotIn('连接方式（测试）', full)
-        self.assertIn('重新进行首次设置', full)
-        self.assertIn('<h1>车机热点</h1>', self.page.render('view=car'))
 
     def test_mifi_way_offers_cable_and_wireless(self):
         (self.state / 'car-hotspot.json').write_text('{"ssid": "mifi", "passphrase": "12345678"}')
         setup_wizard.save(self.state, {'done': False, 'mode': 'mifi', 'car': 'mifi'})
         self.status.update(mode='sta', ssid='mifi')
         html = self.page.render('')
-        self.assertIn('用数据线（推荐）', html)
         self.assertIn('value=start', html)
-        self.assertIn('有的随身 WiFi 不让设备互相访问', html)
         self.assertIn('在车机屏幕上操作', html)
         self.assertNotIn('http-equiv=refresh', html)   # nothing plugged in: no reloading while reading
         self.page.apply('/setup', {'action': 'finish', 'nonce': self.nonce})
@@ -441,7 +403,6 @@ class WizardPageTests(unittest.TestCase):
         self.status.update(box_ssid='Box', entries=['https://192.168.78.1:18443/'])
         html = self.page.render('')
         self.assertIn('第 3 步，共 3 步', html)
-        self.assertIn('用数据线（推荐）', html)
         self.assertIn('value=start', html)
         self.page.apply('/setup', {'action': 'finish', 'nonce': self.nonce})
         full = self.page.render('')

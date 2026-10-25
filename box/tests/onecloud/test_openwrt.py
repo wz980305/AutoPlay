@@ -574,7 +574,6 @@ class ManagedPageTests(unittest.TestCase):
         self.status = {"mode": "openwrt", "ssid": "Car-5G", "home": "http://192.168.1.1:18080/", "identity": True,
                        "entries": ["https://dashplay.lan:18443/", "https://192.168.1.1:18443/"]}
         self.page = SettingsPage(self.state, lambda: self.status, lambda reason: None, lambda: [], None,
-                                 Path(tmp.name) / "wired.json",
                                  managed={"by": "OpenWrt", "admin": "/cgi-bin/luci/admin/network/wireless"})
 
     def test_shows_phones_and_router_wifi_without_network_setup(self):

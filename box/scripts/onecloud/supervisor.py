@@ -52,7 +52,6 @@ CAR_WAIT = 60          # head units often raise their hotspot after the box has 
 LINK_LOSS_GRACE = 30   # seconds without the car hotspot before falling back
 RESCAN_EVERY = 60      # box-hotspot mode: look for the car hotspot when no station is attached
 BIND_WAIT = 120        # an early receiver waits this long for its address (CAR_WAIT + DHCP)
-WIRED_STATUS = RUN / "wired-status.json"   # written by the receiver, shown on the settings page
 
 
 def direct_capable(platform):
@@ -346,7 +345,7 @@ def main():
     light = platform.status_light()
     scanner = setup_wizard.Scanner(interface, hotspot["ssid"], lambda: status["mode"], platform=platform)
     settings = SettingsPage(state, lambda: status, request_reexec, lambda: [ip.network for ip in platform.local_addresses()],
-                            scanner, WIRED_STATUS, run=RUN)
+                            scanner, run=RUN)
     uplink = None
     direct_ap = None
     maintainer = []   # own_domain.Maintainer, when a DuckDNS name is set

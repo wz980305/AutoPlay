@@ -305,27 +305,6 @@ def mode_cards(nonce, modes, selected=None):
             '<button class=btn name=action value=mode>下一步</button></form>')
 
 
-WIRED_STATES = {
-    None: ("off", "未启动", "CarPlay 接收服务启动后可用。"),
-    "cable": ("off", "等待插线", "用数据线把 iPhone 插到盒子上。"),
-    "trust": ("wait", "等待信任", "请在 iPhone 上点「信任」，并输入锁屏密码。"),
-    "starting": ("wait", "正在连接", "iPhone 已插上，正在打开 CarPlay。"),
-    "live": ("on", "已连接", "有线 CarPlay 正在使用。"),
-}
-
-
-def wired_block(phase, title="用数据线", foot=""):
-    """Wired CarPlay: how to plug the iPhone in and what the cable is doing now."""
-    state, value, detail = WIRED_STATES.get(phase, WIRED_STATES[None])
-    status = (f'<div class="cell{" on" if state == "on" else ""}"><span class=main><b>有线 CarPlay</b>'
-              f'<span>{escape(detail)}</span></span><span class=value>{escape(value)}</span></div>')
-    steps = ('<ol class=steps><li>用 iPhone 的数据线（能传数据的线，不是只能充电的线）插到盒子上'
-             '<b>远离网口</b>的那个 USB 口。</li>'
-             '<li>第一次插上时，iPhone 会问「要信任此电脑吗？」，点「信任」并输入锁屏密码，以后插上即用。</li>'
-             '<li>在车机浏览器打开 CarPlay 画面的地址。</li></ol>')
-    return group(title, status, foot) + (steps if phase != "live" else "")
-
-
 def other_screen(address):
     """Where to operate pairing: the head unit, since the iPhone must stay on its Bluetooth page."""
     if not address:

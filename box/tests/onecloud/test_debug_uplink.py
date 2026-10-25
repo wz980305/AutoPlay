@@ -63,8 +63,7 @@ class PageTests(unittest.TestCase):
         setup_wizard.save(self.state, {'done': True, 'mode': 'box_hotspot'})
         self.status = {'mode': 'ap', 'home': 'http://100.96.0.1/', 'box_ssid': 'DashPlay', 'entries': []}
         self.changes = []
-        self.page = SettingsPage(self.state, lambda: self.status, self.changes.append, lambda: [], None,
-                                 root / 'wired-status.json', run=self.run)
+        self.page = SettingsPage(self.state, lambda: self.status, self.changes.append, lambda: [], None, run=self.run)
         self.page.apply_later = self.changes.append
         self.nonce = self.page.pairing.nonce
 

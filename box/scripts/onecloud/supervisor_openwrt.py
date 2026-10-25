@@ -5,8 +5,8 @@ The router owns the network: the person sets up Wi-Fi in LuCI. This supervisor r
 the iPhone (uci dashplay.main.wifi: a wifi-iface section, "auto" = the first access point, 5 GHz
 first, or "external" = another router's Wi-Fi bridged into the LAN, entered as external_*), starts the
 receiver on that network's address and the settings page (iPhones only) on settings_port, and restarts
-itself when that Wi-Fi changes. Without a Bluetooth adapter it runs wired CarPlay only. Compared with
-supervisor.py: no box hotspot, no joining, no first-run setup.
+itself when that Wi-Fi changes. Wireless CarPlay only: the F50 has no USB host, so there is no cable path
+(tesla_only_box_delta.md D13). Compared with supervisor.py: no box hotspot, no joining, no first-run setup.
 Optional: a DuckDNS name with a Let's Encrypt certificate (uci duckdns_domain / duckdns_token,
 own_domain.py) for car browsers that refuse the local CA; it then replaces the name.
 """
@@ -75,7 +75,6 @@ def car_audio_args(config):
 
 
 RECHECK_EVERY = 10      # seconds between looks at the Wi-Fi handed to the iPhone
-WIRED_STATUS = RUN / "wired-status.json"
 # Where browsers refusing private addresses (Tesla) open the router (state.SHARED_LAN). Tailscale's own
 # firewall drops 100.64.0.0/10 from other interfaces unless told not to (shared_lan_conflict).
 SHARED_LAN = state_files.SHARED_LAN
@@ -414,8 +413,7 @@ def main():
     if ddns:
         config["name"] = own_domain.name_of(ddns)
     for relative in ["run-receiver.py", "phone-presence.py", "pair-phone.py", "pairing_window.py", "settings_page.py",
-                     "settings_ui.py", "platform_openwrt.py", "diagnostics.py", "iphone-usb-bridge.py",
-                     "linux-bt-bridge/bt-bridge"]:
+                     "settings_ui.py", "platform_openwrt.py", "diagnostics.py", "linux-bt-bridge/bt-bridge"]:
         if not (root / relative).is_file():
             raise RuntimeError("Missing runtime input: " + relative)
     if not Path(config["java"]).is_file():
@@ -469,7 +467,7 @@ def main():
         stopped.set()
 
     trusted = []   # the network the settings page serves, once the Wi-Fi is known (it starts after that)
-    settings = SettingsPage(state, lambda: status, request_reexec, lambda: list(trusted), None, WIRED_STATUS,
+    settings = SettingsPage(state, lambda: status, request_reexec, lambda: list(trusted), None,
                             managed={"by": "OpenWrt", "admin": "/cgi-bin/luci/admin/network/wireless"})
     offline_checks = OfflineChecks(state, platform=platform)
     maintainer = []   # own_domain.Maintainer, when a DuckDNS name is set
@@ -497,7 +495,6 @@ def main():
             "--channel", str(network["channel"]), "--security", network["security"],
             "--hotspot", str(handoff_file), "--interface", network["device"], "--web-host", "0.0.0.0",
             "--java", config["java"], "--settings-port", str(port), "--viewer-port", str(viewer),
-            "--wired", "--wired-status", str(WIRED_STATUS),
             "--idle-release", str(int(config["idle_release"]) if config["idle_release"].isdigit() else 300)]
             + ([] if wireless else ["--no-wireless"]) + (["--bind-wait", "120"] if wait else [])
             + car_audio_args(config))
@@ -509,7 +506,7 @@ def main():
         diagnostics.LogMirror(state / "logs", RUN, platform.boot_id(), journal=False).start(stopped)
 
         # Bluetooth at once, beside the Wi-Fi: the F50's controller takes ~10 s to come up, about as
-        # long as its Wi-Fi (supervisor.py does the same). A router without BlueZ runs wired only.
+        # long as its Wi-Fi (supervisor.py does the same). Without BlueZ there is no CarPlay at all.
         if config["bluetooth_service"]:
             platform.start("bluetooth", shlex.split(config["bluetooth_service"]))
         has_bluez = bool(config["bluetooth_service"] or shutil.which("bluetoothctl"))
@@ -523,14 +520,14 @@ def main():
 
         def bring_up_bluetooth():
             if not has_bluez:
-                say("No BlueZ (bluez-daemon not installed): wired CarPlay only")
+                say("No BlueZ (bluez-daemon not installed): no CarPlay until it is")
                 return bluetooth.append(False)
             try:
                 wait_for(power_bluetooth, 60 if config["bluetooth_service"] else 40, interval=0.5)
                 mark("bluetooth powered")
                 bluetooth.append(True)
             except TimeoutError:
-                say("Bluetooth adapter did not power on: wired CarPlay only")
+                say("Bluetooth adapter did not power on: no CarPlay until it does")
                 bluetooth.append(False)
             except InterruptedError:
                 bluetooth.append(False)

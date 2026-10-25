@@ -107,17 +107,11 @@ def network_label(mode):
     return "随身 WiFi" if mode == "mifi" else "车机热点"
 
 
-def read_wired(path):
-    """Phase of wired CarPlay written by the receiver (WiredBootstrap): cable/trust/starting/live, or None."""
-    value = _load(path) if path else None
-    return value.get("phase") if isinstance(value, dict) else None
-
-
 class SettingsPage:
-    def __init__(self, state: Path, status, on_change, allowed_networks, scanner=None, wired_status=None,
+    def __init__(self, state: Path, status, on_change, allowed_networks, scanner=None,
                  managed=None, run=None):
         """status() -> dict for display; on_change(reason) re-applies the configuration;
-        wired_status: the receiver's wired CarPlay status file; managed: {"by": "OpenWrt", "admin": URL of
+        managed: {"by": "OpenWrt", "admin": URL of
         its Wi-Fi settings} when the system, not this page, sets up the network; run: the service's runtime
         directory, which holds the remote-debugging window (debug_uplink.py; offered only with it)."""
         self.managed = managed
@@ -125,7 +119,6 @@ class SettingsPage:
         self.state = state
         self.pairing = PairingWindow(state.parent)
         self.car_file = state / "car-hotspot.json"
-        self.wired_status = wired_status
         self.hotspot_file = state / "hotspot.json"
         self.ddns_file = state / "ddns.json"
         self.options_file = state / "options.json"   # also read by supervisor.py (idle_release, car_music, car_voice)
@@ -144,7 +137,7 @@ class SettingsPage:
         return bool(self.status().get('direct_capable'))
 
     def wired_capable(self):
-        """The box has a USB port for the iPhone (status wired_capable, absent on older status: yes)."""
+        """Debian wizard only (status wired_capable from supervisor.py): whether a cable choice is offered there."""
         return self.status().get('wired_capable') is not False
 
     def band_note(self, label):
@@ -771,17 +764,11 @@ class SettingsPage:
                                 f"2 分钟后仍打不开：盒子没连上「{ssid}」，会重新打开自己的热点「{box}」，"
                                 "手机连它后打开上面的地址，页面会写明原因。")
 
-    def phone_node(self, devices, active, phase, wired=None):
-        if wired == "live":
-            return ("on", "iPhone", "有线连接")
+    def phone_node(self, devices, active, phase):
         if active and active in devices:
             return ("on", devices[active], "正在使用")
         if phase != "closed":
             return ("wait", "iPhone", "正在添加")
-        if wired in ("trust", "starting"):
-            return ("wait", "iPhone", "数据线已插上")
-        if self.setup().get("mode") == "car_hotspot":
-            return ("off", "iPhone", "插数据线使用")
         return ("off", "iPhone", f"已添加 {len(devices)} 部" if devices else "未添加")
 
     def hotspot_node(self):
@@ -794,10 +781,10 @@ class SettingsPage:
             return ("on", status.get("box_ssid", ""), "盒子热点")
         return ("wait", "热点", "正在启动")
 
-    def chain(self, devices, presence, phase, wired):
+    def chain(self, devices, presence, phase):
         mode = self.setup().get("mode")
         first = "car" if mode == "car_hotspot" and self.status().get("mode") == "sta" else "hotspot"
-        return ui.chain(self.hotspot_node(), self.phone_node(devices, presence.get("active"), phase, wired), first)
+        return ui.chain(self.hotspot_node(), self.phone_node(devices, presence.get("active"), phase), first)
 
     def phones_block(self, nonce, first=False):
         """Pairing flow while it runs; otherwise the device list and the add button."""
@@ -909,23 +896,16 @@ class SettingsPage:
                 f'{failure}{picker}')
         return ui.page("首次设置", body, ui.SCANNING_RELOAD if networks is None else False)
 
-    def wired_phase(self):
-        return read_wired(self.wired_status)
-
     def iphone_blocks(self, nonce, first=False):
-        """Cable first; Bluetooth pairing for wireless where this way of use has it.
-        Returns (html, refresh, devices, wired phase)."""
-        mode = self.setup().get("mode")
-        wired = self.wired_phase()
-        waiting = wired in ("trust", "starting") or first and mode == "car_hotspot" and wired != "live"
-        if not setup_wizard.wireless(self.setup(), setup_wizard.options(self.state), self.direct_capable()):
-            return ui.wired_block(wired, "iPhone 用数据线", "这种使用方式只能用数据线（有线 CarPlay）。"), waiting, {}, wired
-        foot = ("插着数据线时用有线；拔掉后改用下面的无线。"
-                + ("无线卡顿或连不上时请用数据线：有的随身 WiFi 不让设备互相访问。" if mode == "mifi" else ""))
+        """Bluetooth pairing: the only way an iPhone reaches this box (no USB host on the F50, S1).
+        Returns (html, refresh, devices)."""
         block, refresh, devices = self.phones_block(nonce, first)
+        if not setup_wizard.wireless(self.setup(), setup_wizard.options(self.state), self.direct_capable()):
+            # No Bluetooth adapter was powered when the service started: say so instead of inventing a cable.
+            block = ui.banner("蓝牙没有启动，暂时不能添加或邀请 iPhone。重启盒子；仍然不行请下载诊断记录。", "bad") + block
         # Pairing is done on another screen (the head unit): the iPhone stays on its Bluetooth page.
         intro = ui.other_screen(self.home()) if first and not devices and not refresh else ""
-        return ui.wired_block(wired, "用数据线（推荐）", foot) + intro + block, refresh or waiting, devices, wired
+        return intro + block, refresh, devices
 
     def entries_block(self, status, refresh):
         entries = "".join(f'<a class=cell href="{escape(u)}"><span class=main><b>{escape(u)}</b></span><span class=chev></span></a>'
@@ -952,7 +932,7 @@ class SettingsPage:
 
     def render_phone_step(self, notice):
         nonce = self.pairing.nonce
-        block, refresh, devices, wired = self.iphone_blocks(nonce, first=True)
+        block, refresh, devices = self.iphone_blocks(nonce, first=True)
         presence = self.pairing.presence()
         phase = self.pairing.status().get("phase", "closed")
         needs_pair = setup_wizard.wireless(self.setup(), setup_wizard.options(self.state), self.direct_capable())
@@ -962,11 +942,11 @@ class SettingsPage:
                   f'{"完成设置" if ready else "稍后连接，先完成设置"}</button></form>')
         pairing = phase != "closed"
         body = (f'<h1>连接 iPhone</h1><p class=sub>首次设置：第 3 步，共 3 步</p>{notice}'
-                f'{self.chain(devices, presence, phase, wired)}'
+                f'{self.chain(devices, presence, phase)}'
                 f'{block}'
                 + self.entries_block(self.status(), pairing)
                 + (finish if ready else "")
-                + (ui.banner("请先添加 iPhone，或者在设置中选择只用有线。", "wait") if not ready else ""))
+                + (ui.banner("请先添加 iPhone。", "wait") if not ready else ""))
         return ui.page("首次设置", body, refresh)
 
     def render_car_change(self, notice):
@@ -991,7 +971,7 @@ class SettingsPage:
         mode = self.setup().get("mode")
         label = network_label(mode)
         car = _load(self.car_file) or {}
-        block, refresh, devices, wired = self.iphone_blocks(nonce)
+        block, refresh, devices = self.iphone_blocks(nonce)
         presence = self.pairing.presence()
         phase = self.pairing.status().get("phase", "closed")
         joins = mode in setup_wizard.JOINS
@@ -1031,7 +1011,7 @@ class SettingsPage:
                     f'<form method=post action=/reset>{ui.hidden(nonce)}<button class="cell destructive" '
                     'onclick="return confirm(\'清除使用方式、热点和所有已添加的手机，回到首次设置？\')">重新进行首次设置</button></form>'))
         notice += ui.banner("特斯拉建议回家插网线后设置自己的网址。", "wait") if setup_wizard.options(self.state).get("tesla") else ""
-        body = (f'<h1 class=span>盒子设置</h1>{notice}{self.chain(devices, presence, phase, wired)}'
+        body = (f'<h1 class=span>盒子设置</h1>{notice}{self.chain(devices, presence, phase)}'
                 f'{fallback}<div>'
                 + self.entries_block(status, False)
                 + ("" if self.managed else ui.group("车", self.car_audio_block(nonce, "car")))
