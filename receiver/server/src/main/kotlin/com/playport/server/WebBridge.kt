@@ -88,7 +88,7 @@ class WebBridge(private val hub: WebHub) : MediaSink {
     /** Routes browser microphone payloads (raw PCM or Opus) to the phone. */
     fun sendMicrophonePayload(payload: ByteArray, opus: Boolean): Boolean {
         val uplink = microphone ?: return false
-        val samples = if (opus) 960 else payload.size / (2 * maxOf(1, uplink.channels))
+        val samples = if (opus) uplink.rtpSamplesPerPacket else payload.size / (2 * maxOf(1, uplink.channels))
         uplink.send(payload, samples)
         return true
     }

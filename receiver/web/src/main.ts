@@ -5,7 +5,7 @@ import { VideoPlayer } from './video';
 import { Connection } from './ws';
 import { SystemMedia } from './media-session';
 import { LagProbe } from './lag';
-import { shownSize, suggestedResolution, aspectChanged, closeShape } from './display-fit';
+import { shownSize, suggestedResolution, renegotiate } from './display-fit';
 import { t, language, setLanguage, type Key } from './i18n';
 import { isNight, parseNightMode } from './night';
 import type { ServerMessage, ClientMessage } from './protocol';
@@ -128,7 +128,7 @@ function server(message: ServerMessage) {
   // Straight back, also before CarPlay starts: the box pauses the picture while this page lags behind.
   if (message.type === 'mark') { connection.send({ type: 'ack', mark: message.mark ?? 0 }); return; }
   if(message.type === 'artwork' && message.artwork) { media.setArtwork(message.revision ?? 0,message.artwork); return; }
-  if (message.type === 'now-playing' && message.nowPlaying) { media.setMetadata(message.nowPlaying); audio.followMusic(media.timeline()); return; }
+  if (message.type === 'now-playing' && message.nowPlaying) { media.setMetadata(message.nowPlaying); return; }
   if (message.type === 'host-ui' && active) {
     openPanel(); return;
   }
@@ -184,7 +184,11 @@ function updateFullscreen() {
  *  fullscreen (Xpeng G6, 2026-10-12). Such an exit keeps the picture as negotiated, and the next tap on the
  *  picture goes back to fullscreen; a browser enters fullscreen only on a tap, never by itself. */
 let wantFullscreen = false, hiddenAt = -Infinity, shownAt = -Infinity, coveredInFullscreen = false, fullscreenSeq = 0;
-const restoring = () => wantFullscreen && !document.fullscreenElement && !document.hidden;
+/** A tap goes back to fullscreen only when the car covered the page (reverse camera), not after leaving fullscreen on
+ *  purpose (the car's back button or gesture): in the 2 s that tells the two apart, a tap went back to fullscreen
+ *  and never reached CarPlay (2026-10-13). */
+let restoreArmed = false;
+const restoring = () => restoreArmed && wantFullscreen && !document.fullscreenElement && !document.hidden;
 async function toggleFullscreen() {
   try {
     if (document.fullscreenElement) { wantFullscreen = false; await document.exitFullscreen(); }
@@ -204,11 +208,11 @@ function toast(message: string) {
 document.addEventListener('fullscreenchange', () => {
   updateFullscreen(); fit(); pageEvent(document.fullscreenElement ? 3 : 4);
   const seq = ++fullscreenSeq;
-  if (document.fullscreenElement) { wantFullscreen = true; coveredInFullscreen = false; toast(t('fullscreenHint')); return; }
+  if (document.fullscreenElement) { wantFullscreen = true; coveredInFullscreen = false; restoreArmed = false; toast(t('fullscreenHint')); return; }
   el('toast').hidden = true;
   // The car covered the page: the browser leaves fullscreen while it is hidden, and may tell the page only once it
   // is shown again (Chrome, 2026-10-12: hidden, shown, then out of fullscreen). Fullscreen comes back on a tap.
-  if (wantFullscreen && (document.hidden || (coveredInFullscreen && performance.now() - shownAt < 2000))) { showRestoreHint(); return; }
+  if (wantFullscreen && (document.hidden || (coveredInFullscreen && performance.now() - shownAt < 2000))) { restoreArmed = true; showRestoreHint(); return; }
   // Left while shown: on purpose, unless the page is hidden within 2 s; then fit the window as usual.
   const exitedAt = performance.now();
   window.setTimeout(() => { if (seq !== fullscreenSeq || hiddenAt >= exitedAt) return; wantFullscreen = false; scheduleAuto(); }, 2000);
@@ -261,18 +265,20 @@ async function adapt() {
   // Not for a hidden page (a covered page reports a small window) nor while fullscreen waits for its tap; a timer
   // set just before the car covered the page fired anyway and renegotiated to 800x400 (Chrome, 2026-10-12).
   if (!display || !autoFit.checked || displayBusy || document.hidden || (wantFullscreen && !document.fullscreenElement)) return;
-  const target=autoTarget();
-  if (!document.fullscreenElement && closeShape(display,target)) return;
+  const target=autoTarget(),fullscreen=!!document.fullscreenElement;
+  if (!renegotiate(display,target,fullscreen,storedFullscreenSize())) return;
   const key=`${target.width}x${target.height}`;
-  if (!aspectChanged(display,target) || key===lastAutoTarget) return;
+  if (key===lastAutoTarget) return;
   // Avoid a reconnect loop even when another viewer has a different screen shape.
   lastAutoTarget=key;
-  if (!(await saveDisplay({...display,...target,hevc:false}))) error(t('autoFail'));
+  if (!(await saveDisplay({...display,...target,hevc:false}))) { error(t('autoFail')); return; }
+  if (fullscreen) try { localStorage.setItem('f50-fullscreen-shape',key); } catch { /* Then fullscreen may renegotiate once more. */ }
 }
-/** A close shape is renegotiated only in fullscreen: opening the page or leaving fullscreen shows the
- *  current picture stretched (shownSize, never black bars) instead of a black reconnect right after
- *  opening. A clearly different shape (portrait, split screen) is renegotiated at once, as before
- *  (user 2026-10-12, replacing 2026-10-11's reconnect on every window change). */
+function storedFullscreenSize() { try { return localStorage.getItem('f50-fullscreen-shape') ?? ''; } catch { return ''; } }
+/** A close shape is renegotiated only in fullscreen, and there only once (renegotiate, display-fit.ts): opening
+ *  the page or leaving fullscreen shows the current picture stretched (shownSize, never black bars) instead of a
+ *  black reconnect right after opening. A clearly different shape (portrait, split screen) is renegotiated at
+ *  once, as before (user 2026-10-12, replacing 2026-10-11's reconnect on every window change). */
 function autoTarget() {
   return suggestedResolution(screen.clientWidth,screen.clientHeight);
 }
@@ -289,17 +295,31 @@ document.addEventListener('visibilitychange',()=>{
   if (document.hidden) { hiddenAt = performance.now(); if (document.fullscreenElement || wantFullscreen) coveredInFullscreen = true; return; }
   shownAt = performance.now();
   // The picture at once instead of the phone's next keyframe; then the sound.
+  if (wantFullscreen && !document.fullscreenElement) restoreArmed = true;   // covered: left fullscreen while hidden
   send({ type:'keyframe' }); fit(); scheduleAuto(); void unlock(); showRestoreHint();
 });
-/** Straight into the viewer log, not only every 10 s: ev 1 hidden, 2 shown, 3 fullscreen, 4 out of fullscreen. */
+/** Straight into the viewer log, not only every 10 s: ev 1 hidden, 2 shown, 3 fullscreen, 4 out of fullscreen, 5 resized. */
 function pageEvent(ev: number) {
-  send({type:'stats',stats:{ev,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,width:screen.clientWidth,height:screen.clientHeight,want:wantFullscreen?1:0}});
+  send({type:'stats',stats:{ev,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,width:screen.clientWidth,height:screen.clientHeight,want:wantFullscreen?1:0,...viewport()}});
 }
+/** Which page build runs (raised with each build tried in the car). */
+const BUILD = 202610132400;
+/** What the browser says of the space it gives the page, to find the car's bar over a fullscreen page (2026-10-13):
+ *  window, visual viewport (and its offset), screen, available screen, outer window, pixel ratio. */
+function viewport(): Record<string, number> {
+  const v = window.visualViewport, d = window.screen;
+  return { build:BUILD, iw:window.innerWidth, ih:window.innerHeight, vw:Math.round(v?.width ?? -1), vh:Math.round(v?.height ?? -1),
+    vt:Math.round(v?.offsetTop ?? -1), sw:d.width, sh:d.height, sah:d.availHeight, oh:window.outerHeight,
+    dpr:Math.round(window.devicePixelRatio*100) };
+}
+// ev 5: the window changed size (debounced), with what the browser says of it.
+let resizeTimer = 0;
+window.addEventListener('resize', () => { window.clearTimeout(resizeTimer); resizeTimer = window.setTimeout(() => pageEvent(5), 400); });
 window.setInterval(()=>{
   const now=performance.now(),fps=frames*1000/Math.max(1,now-lastStats);frames=0;lastStats=now;
   el('stats').textContent=painted?`${canvas.width} × ${canvas.height} / ${fps.toFixed(0)} fps / ${t('latency')} ${video.decodeLatencyMs.toFixed(0)} ms`:t('noStream');
   el('audio-unlock').hidden=!active||audio.isUnlocked;
-  el('audio-status').textContent=t(audio.isPlaying?'playing':'paused');media.setPlaying(audio.isPlaying);audio.followMusic(media.timeline());
+  el('audio-status').textContent=t(audio.isPlaying?'playing':'paused');media.setPlaying(audio.isPlaying);media.tick();
 },750);
 // Which browser the car runs and the music element's own timeline, which an OS media card may show instead of the song's.
 const chromeMajor=Number(/Chrome\/(\d+)/.exec(navigator.userAgent)?.[1] ?? 0),webView=/; wv\)/.test(navigator.userAgent)?1:0;
@@ -315,7 +335,7 @@ window.setInterval(()=>{
   send({type:'stats',stats:{fps:reportFrames/seconds,decodeMs:video.decodeLatencyMs,queue:video.decodeQueueSize,
     kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,
     width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),...(musicBytes?{musicKbps:musicBytes*8/1000/seconds}:{}),
-    chrome:chromeMajor,webView,...media.report(),...musicTimeline(),...audio.musicReport(),...video.takeStalls(),...lag.take(performance.now())}});
+    chrome:chromeMajor,build:BUILD,webView,...microphone.report(),...audio.farReport(),...media.report(),...musicTimeline(),...audio.musicReport(),...video.takeStalls(),...lag.take(performance.now())}});
   reportFrames=0;reportBytes=0;reportStart=now;touchSum=0;touchCount=0;musicBytes=0;
 },10000);
 render();fit();if(token) connection.connect();

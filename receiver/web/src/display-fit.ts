@@ -17,6 +17,14 @@ export function closeShape(a: {width: number; height: number}, b: {width: number
   return a.width > 0 && a.height > 0 && b.width > 0 && b.height > 0 &&
     Math.abs((a.width / a.height) / (b.width / b.height) - 1) <= 0.2;
 }
+/** Whether to renegotiate CarPlay to `target`. A close shape is renegotiated in fullscreen only once: when the
+ *  current size was not itself set for fullscreen on this browser (`fullscreenSize`). The car's fullscreen is not
+ *  always the same height (XPeng, 2026-10-13: 876x579 or 876x641 CSS px, its dock shown or not), and switching
+ *  between 1280x846 and 1280x936 reconnected CarPlay, a crackle and seconds without a picture, on most entries. */
+export function renegotiate(display: {width: number; height: number}, target: {width: number; height: number}, fullscreen: boolean, fullscreenSize: string) {
+  if (!aspectChanged(display, target)) return false;
+  return !(closeShape(display, target) && (!fullscreen || fullscreenSize === `${display.width}x${display.height}`));
+}
 /** The picture always fills the view, stretched per axis: no black bars (user 2026-10-12). A close shape
  *  stays stretched; a clearly different one is shown stretched only until CarPlay is renegotiated.
  *  Touch input is normalized per axis, so it stays exact. */

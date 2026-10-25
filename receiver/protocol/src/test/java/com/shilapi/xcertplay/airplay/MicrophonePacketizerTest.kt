@@ -41,6 +41,16 @@ class MicrophonePacketizerTest {
     }
 
     @Test
+    fun opusTimestampsCountInTheStreamsOwnRate() {
+        fun config(clockRate: Int) = MicrophoneConfig("telephony", 48_000, 1, 100, 20,
+            java.net.InetAddress.getLoopbackAddress(), 1, ByteArray(32), AudioCodecKind.OPUS, 48_000, clockRate)
+        assertEquals("a call (OPUS_16000_1): 20 ms is 320", 320, config(16_000).rtpSamplesPerPacket)
+        assertEquals("Siri (OPUS_24000_1)", 480, config(24_000).rtpSamplesPerPacket)
+        assertEquals(960, config(48_000).rtpSamplesPerPacket)
+        assertEquals("the page still encodes 48 kHz in 960-sample blocks", 960, config(16_000).samplesPerPacket)
+    }
+
+    @Test
     fun pcmIsConvertedToBigEndian() {
         assertArrayEquals(
             byteArrayOf(0x12, 0x34, 0x56, 0x78),

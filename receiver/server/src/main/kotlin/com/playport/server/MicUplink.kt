@@ -21,6 +21,7 @@ class MicUplink(private val config: MicrophoneConfig) : Closeable {
     val sampleRate: Int get() = config.sampleRate
     val channels: Int get() = config.channels
     val samplesPerPacket: Int get() = config.samplesPerPacket
+    val rtpSamplesPerPacket: Int get() = config.rtpSamplesPerPacket
     val codec: String get() = config.codec.name.lowercase()
     val bitrate: Int? get() = config.bitrate
 

@@ -1,4 +1,4 @@
-import { MusicOutput, type SongTimeline } from './music-output';
+import { MusicOutput } from './music-output';
 import { audioStartTime } from './audio-timing';
 import { AudioCodec, type AudioConfigMessage, type AudioPacketMessage } from './protocol';
 
@@ -173,11 +173,6 @@ export class AudioEngine {
     this.closeStream(streamType);
   }
 
-  /** Keeps the music element's timeline on the song (music-output.ts). */
-  followMusic(song: SongTimeline | null): void {
-    for (const state of this.streams.values()) state.music?.follow(song);
-  }
-
   /** Music element counters for the viewer log (music-output.ts). */
   musicReport(): Record<string, number> {
     const total: Record<string, number> = {};
@@ -210,6 +205,15 @@ export class AudioEngine {
     }
   }
 
+  /** For the viewer log: how far ahead the far end (a call, Siri) is queued, and the reported output latency
+   *  (F50 drive 2026-10-13: about 160 ms and 200 ms, so the car's speakers play a call about 0.4 s late). */
+  private farQueueMaxMs = 0;
+  farReport(): Record<string, number> {
+    if (!this.farQueueMaxMs) return {};
+    const out = { farQueueMaxMs: Math.round(this.farQueueMaxMs), outLatMs: Math.round(((this.context as AudioContext & {outputLatency?: number}).outputLatency ?? this.context.baseLatency ?? 0) * 1000) };
+    this.farQueueMaxMs = 0; return out;
+  }
+
   private playAudioData(state: StreamState, data: AudioData): void {
     if (!this.unlocked) return;
     const numberOfChannels = Math.max(1, data.numberOfChannels);
@@ -219,7 +223,9 @@ export class AudioEngine {
       data.copyTo(plane, { planeIndex: channel, format: 'f32-planar' });
       buffer.copyToChannel(plane, channel);
     }
-    this.schedule(state, buffer);
+    const start = this.schedule(state, buffer);
+    if (start === null || state.name === 'media') return;
+    this.farQueueMaxMs = Math.max(this.farQueueMaxMs, (start - this.context.currentTime) * 1000);
   }
 
   private playPcm(state: StreamState, payload: Uint8Array): void {
@@ -240,10 +246,10 @@ export class AudioEngine {
     this.schedule(state, buffer);
   }
 
-  private schedule(state: StreamState, buffer: AudioBuffer): void {
+  private schedule(state: StreamState, buffer: AudioBuffer): number | null {
     const now = this.context.currentTime;
     const start = audioStartTime(now, state.nextPlayTime, state.name === 'media');
-    if (start === null) return;
+    if (start === null) return null;
     state.nextPlayTime = start;
     const source = this.context.createBufferSource();
     source.buffer = buffer;
@@ -252,6 +258,7 @@ export class AudioEngine {
     source.start(state.nextPlayTime);
     this.lastAudioAt = performance.now();
     state.nextPlayTime += buffer.duration;
+    return start;
   }
 }
 

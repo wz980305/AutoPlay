@@ -14,6 +14,10 @@ data class MicrophoneConfig(
     val key: ByteArray,
     val codec: AudioCodecKind = AudioCodecKind.LPCM,
     val bitrate: Int? = null,
+    /** The stream's own rate, which its RTP timestamps count in: Opus is 16 kHz for telephony and 24 kHz for Siri
+     *  (audioFormat bits), though encoded and announced as 48 kHz. Counting a call's 20 ms packets in 48 kHz
+     *  steps (960 instead of 320) made the other side hear crackle (F50 drive 2026-10-13); Siri coped. */
+    val clockRate: Int = sampleRate,
 ) {
     val samplesPerPacket: Int
         get() = if (codec == AudioCodecKind.OPUS) {
@@ -22,11 +26,16 @@ data class MicrophoneConfig(
             maxOf(1, sampleRate * frameMillis / 1000)
         }
 
+    /** RTP timestamp step per packet. */
+    val rtpSamplesPerPacket: Int
+        get() = if (codec == AudioCodecKind.OPUS) maxOf(1, clockRate * OPUS_PACKET_MILLIS / 1000) else samplesPerPacket
+
     val frameBytes: Int
         get() = samplesPerPacket * channels * 2
 
     private companion object {
         const val OPUS_SAMPLES_PER_PACKET = 960
+        const val OPUS_PACKET_MILLIS = 20
     }
 }
 

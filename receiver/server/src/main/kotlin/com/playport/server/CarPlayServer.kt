@@ -392,7 +392,12 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                 "touch" -> session.sendTouch(
                     message.contacts.map { AirPlayContact(it.id, it.x, it.y, it.down) },
                 )
-                "media" -> message.media?.let(session::sendMedia)
+                "media" -> message.media?.let {
+                    // Media keys from the page (1 play, 2 pause, 3 toggle, 4 next, 5 previous): the log then tells a
+                    // pause from the car's media card or steering wheel apart from one made on the CarPlay screen.
+                    log.info("viewer media key {}", it)
+                    session.sendMedia(it)
+                }
                 "knob" -> message.knob?.let {
                     session.sendKnob(
                         AirPlayKnobState(

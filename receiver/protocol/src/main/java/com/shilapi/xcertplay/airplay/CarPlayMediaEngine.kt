@@ -357,6 +357,12 @@ class CarPlayMediaEngine(
             key = key,
             codec = format.codec,
             bitrate = if (format.codec == AudioCodecKind.OPUS) opusBitrate else null,
+            clockRate = when {
+                format.codec != AudioCodecKind.OPUS -> format.sampleRate
+                formatBits and OPUS_16K != 0L -> 16_000
+                formatBits and OPUS_24K != 0L -> 24_000
+                else -> 48_000
+            },
         )
     }
 
@@ -387,6 +393,7 @@ class CarPlayMediaEngine(
         const val DATASTREAM_OUTPUT_KEY = "DataStream-Output-Encryption-Key"
         const val DATASTREAM_INPUT_KEY = "DataStream-Input-Encryption-Key"
         const val IAP_DATASTREAM_UUID = "E9459FD0-BCAD-4C45-820F-1E72447EF2F2"
+        const val OPUS_16K = 0x10000000L
         const val OPUS_24K = 0x20000000L
         const val OPUS_48K = 0x40000000L
     }

@@ -16,7 +16,9 @@ button:disabled { opacity:.4; cursor:default; }
 .ico { width:22px; height:22px; flex:none; display:block; }
 .ico.dim { color:var(--secondary); }
 
-#app { width:100vw; height:100vh; height:100dvh; position:relative; background:#000; }
+/* Pinned to the window's edges, not 100vh/100dvh: the XPeng's Chrome 120 kept 100dvh at 641 px after fullscreen
+   changes while the window was 579, and CarPlay's bottom row (home button) went below the screen (2026-10-13). */
+#app { position:fixed; top:0; right:0; bottom:0; left:0; background:#000; }
 #screen-container { position:absolute; top:0; right:0; bottom:0; left:0; inset:0; display:flex; justify-content:center; align-items:center; }
 #surface { flex:none; }
 #screen { display:block; width:100%; height:100%; touch-action:none; user-select:none; -webkit-user-select:none; }
