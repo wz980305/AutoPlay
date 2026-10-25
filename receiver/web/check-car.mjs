@@ -399,11 +399,12 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
   const {VideoPlayer}=await load('video',s=>s.replace(/^import .*?;$/gm,'')+'\nconst VideoCodec={H264:1,H265:2};function avcCodecString(){return "avc1.640028";}function annexBToAvcc(d){return d;}');
   const hvcC=new Uint8Array([1,1,0x60,0,0,0,0x90,0,0,0,0,0,0x5d]);
   for (const compat of [false,true]) {
-    const contexts=[];const canvas={getContext(kind,options){contexts.push(options??null);return null;},width:0,height:0};
+    const contexts=[];const canvas={getContext(kind,options){contexts.push(options??null);return {getContextAttributes:()=>({alpha:false,desynchronized:!compat})};},width:0,height:0};
     const player=new VideoPlayer(canvas,()=>{},()=>{},()=>{},()=>{},compat);
+    assert.equal(player.desynchronized,compat?0:1,'what the browser gave is read back for the viewer log');
     player.configure({codec:1,width:1280,height:846,codecData:new Uint8Array([1,0x64,0,0x28,0x40])});await Promise.resolve();
     player.configure({codec:2,width:1280,height:846,codecData:hvcC});for(let i=0;i<5;i++)await Promise.resolve();
-    assert.deepEqual(contexts,compat?[]:[{desynchronized:true}],compat?'compatible: no low-latency canvas':'default: the low-latency canvas');
+    assert.deepEqual(contexts,compat?[{alpha:false}]:[{alpha:false,desynchronized:true}],compat?'compatible: an opaque canvas, not the low-latency one':'default: the opaque low-latency canvas');
     assert.deepEqual(configs.splice(0).map(c=>c.hardwareAcceleration),compat?['no-preference','no-preference']:['prefer-hardware','prefer-hardware'],
       'H.264 and the first H.265 candidate');
   }

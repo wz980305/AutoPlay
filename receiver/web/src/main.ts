@@ -524,7 +524,7 @@ window.setInterval(()=>{
   send({type:'stats',stats:{fps:reportFrames/seconds,decodeMs:video.decodeLatencyMs,queue:video.decodeQueueSize,
     kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,borderless:teslaBorderless()?1:0,
     width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),...(musicBytes?{musicKbps:musicBytes*8/1000/seconds}:{}),
-    ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,build:BUILD,webView,carMusic:carMusic?1:0,teslaMode:TESLA?1:0,promptGain,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...audio.farReport(),...musicTimeline(),...audio.musicReport(),...stalls,...lag.take(performance.now())}});
+    ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,desync:video.desynchronized,build:BUILD,webView,carMusic:carMusic?1:0,teslaMode:TESLA?1:0,promptGain,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...audio.farReport(),...musicTimeline(),...audio.musicReport(),...stalls,...lag.take(performance.now())}});
   judgeDecoder(video.decodeLatencyMs, reportFrames/seconds);
   if (active) judgeFrameRate(stalls.caughtUp);
   reportFrames=0;reportBytes=0;reportStart=now;touchSum=0;touchCount=0;musicBytes=0;
