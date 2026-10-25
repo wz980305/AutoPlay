@@ -1,0 +1,31 @@
+# AutoPlay monorepo ignores. Identity material must never be committed.
+identity/
+**/identity/offline-mfi/
+**/identity/*.pem
+**/identity/*.p12
+**/identity/*.key
+**/identity/*.der
+**/identity/*.bin
+
+# Build outputs
+dist/
+build/
+out/
+.gradle/
+node_modules/
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Device state (pairings, TLS, measurements, logs)
+state/
+*.csv
+!tools/f50/testdata/*.csv
+
+# Editors / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
+__pycache__/
+*.pyc
