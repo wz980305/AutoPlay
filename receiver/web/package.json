@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "node check.mjs && node check-audio.mjs && node check-car.mjs && node check-browser.mjs",
+    "test": "node check.mjs && node check-audio.mjs && node check-car.mjs && node check-browser.mjs && node check-flac.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },

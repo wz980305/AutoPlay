@@ -80,9 +80,14 @@ export class AudioEngine {
       nextPlayTime: 0,
       gain: streamGain,
     };
-    if (message.codec === AudioCodec.AacLc && message.name === 'media' && MusicOutput.supported()) {
+    // Music through a media element: AAC (stream 102, wireless) as sent; the wired iPhone's LPCM
+    // (stream 100) losslessly as FLAC, since 7 ms Web Audio buffers crackled and gave the head unit no
+    // media session (2026-10-12). Other LPCM (calls, Siri, alerts) stays on Web Audio for low latency.
+    const kind = message.name !== 'media' ? null : message.codec === AudioCodec.AacLc ? 'aac'
+      : message.codec === AudioCodec.Lpcm && message.channels <= 2 && [44100, 48000].includes(message.sampleRate) ? 'flac' : null;
+    if (kind && MusicOutput.supported(kind)) {
       try {
-        state.music = (this.retainedMusic && this.retainedConfig === JSON.stringify([message.sampleRate,message.channels,Array.from(message.description)]) ? this.retainedMusic : new MusicOutput(message, this.onError));
+        state.music = (this.retainedMusic && this.retainedConfig === MusicOutput.key(message, kind) ? this.retainedMusic : new MusicOutput(message, this.onError, kind));
         if (this.retainedMusic && this.retainedMusic !== state.music) this.retainedMusic.close();
         this.retainedMusic = null;
         state.music.volume(this.masterVolume * (this.streamGains.get(state.name) ?? 1));
