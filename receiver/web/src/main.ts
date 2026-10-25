@@ -117,10 +117,12 @@ function updateFullscreen() {
   const full = !!document.fullscreenElement;
   const label = t(full ? 'exitFullscreen' : 'fullscreen');
   el('fullscreen-label').textContent = label;
-  el('fullscreen').textContent = label;
-  el('btn-fullscreen').setAttribute('aria-label', label);
-  el('btn-fullscreen').setAttribute('title', label);
-  el('btn-fullscreen').dataset.fullscreen = String(full);
+  el('fullscreen-text').textContent = label;
+  for (const id of ['btn-fullscreen', 'fullscreen']) {
+    el(id).setAttribute('aria-label', label);
+    el(id).setAttribute('title', label);
+    el(id).dataset.fullscreen = String(full);
+  }
 }
 async function toggleFullscreen() {
   try {
