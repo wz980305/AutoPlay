@@ -2,7 +2,6 @@ package com.playport.server
 
 import com.shilapi.xcertplay.airplay.AudioFormat
 import com.shilapi.xcertplay.airplay.MediaSink
-import com.shilapi.xcertplay.airplay.MicrophoneConfig
 import com.shilapi.xcertplay.airplay.VideoCodec
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -60,37 +59,6 @@ class WebBridge(private val hub: WebHub) : MediaSink {
 
     override fun onAudioStopped(type: Int) {
         hub.broadcastAudioStopped(type)
-    }
-
-    @Volatile private var microphone: MicUplink? = null
-
-    override fun onMicrophoneStarted(type: Int, config: MicrophoneConfig) {
-        microphone?.close()
-        val uplink = MicUplink(config)
-        microphone = uplink
-        hub.microphoneRequested(uplink)
-    }
-
-    override fun onMicrophoneStopped(type: Int) {
-        endMicrophone()
-    }
-
-    /** Called by the server when the session ends (the engine clears its state silently). */
-    fun endMicrophone() {
-        val current = microphone
-        microphone = null
-        if (current != null) {
-            current.close()
-            hub.microphoneStopped()
-        }
-    }
-
-    /** Routes browser microphone payloads (raw PCM or Opus) to the phone. */
-    fun sendMicrophonePayload(payload: ByteArray, opus: Boolean): Boolean {
-        val uplink = microphone ?: return false
-        val samples = if (opus) uplink.rtpSamplesPerPacket else payload.size / (2 * maxOf(1, uplink.channels))
-        uplink.send(payload, samples)
-        return true
     }
 
     /** Asks the phone for a keyframe; called when a browser joins or reports a decode stall. */

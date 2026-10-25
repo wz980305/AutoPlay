@@ -119,12 +119,6 @@ export class Connection {
     return true;
   }
 
-  sendBinary(payload: Uint8Array): void {
-    const socket = this.socket;
-    if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    socket.send(payload);
-  }
-
   /** Leaves the current socket at once, without waiting for it to close (after the browser was frozen it may be
    *  dead with no close to come), and opens a new one. */
   restart(): void {

@@ -63,7 +63,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
     )
     val hub = WebHub(config, display)
     val bridge = WebBridge(hub)
-    val media = CarPlayMediaEngine(bridge, microphoneEnabled = true, audioCaptureDirectory = null)
+    val media = CarPlayMediaEngine(bridge, audioCaptureDirectory = null)
 
     private val pairings = loadPairings()
     val mfi: MfiAuthenticator by lazy { MfiIdentity.load(config) }
@@ -162,8 +162,6 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             port = config.airPlayPort,
             entertainmentSampleRate = 48_000,
             hevc = display.hevc,
-            microphone = !config.carVoice,
-            callsAndSiri = !config.carVoice,
             manufacturer = config.manufacturer,
             model = config.model,
             oemLabel = "盒子设置",
@@ -200,7 +198,6 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                 log.info("display changed to {}x{} @{}fps codec={} for the next session (it waited for this one to end)",
                     display.width, display.height, display.fps, if (display.hevc) "h265" else "h264")
             }
-            bridge.endMicrophone()
             hub.setSessionState(false, null, restarting = forDisplay)
         }
 
@@ -240,7 +237,6 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
     fun start() {
         hub.inputHandler = ::routeInput
         hub.onApplyDisplay = ::applyDisplay
-        hub.onMicrophoneData = { opus, payload -> bridge.sendMicrophonePayload(payload, opus) }
         hub.onViewerJoined = { streamType ->
             if (bridge.hasRecoveryHandler) {
                 log.info("requesting keyframe for stream {}", streamType)

@@ -109,12 +109,6 @@ export interface ServerMessage {
   height?: number;
   viewers?: number;
   message?: string;
-  micActive?: boolean;
-  micRate?: number;
-  micChannels?: number;
-  micCodec?: string;
-  micSamplesPerPacket?: number;
-  micBitrate?: number;
 }
 
 /** Parses one binary WebSocket payload into a typed wire message. */

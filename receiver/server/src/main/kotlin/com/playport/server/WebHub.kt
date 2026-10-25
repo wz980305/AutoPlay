@@ -94,12 +94,6 @@ data class ServerMessage(
     val height: Int? = null,
     val viewers: Int = 0,
     val message: String? = null,
-    val micActive: Boolean? = null,
-    val micRate: Int? = null,
-    val micChannels: Int? = null,
-    val micCodec: String? = null,
-    val micSamplesPerPacket: Int? = null,
-    val micBitrate: Int? = null,
     /** "session" ended because the receiver applies a new display: the phone comes back at once (keep the picture). */
     val restarting: Boolean? = null,
 )
@@ -160,28 +154,6 @@ class WebHub(
 
     /** Applies a display change; returns null on success or an error message. */
     @Volatile var onApplyDisplay: ((DisplayRequest) -> DisplayOutcome)? = null
-
-    /** Browser microphone payloads: (isOpus, payload). */
-    @Volatile var onMicrophoneData: ((Boolean, ByteArray) -> Unit)? = null
-
-    fun microphoneRequested(uplink: MicUplink) {
-        broadcastJson(
-            ServerMessage(
-                type = "mic",
-                deviceName = config.deviceName,
-                micActive = true,
-                micRate = uplink.sampleRate,
-                micChannels = uplink.channels,
-                micCodec = uplink.codec,
-                micSamplesPerPacket = uplink.samplesPerPacket,
-                micBitrate = uplink.bitrate,
-            ),
-        )
-    }
-
-    fun microphoneStopped() {
-        broadcastJson(ServerMessage(type = "mic", deviceName = config.deviceName, micActive = false))
-    }
 
     @Volatile private var sessionActive = false
     @Volatile private var nowPlaying = NowPlaying()
@@ -474,18 +446,8 @@ class WebHub(
                             configByStream.keys.forEach { streamType -> requestKeyframe(streamType) }
                         }
                         client.lastHeard.set(heardAt)
-                        if (frame is Frame.Binary) {
-                            val data = frame.data
-                            if (data.size >= 2) {
-                                val kind = data[0].toInt() and 0xff
-                                val payload = data.copyOfRange(1, data.size)
-                                when (kind) {
-                                    MIC_FRAME_LPCM -> onMicrophoneData?.invoke(false, payload)
-                                    MIC_FRAME_OPUS -> onMicrophoneData?.invoke(true, payload)
-                                }
-                            }
-                            continue
-                        }
+                        // Binary frames from a page (the microphone uplink of older builds) carry nothing now.
+                        if (frame is Frame.Binary) continue
                         val text = (frame as? Frame.Text)?.readText() ?: continue
                         val message = try {
                             json.decodeFromString(ClientMessage.serializer(), text)
@@ -643,8 +605,6 @@ class WebHub(
         private fun io.ktor.server.application.ApplicationCall.fromOwnPage(): Boolean = ownPage(
             request.headers["Origin"], "${request.local.serverHost}:${request.local.serverPort}", request.headers["Sec-Fetch-Site"])
 
-        const val MIC_FRAME_LPCM = 0x10
-        const val MIC_FRAME_OPUS = 0x11
         private const val SEND_QUEUE_CAPACITY = 1024
         /** Written by the box's startup (run-receiver.py): {"token": ..., "settingsPort": ...}. */
         const val ACCESS_FILE = "receiver-access.json"

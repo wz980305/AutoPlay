@@ -31,7 +31,6 @@ const messages = {
   autoFail: ['暂未完成自动匹配，可在设置中重试。', 'Automatic matching did not complete. Retry in Settings.'],
   diagnostics: ['连接与兼容性', 'Connection and compatibility'], advanced: ['备用控制', 'Fallback controls'],
   home: ['主屏幕', 'Home'], back: ['返回', 'Back'], previous: ['上一曲', 'Previous track'], play: ['播放 / 暂停', 'Play / pause'], next: ['下一曲', 'Next track'], refresh: ['刷新画面', 'Refresh video'],
-  mic: ['麦克风', 'Microphone'], micHint: ['Siri 与通话需要浏览器允许麦克风；尚未完成车机验证。', 'Siri and calls require browser microphone permission; not yet verified on the car.'],
   compatible: ['基础解码能力可用', 'Basic decoding APIs available'], unsupported: ['此浏览器缺少视频或音频解码能力，请使用支持 WebCodecs 的浏览器。', 'This browser lacks video or audio decoding APIs. Use a browser with WebCodecs support.'],
   insecure: ['当前页面不是安全上下文，请使用已受信任的 HTTPS 地址。', 'This page is not a secure context. Use a trusted HTTPS address.'],
   mediaYes: ['系统媒体控制接口可用，方向盘按键需车机实测。', 'System media API available. Steering-wheel keys require a test in the car.'],

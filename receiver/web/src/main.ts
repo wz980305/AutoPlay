@@ -1,7 +1,6 @@
 import { startup, startupStats } from './startup';
 import { AudioEngine } from './audio';
 import { InputController } from './input';
-import { MicrophoneUplink } from './mic';
 import { VideoPlayer } from './video';
 import { Connection } from './ws';
 import { SystemMedia } from './media-session';
@@ -155,7 +154,7 @@ const video = new VideoPlayer(canvas, error, () => {
 // Music over the car's Bluetooth, turned on by the person on the box (found in a Tesla, 2026-10-14; any car paired
 // with the iPhone): the steering wheel, media card and volume are the car's own; this page plays prompts (boosted)
 // and whatever else the iPhone still sends. ?promptgain=1..8 overrides the boost. Tesla mode sets it too, and adds
-// the Tesla browser's ways (fullscreen below, microphone gain in mic.ts).
+// the Tesla browser's ways (fullscreen below).
 const boxFlags = window as unknown as { playportCarMusic?: boolean; playportTeslaMode?: boolean };
 const carMusic = boxFlags.playportCarMusic === true;
 const teslaMode = boxFlags.playportTeslaMode === true;
@@ -181,9 +180,6 @@ function voiceStarted(streamType: number, name: string) {
 function voiceStopped(streamType: number) { if (carMusic && voices.delete(streamType)) showVoice(); }
 const lag = new LagProbe();
 const media = new SystemMedia(send, () => { void audio.unlock().catch(error); }, () => audio.pauseMusic(), carMusic);
-const microphone = new MicrophoneUplink((payload, opus) => {
-  const frame = new Uint8Array(payload.length + 1); frame[0] = opus ? 0x11 : 0x10; frame.set(payload, 1); connection.sendBinary(frame);
-}, message => { el('mic-status').textContent = message; });
 const connection = new Connection(token, {
   onTiming(stats) { connection.send({type:'stats', stats:{ev:16,...stats}}); },
   onWire(message) {
@@ -225,7 +221,7 @@ let holding = false, holdAwakeMs = 0, holdForDisplay = false, shownOnce = false;
 function reset(hold = false, forDisplay = false) {
   sentNight = null; lag.reset();
   active = painted = false; input.reset(); canvas.inert = true;
-  video.close(); audio.stopAll(); media.setActive(false); void microphone.stop();
+  video.close(); audio.stopAll(); media.setActive(false);
   holding = hold; holdAwakeMs = 0; holdForDisplay = forDisplay;
   if (hold) toast(t(forDisplay ? 'adjusting' : 'reconnecting'));
   else clearPicture();
@@ -239,10 +235,6 @@ function server(message: ServerMessage) {
   if (message.type === 'now-playing' && message.nowPlaying) { media.setMetadata(message.nowPlaying); return; }
   if (message.type === 'host-ui' && active) {
     openPanel(); return;
-  }
-  if (message.type === 'mic') {
-    if (message.micActive) void microphone.start({ sampleRate:message.micRate ?? 16000, channels:message.micChannels ?? 1, codec:message.micCodec ?? 'lpcm', samplesPerPacket:message.micSamplesPerPacket ?? 320, bitrate:message.micBitrate ?? null });
-    else void microphone.stop();
   }
   if (message.type !== 'session' && message.type !== 'hello') return;
   if (!message.sessionActive) {
@@ -560,7 +552,7 @@ window.setInterval(()=>{
   send({type:'stats',stats:{fps:reportFrames/seconds,decodeMs:video.decodeLatencyMs,queue:video.decodeQueueSize,
     kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,
     width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),...(musicBytes?{musicKbps:musicBytes*8/1000/seconds}:{}),
-    ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,build:BUILD,webView,carMusic:carMusic?1:0,teslaMode:teslaMode?1:0,promptGain,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...microphone.report(),...audio.farReport(),...media.report(),...musicTimeline(),...audio.musicReport(),...stalls,...lag.take(performance.now())}});
+    ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,build:BUILD,webView,carMusic:carMusic?1:0,teslaMode:teslaMode?1:0,promptGain,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...audio.farReport(),...media.report(),...musicTimeline(),...audio.musicReport(),...stalls,...lag.take(performance.now())}});
   judgeDecoder(video.decodeLatencyMs, reportFrames/seconds);
   if (active) judgeFrameRate(stalls.caughtUp);
   reportFrames=0;reportBytes=0;reportStart=now;touchSum=0;touchCount=0;musicBytes=0;

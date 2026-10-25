@@ -20,9 +20,6 @@ data class ServerConfig(
     /** View areas of the display (the page's window shapes) and the one CarPlay starts in. */
     val displayAreas: List<ViewArea> = emptyList(),
     val displayArea: Int = 0,
-    /** Calls and Siri on the car's own Bluetooth (DashPlay car_voice, part of Tesla mode; 2026-10-14): no microphone,
-     *  no call or Siri audio. */
-    val carVoice: Boolean = false,
     val rightHandDrive: Boolean = false,
     val bindAddress: String? = null,
     val identityDir: Path,
@@ -78,7 +75,9 @@ data class ServerConfig(
                     "--fps" -> config = config.copy(displayFps = nextValue(flag).toInt())
                     "--ui-scale" -> config = config.copy(uiScale = com.shilapi.xcertplay.airplay.CarPlayUiScale.sanitize(nextValue(flag).toInt()))
                     "--hevc" -> config = config.copy(hevc = true)
-                    "--car-voice" -> config = config.copy(carVoice = true)
+                    // Calls and Siri are always on the car's own Bluetooth now (AirPlayInfoPlist offers neither):
+                    // the flag the box's launcher still passes is accepted and ignored for one release.
+                    "--car-voice" -> {}
                     "--rhd" -> config = config.copy(rightHandDrive = true)
                     "--bind" -> config = config.copy(bindAddress = nextValue(flag))
                     "--identity-dir" -> config = config.copy(identityDir = Path.of(nextValue(flag)))
