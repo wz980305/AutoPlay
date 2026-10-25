@@ -12,8 +12,8 @@ function setup(modern,codec=true){
  if(modern)Object.assign(w,{AudioContext:function(){},PointerEvent:function(){},AudioDecoder:function(){},VideoDecoder:{isConfigSupported:()=>Promise.resolve({supported:codec})},MediaSource:{isTypeSupported:()=>true}});
  vm.runInNewContext(code,{window:w,document:d});return {w,nodes};
 }
-let old=setup(false);assert.equal(old.w.F50BrowserCheck.allowed,false);assert.equal(old.w.F50BrowserCheck.done,true);assert(old.nodes['browser-check-list'].children.some(n=>n.children[0].includes('缺少：WebCodecs')));
-let good=setup(true);await Promise.resolve();assert.equal(good.w.F50BrowserCheck.allowed,true);good.w.F50BrowserCheck.appReady();assert.equal(good.nodes['browser-check-continue'].disabled,false);
+let old=setup(false);assert.equal(old.w.F50BrowserCheck.allowed,false);assert.equal(old.w.F50BrowserCheck.done,true);assert.equal(old.nodes['browser-check'].style.display,'block');assert(old.nodes['browser-check-list'].children.some(n=>n.children[0].includes('缺少：WebCodecs')));
+let good=setup(true);await Promise.resolve();assert.equal(good.w.F50BrowserCheck.allowed,true);good.w.F50BrowserCheck.appReady();assert.equal(good.nodes['browser-check-continue'].disabled,false);assert.equal(good.nodes['browser-check'].style.display,'none');
 let bad=setup(true,false);await Promise.resolve();assert.equal(bad.w.F50BrowserCheck.allowed,false);
 good.w.F50BrowserCheck.appFailed();assert.equal(good.nodes['browser-check'].style.display,'block');assert.equal(good.nodes['browser-check-continue'].disabled,true);
 console.log('Browser check: legacy API failures, supported browser, H264 rejection and bundle failure passed.');

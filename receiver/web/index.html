@@ -1,6 +1,6 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/><meta name="color-scheme" content="dark"/><title>F50 CarPlay</title><link rel="stylesheet" href="/src/style.css"/></head>
-<body><section id="browser-check" style="position:fixed;top:0;right:0;bottom:0;left:0;z-index:99999;background:#141920;color:#f4f6f8;overflow:auto;padding:24px;font:16px/1.6 sans-serif;box-sizing:border-box">
+<html lang="zh-CN"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/><meta name="color-scheme" content="dark"/><title>F50 CarPlay</title><link rel="stylesheet" href="/src/style.css"/><noscript><style>#browser-check{display:block!important}</style></noscript></head>
+<body><section id="browser-check" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:99999;background:#141920;color:#f4f6f8;overflow:auto;padding:24px;font:16px/1.6 sans-serif;box-sizing:border-box">
 <h1 id="browser-check-title" style="font-size:24px">浏览器兼容性检测</h1><p id="browser-check-note">正在检测。如果此提示一直不变，请确认 JavaScript 已启用，或刷新页面重新加载检测脚本。</p><noscript>此浏览器禁用了 JavaScript，无法使用 CarPlay。</noscript><ul id="browser-check-list" style="padding-left:22px"></ul><button id="browser-check-continue" disabled style="padding:12px 20px;font-size:18px">正在检测…</button><p id="browser-check-agent" style="word-wrap:break-word;font-size:12px"></p></section><script src="./browser-check.js"></script><main id="app">
   <div id="screen-container"><div id="surface"><canvas id="screen" width="1280" height="720" tabindex="0" aria-label="CarPlay" inert></canvas></div></div>
   <div id="overlay" role="status"><h1>CarPlay</h1><p id="connection-text"></p><p id="connection-hint"></p></div>
@@ -20,4 +20,5 @@
   <details><summary data-i18n="advanced"></summary><div id="fallback-controls"><button data-command="home" data-i18n="home"></button><button data-command="back" data-i18n="back"></button><button data-command="previous" data-i18n="previous"></button><button data-command="play" data-i18n="play"></button><button data-command="next" data-i18n="next"></button><button data-command="refresh" data-i18n="refresh"></button></div></details>
   <p class="hint" data-i18n="savedHere"></p>
 </div></dialog>
+<script src="./receiver-access.js"></script>
 <script type="module" src="/src/boot.ts"></script></body></html>

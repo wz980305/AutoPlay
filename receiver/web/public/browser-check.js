@@ -4,8 +4,8 @@
  var panel=d.getElementById('browser-check'), list=d.getElementById('browser-check-list'), title=d.getElementById('browser-check-title'), note=d.getElementById('browser-check-note'), button=d.getElementById('browser-check-continue');
  var failures=0,pending=0,timer,api=w.F50BrowserCheck={done:false,allowed:false,ready:false};
  function add(name,ok,required,detail){var row=d.createElement('li');row.style.marginBottom='10px';row.style.color=ok?'#b5edc9':required?'#ffb7ad':'#ffe3a1';row.appendChild(d.createTextNode((ok?'通过：':required?'缺少：':'受限：')+name+'。'+detail));list.appendChild(row);if(!ok&&required)failures++;}
- function finish(){if(api.done||pending)return;api.done=true;api.allowed=failures===0;title.textContent=api.allowed?'浏览器基础检测通过':'此浏览器暂不能使用标准 CarPlay 模式';note.textContent=api.allowed?'正在加载播放器；实际画面、声音仍需连接后验证。':'缺失能力会造成黑屏或操作异常。请使用较新的浏览器；实验兼容模式仍在研究，当前未启用。';button.textContent=api.allowed?'正在加载播放器…':'标准模式不可用';if(api.allowed)timer=w.setTimeout(function(){if(!api.ready)api.appFailed();},12000);}
- api.appReady=function(){api.ready=true;w.clearTimeout(timer);button.disabled=false;button.textContent='进入 CarPlay';note.textContent='播放器已启动。检测通过不代表已连接 iPhone；首次声音播放可能需要点击。';w.setTimeout(function(){if(api.allowed)panel.style.display='none';},2500);};
+ function finish(){if(api.done||pending)return;api.done=true;api.allowed=failures===0;if(!api.allowed)panel.style.display='block';title.textContent=api.allowed?'浏览器基础检测通过':'此浏览器暂不能使用标准 CarPlay 模式';note.textContent=api.allowed?'正在加载播放器；实际画面、声音仍需连接后验证。':'缺失能力会造成黑屏或操作异常。请使用较新的浏览器；当前浏览器无法显示画面。';button.textContent=api.allowed?'正在加载播放器…':'标准模式不可用';if(api.allowed)timer=w.setTimeout(function(){if(!api.ready)api.appFailed();},12000);}
+ api.appReady=function(){api.ready=true;w.clearTimeout(timer);button.disabled=false;button.textContent='进入 CarPlay';note.textContent='播放器已启动。检测通过不代表已连接 iPhone；首次声音播放可能需要点击。';if(api.allowed)panel.style.display='none';};
  api.appFailed=function(){w.clearTimeout(timer);panel.style.display='block';title.textContent='播放器未正常启动';note.textContent='可能是现代 JavaScript 不兼容、脚本加载失败或初始化失败。请刷新或更新浏览器。';button.disabled=true;};
  api.show=function(){panel.style.display='block';};button.onclick=function(){if(api.allowed&&api.ready)panel.style.display='none';};
  d.getElementById('browser-check-agent').textContent='浏览器上报：'+w.navigator.userAgent;
@@ -17,7 +17,6 @@
  add('Pointer Events',!!w.PointerEvent,true,'画面内触控需要。');
  add('设置弹窗',!!d.createElement('dialog').showModal,true,'打开设置需要。');
  add('WebCodecs 视频解码',!!w.VideoDecoder,true,'缺少 VideoDecoder 无法显示标准模式画面。');
- add('实验候选：MSE H.264 播放',!!w.MediaSource&&typeof w.MediaSource.isTypeSupported==='function'&&w.MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01F"'),false,'仅调查兼容路线，不代表兼容模式已经实现。');
  add('AAC 原生音乐播放',!!w.MediaSource&&w.MediaSource.isTypeSupported('audio/mp4; codecs="mp4a.40.2"'),false,'不支持时可能降级或没有声音，系统媒体控制也可能不可用。');
  add('辅助音频解码',!!w.AudioDecoder,false,'缺少 AudioDecoder 时部分音轨不可用。');
  add('全屏',!!d.documentElement.requestFullscreen,false,'不支持时仍可在窗口内显示。');
