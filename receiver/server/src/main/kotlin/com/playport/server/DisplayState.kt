@@ -5,8 +5,8 @@ import com.shilapi.xcertplay.airplay.CarPlayUiScale
 /**
  * Live display configuration advertised to the phone in AirPlay /info.
  *
- * Portrait orientation is simply `height > width`. [uiScale] maps to [CarPlayUiScale]: a larger
- * canvas requests proportionally smaller CarPlay controls.
+ * Portrait orientation is simply `height > width`. [uiScale] is CarPlay's size: the physical width told to the
+ * phone ([physicalWidthMm]); a wider one gives smaller controls.
  */
 /** One view area: a width x height rectangle at the stream's top left (a browser window's shape). */
 @kotlinx.serialization.Serializable
@@ -80,13 +80,14 @@ class DisplayState(width: Int, height: Int, fps: Int, uiScale: Int, hevc: Boolea
     }
 
     /**
-     * CarPlay sizes its icons by pixels per millimetre. With areas the stream is wider than the window shape it mostly
-     * shows, and at the plain 200 mm the windowed area looked crowded (Tesla, 2026-10-14): the narrowest area keeps the
-     * plain density, 200 mm per its width. null (the plain 200 mm) without areas.
+     * CarPlay lays out by the physical size it is told, not by pixels: at 200 mm, 1280x720 and 2560x1440 at every
+     * old UI-scale canvas (75-115 %) showed the same two rows of five icons (F50, 2026-10-22); DiPlay and WheelPlay
+     * dropped the canvas scale for millimetre presets too. [uiScale] picks the length of the stream's long side (its
+     * width in landscape; a portrait screen is the same screen turned, so its icons keep their size): the areas get
+     * their share at the same density, so a larger window shows more. (Before, the narrowest area had a fixed 200 mm:
+     * the icons changed with the shapes remembered, and the largest window showed less once a change dropped them.)
      */
-    fun physicalWidthMm(): Int? = areas.takeIf { it.size > 1 }?.minOf { it.width }?.let {
-        com.shilapi.xcertplay.airplay.AirPlayDisplaySettings.DEFAULT_WIDTH_PHYSICAL_MM * width / it
-    }
+    fun physicalWidthMm(): Int = (SIZE_MM[uiScale] ?: SIZE_MM.getValue(CarPlayUiScale.DEFAULT)) * width / maxOf(width, height, 1)
 
     val orientation: String get() = if (height > width) "portrait" else "landscape"
 
@@ -98,6 +99,11 @@ class DisplayState(width: Int, height: Int, fps: Int, uiScale: Int, hevc: Boolea
 
         /** As many as the page declares (display-fit.ts MAX_AREAS; 4 until 2026-10-21). */
         const val MAX_AREAS = 8
+
+        /** The size setting as the stream's physical width: large, standard, small, smaller. It keeps the old UI-scale
+         *  values (115/100/85/75), so saved settings carry over; standard is 250 mm (the plain 200 before, but the
+         *  windows with areas were already shown at about 230-270 mm). */
+        val SIZE_MM = mapOf(115 to 200, 100 to 250, 85 to 300, 75 to 350)
 
         fun validateAreas(width: Int, height: Int, areas: List<ViewArea>, area: Int): String? = when {
             areas.size > MAX_AREAS -> "at most $MAX_AREAS view areas"

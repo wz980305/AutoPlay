@@ -36,9 +36,12 @@ class ViewAreaTest {
     }
 
     @Test
-    fun theNarrowestAreaKeepsThePlainDensity() {
-        assertEquals(300, DisplayState(1920, 1080, 30, 100, true, listOf(windowed, full), 0).physicalWidthMm())
-        assertNull(DisplayState(1280, 996, 30, 100).physicalWidthMm())
+    fun theSizeIsTheStreamsPhysicalWidth() {
+        assertEquals("standard, with or without areas", 250, DisplayState(1920, 1080, 30, 100, true, listOf(windowed, full), 0).physicalWidthMm())
+        assertEquals(250, DisplayState(1280, 996, 30, 100).physicalWidthMm())
+        assertEquals(listOf(200, 250, 300, 350), listOf(115, 100, 85, 75).map { DisplayState(1280, 720, 30, it).physicalWidthMm() })
+        assertEquals("an unknown value is standard", 250, DisplayState(1280, 720, 30, 90).physicalWidthMm())
+        assertEquals("portrait: the long side has the size", 140, DisplayState(720, 1280, 30, 100).physicalWidthMm())
     }
 
     @Test

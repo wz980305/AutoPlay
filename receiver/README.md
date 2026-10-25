@@ -216,8 +216,9 @@ the browser is the quality control room:
 
 - **Landscape presets** — 800×480, 1280×720, 1920×720, 1920×1080, 2560×1440, 3840×2160.
 - **Portrait presets** — 720×1280, 1080×1920 (portrait is simply `height > width`).
-- **CarPlay UI size** — Smaller/Small/Default/Large requests a proportionally larger canvas, so
-  CarPlay draws finer controls (75–115%).
+- **CarPlay UI size** — Large/Standard/Small/Smaller tells the phone a screen 200/250/300/350 mm
+  wide; CarPlay lays out by that physical size (more icons on a wider one), not by pixel count. With
+  view areas the whole stream has that width and each window shape its share, so icons keep their size.
 - **Video codec** — H.265/HEVC is sharper at the same bitrate and is offered when the browser can
   decode it (probed with `VideoDecoder.isConfigSupported`). The phone makes the final call.
 - **Frame rate** — 60 fps for smoothness, 30 fps to spend more bitrate on detail.

@@ -149,16 +149,14 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             deviceId = deviceId,
             btMac = hostBluetoothMac,
             sourceVersion = config.sourceVersion,
-            main = com.shilapi.xcertplay.airplay.CarPlayUiScale.apply(
-                AirPlayDisplayConfig(
-                    widthPixels = display.width,
-                    heightPixels = display.height,
-                    fps = display.fps,
-                    viewAreas = display.areas.takeIf { it.size > 1 }?.map { AirPlayViewArea(it.width, it.height) },
-                    initialViewArea = display.area,
-                    widthPhysicalMm = display.physicalWidthMm(),
-                ),
-                display.uiScale,
+            // The size setting is the physical width (DisplayState.physicalWidthMm), no longer a larger canvas.
+            main = AirPlayDisplayConfig(
+                widthPixels = display.width,
+                heightPixels = display.height,
+                fps = display.fps,
+                viewAreas = display.areas.takeIf { it.size > 1 }?.map { AirPlayViewArea(it.width, it.height) },
+                initialViewArea = display.area,
+                widthPhysicalMm = display.physicalWidthMm(),
             ),
             rightHandDrive = config.rightHandDrive,
             port = config.airPlayPort,
