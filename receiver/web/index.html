@@ -4,8 +4,9 @@
 <h1 id="browser-check-title" style="font-size:24px">浏览器兼容性检测</h1><p id="browser-check-note">正在检测。如果此提示一直不变，请确认 JavaScript 已启用，或刷新页面重新加载检测脚本。</p><noscript>此浏览器禁用了 JavaScript，无法使用 CarPlay。</noscript><ul id="browser-check-list" style="padding-left:22px"></ul><button id="browser-check-continue" disabled style="padding:12px 20px;font-size:18px">正在检测…</button><p id="browser-check-agent" style="word-wrap:break-word;font-size:12px"></p></section><script src="./browser-check.js"></script><main id="app">
   <div id="screen-container"><div id="surface"><canvas id="screen" width="1280" height="720" tabindex="0" aria-label="CarPlay" inert></canvas></div></div>
   <div id="overlay" role="status"><h1>CarPlay</h1><p id="connection-text"></p><p id="connection-hint"></p></div>
-  <button id="btn-settings" aria-haspopup="dialog" aria-controls="settings"><span aria-hidden="true">⚙</span><span data-i18n="settings">设置</span></button>
+  <button id="btn-settings" aria-haspopup="dialog" aria-controls="settings"><span aria-hidden="true">⚙</span><span data-i18n="settings">盒子设置</span></button>
   <button id="btn-fullscreen" aria-label="全屏" title="全屏"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path class="expand" d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><path class="collapse" d="M3 8h5V3m8 0v5h5M8 21v-5H3m13 5v-5h5"/></svg><span id="fullscreen-label">全屏</span></button>
+  <div id="toast" role="status" hidden></div>
   <button id="audio-unlock" data-i18n="sound" hidden>轻点启用声音</button>
   <div id="error-banner" role="alert" hidden><span data-i18n="error"></span><details><summary data-i18n="technical"></summary><p id="error-text"></p></details><button id="dismiss-error" data-i18n="close"></button></div>
 </main>

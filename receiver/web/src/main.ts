@@ -149,7 +149,15 @@ async function toggleFullscreen() {
 }
 el('fullscreen').onclick = toggleFullscreen;
 el('btn-fullscreen').onclick = toggleFullscreen;
-document.addEventListener('fullscreenchange', () => { updateFullscreen(); fit(); });
+let toastTimer = 0;
+function toast(message: string) {
+  el('toast').textContent = message; el('toast').hidden = false;
+  window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => { el('toast').hidden = true; }, 6000);
+}
+document.addEventListener('fullscreenchange', () => {
+  updateFullscreen(); fit();
+  if (document.fullscreenElement) toast(t('fullscreenHint')); else el('toast').hidden = true;
+});
 document.querySelectorAll<HTMLButtonElement>('[data-command]').forEach(button => button.onclick = () => {
   const cmd = button.dataset.command;
   if (cmd === 'home' || cmd === 'back') send({ type:'knob', knob:{ select:false, home:cmd==='home', back:cmd==='back', x:0,y:0,wheel:0 } });

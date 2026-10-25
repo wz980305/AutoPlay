@@ -1,11 +1,11 @@
 const messages = {
-  settings: ['设置', 'Settings'], close: ['关闭', 'Close'], language: ['语言', 'Language'],
+  settings: ['盒子设置', 'Box settings'], close: ['关闭', 'Close'], language: ['语言', 'Language'],
   waiting: ['正在等待 iPhone', 'Waiting for iPhone'], waitingHint: ['手机开启蓝牙并连接盒子 Wi-Fi，已配对手机会自动重连。', 'Enable Bluetooth and join the receiver Wi-Fi. Paired phones reconnect automatically.'],
   connecting: ['正在连接盒子…', 'Connecting to receiver…'], reconnecting: ['连接中断，正在自动重连…', 'Disconnected. Reconnecting automatically…'],
   starting: ['已连接，正在等待画面…', 'Connected. Waiting for video…'], live: ['已连接', 'Connected'],
   access: ['需要首次登录链接', 'First-time access link required'], accessHint: ['请使用私有访问资料中的完整链接打开一次，此浏览器会记住登录。', 'Open the complete link from your private access file once. This browser will remember it.'],
   sound: ['轻点启用声音', 'Tap to enable sound'], volume: ['音量', 'Volume'],
-  display: ['画面', 'Display'], fullscreen: ['全屏', 'Fullscreen'], exitFullscreen: ['退出全屏', 'Exit fullscreen'], fullscreenFail: ['此浏览器不允许全屏，画面仍会自动适配窗口。', 'Fullscreen unavailable. The picture still fits this window.'],
+  display: ['画面', 'Display'], fullscreen: ['全屏', 'Fullscreen'], exitFullscreen: ['退出全屏', 'Exit fullscreen'], fullscreenHint: ['已全屏。退出全屏：点 CarPlay 主屏幕上的「盒子设置」图标，再点「退出全屏」。', 'Fullscreen on. To exit, tap the Box settings icon on the CarPlay home screen, then Exit fullscreen.'], fullscreenFail: ['此浏览器不允许全屏，画面仍会自动适配窗口。', 'Fullscreen unavailable. The picture still fits this window.'],
   auto: ['自动匹配屏幕比例', 'Match screen aspect ratio automatically'], autoHint: ['仅此显示端启用。比例变化时重新协商画面，最多 1920 像素长边；可能短暂重连。', 'Enable on one display only. Aspect changes renegotiate video, up to 1920 pixels on the long edge, and may briefly reconnect.'],
   width: ['宽度', 'Width'], height: ['高度', 'Height'], apply: ['应用并重连', 'Apply and reconnect'],
   nightMode: ['夜间模式', 'Night mode'], nightSchedule: ['自动（18:30–06:30 为夜间）', 'Auto (night 18:30–06:30)'], nightSystem: ['跟随车机浏览器深色模式', 'Follow car browser dark mode'], nightDay: ['始终白天', 'Always day'], nightNight: ['始终夜间', 'Always night'],

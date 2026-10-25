@@ -38,8 +38,9 @@ fieldset { border:0; padding:0; margin:0; min-width:0; } .pair { display:grid; g
 
 #btn-fullscreen { position:absolute; top:12px;top:max(12px,env(safe-area-inset-top)); right:12px;right:max(12px,env(safe-area-inset-right)); display:flex; align-items:center; gap:8px; min-width:48px; min-height:48px; padding:10px 12px; background:#252b33c9; border-color:#77818e; }
 #btn-fullscreen:hover, #btn-fullscreen:focus-visible { background:#303945; }
-/* Live CarPlay keeps the whole picture clear; fullscreen then lives in Settings (opened from the CarPlay gear icon). */
-#app[data-live=true] #btn-fullscreen { display:none; }
+/* Top-right button only enters fullscreen; once fullscreen it hides and exit lives in Settings (CarPlay gear icon). */
+#btn-fullscreen[data-fullscreen=true] { display:none; }
+#toast { position:absolute; top:max(16px,env(safe-area-inset-top)); left:50%; transform:translateX(-50%); max-width:calc(100vw - 32px); padding:12px 18px; border-radius:12px; background:#252b33f2; border:1px solid #77818e; font-size:17px; line-height:1.5; text-align:center; pointer-events:none; }
 .fullscreen-action { display:flex; align-items:center; justify-content:center; gap:10px; min-height:56px; margin:18px 0 8px; font-size:19px; }
 #btn-fullscreen .collapse, #btn-fullscreen[data-fullscreen=true] .expand, #fullscreen .collapse, #fullscreen[data-fullscreen=true] .expand { display:none; }
 #btn-fullscreen[data-fullscreen=true] .collapse, #fullscreen[data-fullscreen=true] .collapse { display:block; }

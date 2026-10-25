@@ -89,7 +89,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             microphone = true,
             manufacturer = config.manufacturer,
             model = config.model,
-            oemLabel = "设置",
+            oemLabel = "盒子设置",
             icons = listOf(AirPlayIcon(180, 180, checkNotNull(javaClass.getResourceAsStream("/f50-settings.png")).use { it.readBytes() })),
         )
 

@@ -13,7 +13,7 @@ class OemSettingsTest {
         CarPlayServer(ServerConfig(identityDir = root, stateDir = root.resolve("state"), bindAddress = "127.0.0.1")).use { server ->
             val info = AirPlayInfoPlist.build(server.airPlayConfig)
             assertEquals(true, info["oemIconVisible"])
-            assertEquals("设置", info["oemIconLabel"])
+            assertEquals("盒子设置", info["oemIconLabel"])
             val icon = (info["oemIcons"] as List<*>).single() as Map<*, *>
             val bytes = icon["imageData"] as ByteArray
             assertArrayEquals(byteArrayOf(-119,80,78,71,13,10,26,10), bytes.take(8).toByteArray())
