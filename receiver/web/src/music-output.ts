@@ -11,6 +11,8 @@ const MIMES: Record<MusicKind,string> = { aac: 'audio/mp4; codecs="mp4a.40.2"', 
 const CUSHION: Record<MusicKind,number> = { aac: 1, flac: .65 };
 /** AAC frames (1024 samples, 21 ms) per MP4 fragment: small, so audio reaches the element as it arrives. */
 const AAC_FRAGMENT = 4;
+/** Fragments (85 ms each, AAC and FLAC alike) that may wait for the buffer: more than a realignment replays (5 s). */
+const MAX_PENDING = 80;
 /** A real HTML media timeline makes received music eligible for OS media controls. */
 export class MusicOutput {
   static supported(kind: MusicKind = 'aac') { return typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported(MIMES[kind]); }
@@ -58,13 +60,21 @@ export class MusicOutput {
       catch(error){this.onError(String(error));}
     },{once:true});
   }
-  get unlocked(){return !this.element.paused;}
+  /** Waiting for a cushion before playing on (unlock). */
+  private holding=false;
+  get unlocked(){return !this.element.paused||this.holding;}
   get playing(){return this.running&&!this.element.paused&&performance.now()-this.lastPacket<1800;}
-  pause(){this.pausing=!this.element.paused;this.element.pause();this.running=false;this.frames=[];this.pcm=[];this.pcmBytes=0;}
+  pause(){this.holding=false;this.pausing=!this.element.paused;this.element.pause();this.running=false;this.frames=[];this.pcm=[];this.pcmBytes=0;}
   unlock(){
-    // Not right at the end: playing from the last sample ran dry at once, a crackle on opening the page.
+    // Not right at the end: playing from the last sample ran dry at once, a crackle on opening the page. Never
+    // backwards either: after a pause the buffer may be played out, and going back replayed what was heard
+    // (review 2026-10-12); then the music waits for its cushion and plays on (pump).
     const b=this.buffer;
-    if(this.element.paused && b?.buffered.length) this.element.currentTime=Math.max(b.buffered.start(0),b.buffered.end(b.buffered.length-1)-CUSHION[this.kind]);
+    if(this.element.paused && b?.buffered.length){
+      const target=b.buffered.end(b.buffered.length-1)-CUSHION[this.kind];
+      if(target>this.element.currentTime)this.element.currentTime=Math.max(b.buffered.start(0),target);
+      else{this.holding=true;this.pump();return Promise.resolve();}
+    }
     return this.element.play();
   }
   volume(value:number){this.element.volume=Math.max(0,Math.min(1,value));}
@@ -74,7 +84,7 @@ export class MusicOutput {
     this.lastPacket=performance.now();this.frames.push(data.slice());
     if(this.frames.length<AAC_FRAGMENT)return;
     this.queue(aacFragment(this.sequence++,this.samples,this.frames),1024*this.frames.length);this.frames=[];
-    if(this.pending.length>48){this.onError('Music buffer is not advancing');this.close();return;}
+    if(this.pending.length>MAX_PENDING){this.onError('Music buffer is not advancing');this.close();return;}
     this.pump();
   }
   /** LPCM packets (352 samples each) are cut into fixed FLAC_BLOCK blocks, one MP4 fragment each. */
@@ -91,7 +101,7 @@ export class MusicOutput {
       this.pcmBytes-=step;
       this.queue(flacFragment(this.sequence++,this.samples,flacFrame(this.block++,this.rate,this.channels,block),FLAC_BLOCK),FLAC_BLOCK);
     }
-    if(this.pending.length>12){this.onError('Music buffer is not advancing');this.close();return;}
+    if(this.pending.length>MAX_PENDING){this.onError('Music buffer is not advancing');this.close();return;}
     this.pump();
   }
   private queue(data:Uint8Array,length:number){
@@ -117,7 +127,8 @@ export class MusicOutput {
       this.element.currentTime=from/this.rate+offset;
       return false;
     }
-    const song=this.song;if(!song||!this.started)return false;
+    // Paused (by the car for another app, or not unlocked yet): aligned when it plays again.
+    const song=this.song;if(!song||!this.started||this.element.paused)return false;
     const position=Math.min(song.duration,song.position+(song.playing?(performance.now()-song.at)/1000:0));
     const now=performance.now();
     if(song.key===this.alignedKey&&(Math.abs(this.element.currentTime-position)<=3||now-this.alignedAt<5000))return false;
@@ -142,6 +153,7 @@ export class MusicOutput {
         const end=b.buffered.end(b.buffered.length-1),now=this.element.currentTime;
         if(end-now>CUSHION[this.kind]+1.35){this.element.currentTime=Math.max(b.buffered.start(0),end-CUSHION[this.kind]);this.counts.musicSkips++;}
         if(now-b.buffered.start(0)>15){b.remove(0,now-10);return;}
+        if(this.holding&&end-now>=CUSHION[this.kind]){this.holding=false;void this.element.play().catch(()=>{});}
       }
       const next=this.pending.shift();if(next){b.appendBuffer(next as Uint8Array<ArrayBuffer>);this.started=true;}
     }catch(error){this.onError(String(error));}

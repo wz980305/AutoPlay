@@ -183,7 +183,7 @@ function updateFullscreen() {
 /** The car shows something else over the page (reverse camera): the page is hidden and comes back out of
  *  fullscreen (Xpeng G6, 2026-10-12). Such an exit keeps the picture as negotiated, and the next tap on the
  *  picture goes back to fullscreen; a browser enters fullscreen only on a tap, never by itself. */
-let wantFullscreen = false, hiddenAt = -Infinity, exitedAt = -Infinity;
+let wantFullscreen = false, hiddenAt = -Infinity, shownAt = -Infinity, coveredInFullscreen = false, fullscreenSeq = 0;
 const restoring = () => wantFullscreen && !document.fullscreenElement && !document.hidden;
 async function toggleFullscreen() {
   try {
@@ -203,10 +203,15 @@ function toast(message: string) {
 }
 document.addEventListener('fullscreenchange', () => {
   updateFullscreen(); fit(); pageEvent(document.fullscreenElement ? 3 : 4);
-  if (document.fullscreenElement) { wantFullscreen = true; toast(t('fullscreenHint')); return; }
-  el('toast').hidden = true; exitedAt = performance.now();
-  // Not hidden around the exit (within 2 s): the user left fullscreen on purpose.
-  window.setTimeout(() => { if (!document.hidden && Math.abs(exitedAt - hiddenAt) > 2000) wantFullscreen = false; }, 2000);
+  const seq = ++fullscreenSeq;
+  if (document.fullscreenElement) { wantFullscreen = true; coveredInFullscreen = false; toast(t('fullscreenHint')); return; }
+  el('toast').hidden = true;
+  // The car covered the page: the browser leaves fullscreen while it is hidden, and may tell the page only once it
+  // is shown again (Chrome, 2026-10-12: hidden, shown, then out of fullscreen). Fullscreen comes back on a tap.
+  if (wantFullscreen && (document.hidden || (coveredInFullscreen && performance.now() - shownAt < 2000))) { showRestoreHint(); return; }
+  // Left while shown: on purpose, unless the page is hidden within 2 s; then fit the window as usual.
+  const exitedAt = performance.now();
+  window.setTimeout(() => { if (seq !== fullscreenSeq || hiddenAt >= exitedAt) return; wantFullscreen = false; scheduleAuto(); }, 2000);
 });
 function showRestoreHint() {
   if (!restoring()) return;
@@ -253,10 +258,11 @@ function scheduleAuto() {
   autoTimer=window.setTimeout(() => { void adapt(); },1500);
 }
 async function adapt() {
-  if (!display || !autoFit.checked || displayBusy) return;
+  // Not for a hidden page (a covered page reports a small window) nor while fullscreen waits for its tap; a timer
+  // set just before the car covered the page fired anyway and renegotiated to 800x400 (Chrome, 2026-10-12).
+  if (!display || !autoFit.checked || displayBusy || document.hidden || (wantFullscreen && !document.fullscreenElement)) return;
   const target=autoTarget();
   if (!document.fullscreenElement && closeShape(display,target)) return;
-  if (restoring()) return;   // back from the reverse camera: the next tap restores the negotiated shape
   const key=`${target.width}x${target.height}`;
   if (!aspectChanged(display,target) || key===lastAutoTarget) return;
   // Avoid a reconnect loop even when another viewer has a different screen shape.
@@ -280,7 +286,8 @@ el<HTMLFormElement>('display-form').onsubmit=event => {
 new ResizeObserver(()=>{ fit(); scheduleAuto(); }).observe(screen);
 document.addEventListener('visibilitychange',()=>{
   pageEvent(document.hidden ? 1 : 2);
-  if (document.hidden) { hiddenAt = performance.now(); return; }
+  if (document.hidden) { hiddenAt = performance.now(); if (document.fullscreenElement || wantFullscreen) coveredInFullscreen = true; return; }
+  shownAt = performance.now();
   // The picture at once instead of the phone's next keyframe; then the sound.
   send({ type:'keyframe' }); fit(); scheduleAuto(); void unlock(); showRestoreHint();
 });

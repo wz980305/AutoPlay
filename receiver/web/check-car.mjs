@@ -85,13 +85,15 @@ assert.equal(media.timeline().key,'Run|||200');assert.equal(media.timeline().pos
     get buffered(){return new Ranges(this.ranges);},appendBuffer(){log.push('append');},remove(a,b){log.push(`remove ${a}-${b}`);this.ranges=[];}};
   const source={readyState:'open',duration:Infinity,addEventListener(n,h){h();},addSourceBuffer(){return buffer;}};
   globalThis.MediaSource=class {constructor(){return source;}};globalThis.URL.createObjectURL=()=>'blob:x';
-  const element={currentTime:0,paused:true,setAttribute(){},addEventListener(){},play(){return Promise.resolve();},pause(){}};
+  const element={currentTime:0,paused:true,plays:0,setAttribute(){},removeAttribute(){},load(){},remove(){},addEventListener(){},play(){this.plays++;this.paused=false;return Promise.resolve();},pause(){this.paused=true;}};
   globalThis.document={createElement:()=>element,body:{append(){}}};
-  const {MusicOutput}=await load('music-output',s=>'const FLAC_BLOCK=4096,FLAC_MIME="audio/mp4";function flacInit(){return new Uint8Array(1);}function aacInit(){return new Uint8Array(1);}\n'+s.replace(/^import .*?;$/gm,''));
+  const {MusicOutput}=await load('music-output',s=>'const FLAC_BLOCK=4096,FLAC_MIME="audio/mp4";function flacInit(){return new Uint8Array(1);}function aacInit(){return new Uint8Array(1);}function flacFrame(){return new Uint8Array(1);}function flacFragment(){return new Uint8Array(1);}\n'+s.replace(/^import .*?;$/gm,''));
   const music=new MusicOutput({sampleRate:48000,channels:2,description:new Uint8Array()},()=>{},'flac');
   assert.deepEqual(log,['append'],'init segment');
   element.currentTime=600;buffer.ranges=[[599,600.6]];
   music.follow({position:8,duration:269,key:'A',playing:true});
+  assert.deepEqual(log.slice(1),[],'Nothing moves while the element is paused (not unlocked, or the car gave the sound to another app)');
+  element.paused=false;music.follow({position:8,duration:269,key:'A',playing:true});
   assert.deepEqual(log.slice(1),['remove 0-Infinity'],'A new song first drops the old timeline');
   clock=100;buffer.listeners.updateend();
   assert.equal(element.currentTime,8,'then what was being heard is the song position');assert.equal(source.duration,269,'with the song duration');
@@ -102,6 +104,21 @@ assert.equal(media.timeline().key,'Run|||200');assert.equal(media.timeline().pos
   assert.ok(!log.some(x=>x.startsWith('remove')),'Following the same song moves nothing');
   clock=10000;music.follow({position:60,duration:269,key:'A',playing:true});
   assert.ok(log.includes('remove 0-Infinity'),'A seek on the iPhone (more than 3 s off) realigns');
+  // A realignment queues the unheard seconds again (up to 5 s): that is not a stuck buffer.
+  const errors=[];const flac=new MusicOutput({sampleRate:48000,channels:2,description:new Uint8Array()},m=>errors.push(m),'flac');
+  buffer.updating=true;for(let i=0;i<40;i++)flac.packet(new Uint8Array(4096*4));
+  assert.deepEqual(errors,[],'Forty fragments (3.4 s) waiting on a busy buffer close nothing');
+  for(let i=0;i<60;i++)flac.packet(new Uint8Array(4096*4));
+  assert.deepEqual(errors,['Music buffer is not advancing'],'but a buffer stuck for good still does');buffer.updating=false;
+  // Resuming after a pause whose buffer was played out: no step back (that replayed a second already heard).
+  const resumed=new MusicOutput({sampleRate:48000,channels:2,description:new Uint8Array()},()=>{},'aac');
+  element.paused=true;element.plays=0;element.currentTime=10;buffer.ranges=[[5,10]];
+  await resumed.unlock();
+  assert.equal(element.currentTime,10,'No step back');assert.equal(element.plays,0,'it waits for a cushion');assert.equal(resumed.unlocked,true);
+  buffer.ranges=[[5,11.2]];buffer.listeners.updateend();
+  assert.equal(element.plays,1,'and plays on once a second of new audio is in');
+  element.paused=true;element.currentTime=6;buffer.ranges=[[5,12]];await resumed.unlock();
+  assert.equal(element.currentTime,11,'A stale buffer still jumps forward to 1 s before its end');
   Object.defineProperty(performance,'now',{value:realNow,configurable:true,writable:true}); }
 media.setActive(false);assert.equal(navigator.mediaSession.playbackState,'none');assert.equal(navigator.mediaSession.metadata,null);
 // Music must take exactly one route; voice/navigation keep the existing Web Audio path.
