@@ -81,4 +81,16 @@ class ViewAreaTest {
         assertFalse("a bad waiting change is dropped", display.applyPending())
         assertEquals(1920, display.width)
     }
+
+    @Test
+    fun aWaitingChangeIsWhatTheNextStartUses() {
+        val display = DisplayState(1280, 720, 30, 100, false)
+        assertEquals(DisplayPrefs(1280, 720, 30, 100, false), display.forNextStart())
+        display.defer(DisplayRequest(1372, 1260, 30, 100, hevc = true, defer = true, reason = "quality"))
+        assertEquals("the box may lose power before the session ends", DisplayPrefs(1372, 1260, 30, 100, true),
+            display.forNextStart())
+        assertEquals("the running session keeps its own", 1280, display.width)
+        display.defer(DisplayRequest(1920, 1080, 30, 100, areas = listOf(full, windowed), area = 1, defer = true))
+        assertEquals(DisplayPrefs(1920, 1080, 30, 100, false, listOf(full, windowed), 1), display.forNextStart())
+    }
 }

@@ -59,6 +59,16 @@ class DisplayState(width: Int, height: Int, fps: Int, uiScale: Int, hevc: Boolea
 
     fun defer(request: DisplayRequest) { pending = request }
 
+    /**
+     * What config.json keeps for the next start: the waiting change when there is one. A car that cuts the box's power
+     * at once never ends the session by itself; kept only in memory, the change was lost at every stop and the page
+     * deferred it again on the next drive (F50, 2026-10-22).
+     */
+    fun forNextStart(): DisplayPrefs = pending?.let {
+        DisplayPrefs(it.width, it.height, it.fps, CarPlayUiScale.sanitize(it.uiScale), it.hevc,
+            it.areas.takeIf { areas -> areas.size > 1 } ?: emptyList(), it.area)
+    } ?: DisplayPrefs(width, height, fps, uiScale, hevc, areas, area)
+
     /** Takes up the pending change, if any; true when the display changed. */
     fun applyPending(): Boolean {
         val next = pending ?: return false

@@ -686,7 +686,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         if (areas.isNotEmpty() && session != null && display.sameStream(width, height, fps, uiScale, hevc, areas)) {
             if (request.area == display.area) return DisplayOutcome()
             display.useArea(request.area)
-            configStore?.save(PersistentConfig.of(config, display))
+            configStore?.save(PersistentConfig.of(config, display).copy(display = display.forNextStart()))
             val sent = session.showViewArea(request.area)
             log.info("view area {} ({}x{}) of {}x{} sent={} ({})", request.area, areas[request.area].width,
                 areas[request.area].height, width, height, sent, reason)
@@ -703,6 +703,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         }
         if (request.defer && session != null) {
             display.defer(request.copy(areas = areas))
+            configStore?.save(PersistentConfig.of(config, display).copy(display = display.forNextStart()))
             log.info("display {}x{} @{}fps codec={} waits for the session to end ({})", width, height, fps,
                 if (hevc) "h265" else "h264", reason)
             return DisplayOutcome(deferred = true)
