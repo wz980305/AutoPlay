@@ -9,6 +9,15 @@ export function suggestedResolution(width: number, height: number, max = 1920) {
   w *= grow; h *= grow;
   return { width: Math.round(w / 2) * 2, height: Math.round(h / 2) * 2 };
 }
+/** The window's own size for the normal mode (no upsize to 1280): the CSS size times the pixels used, a minimum
+ *  width of 720 (CarPlay's UI is cramped below that in the 1/3 split) and the same maximum (1920; 2560 with a fast
+ *  decoder). A larger window keeps its true size; clarity may drop. */
+export function windowResolution(width: number, height: number, max = 1920, minWidth = 720) {
+  const long = Math.max(width, height);
+  let factor = Math.max(1, minWidth / Math.max(1, width));
+  if (long * factor > max) factor = max / Math.max(1, long);
+  return { width: Math.round(width * factor / 2) * 2, height: Math.round(height * factor / 2) * 2 };
+}
 export function aspectChanged(a: {width: number; height: number}, b: {width: number; height: number}) {
   return Math.abs((a.width / a.height) / (b.width / b.height) - 1) > 0.025;
 }

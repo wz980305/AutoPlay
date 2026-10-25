@@ -6,7 +6,7 @@ async function load(name, transform = s => s) {
   const {outputText}=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}});
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 }
-const {suggestedResolution,windowShape,aspectChanged,shownSize,areaPlan,areaSize,areaFor,sameStream,showsShape,MAX_AREAS,frameRateCheck}=await load('display-fit');
+const {suggestedResolution,windowResolution,windowShape,aspectChanged,shownSize,areaPlan,areaSize,areaFor,sameStream,showsShape,MAX_AREAS,frameRateCheck}=await load('display-fit');
 { // 60 fps the decoder cannot keep up with (Zeekr 7X): two 10 s reports in a row with two catch-ups each go to 30 fps.
   let c=frameRateCheck(0,3,60);assert.deepEqual(c,{run:1,lower:false},'one report is not enough');
   assert.deepEqual(frameRateCheck(c.run,2,60),{run:0,lower:true},'two in a row lower it');
@@ -31,6 +31,11 @@ assert.deepEqual(suggestedResolution(2560,1440,2560),{width:2560,height:1440},'a
 assert.deepEqual(suggestedResolution(3840,2160,2560),{width:2560,height:1440},'never beyond 2560');
 assert.deepEqual(suggestedResolution(1254*1.53,784*1.53,2560),{width:1918,height:1200},'Tesla: same as before');
 assert.deepEqual(suggestedResolution(2560,1440),{width:1920,height:1080},'1920 unless asked for more');
+// Normal mode: the window's own size, a 720 minimum width, the same maximum (2026-10-23).
+assert.deepEqual(windowResolution(876,518),{width:876,height:518},'a 2/3 window keeps its size');
+assert.deepEqual(windowResolution(490,580),{width:720,height:852},'the 1/3 window gets the minimum width');
+assert.deepEqual(windowResolution(1372,686),{width:1372,height:686},'the full window stays');
+assert.deepEqual(windowResolution(3840,2160),{width:1920,height:1080},'and the maximum still applies');
 { // A Tesla page (2026-10-16 diagnosis): 1280x996 H.264 first, then the browser proves a fast decoder. Real pixels and
   // H.265 for the same window are sharper only: that waits for the session to end. A new shape cannot wait.
   const live={width:1280,height:996,fps:60,uiScale:100,hevc:false};

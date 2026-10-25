@@ -2,7 +2,7 @@ const messages = {
   settings: ['盒子设置', 'Box settings'], close: ['关闭', 'Close'], done: ['完成', 'Done'],
   boxLink: ['添加 iPhone · 网络设置', 'Add iPhone · Network'], boxLinkHint: ['配对新手机、选择热点', 'Pair a phone, choose the hotspot'],
   boxLinkHintLive: ['离开画面，配对手机、更换热点', 'Leaves the picture to pair phones or change the hotspot'],
-  playerSettings: ['画面与声音', 'Display and sound'], displaySettings: ['画面参数', 'Display settings'], customSize: ['自定义分辨率', 'Custom resolution'], customSizeHint: ['关闭时跟随窗口', 'Off: follow the window'], language: ['语言', 'Language'],
+  playerSettings: ['画面与声音', 'Display and sound'], displaySettings: ['画面参数', 'Display settings'], performanceMode: ['性能模式', 'Performance mode'], performanceModeHint: ['开：先按最高分辨率放大再缩回窗口，更清楚但更吃解码；关：按窗口实际尺寸（最小宽度 720），清晰度可能下降', 'On: upsize then shrink into the window, sharper but heavier; off: the window own size (min width 720), clarity may drop'], customSize: ['自定义分辨率', 'Custom resolution'], customSizeHint: ['关闭时跟随窗口', 'Off: follow the window'], language: ['语言', 'Language'],
   waiting: ['正在等待 iPhone', 'Waiting for iPhone'], waitingHint: ['已添加的 iPhone 打开蓝牙和 Wi-Fi 后会自动连接。第一次使用，请先添加 iPhone。', 'An added iPhone connects by itself with Bluetooth and Wi-Fi on. First time here? Add your iPhone.'],
   connecting: ['正在连接盒子…', 'Connecting to receiver…'], reconnecting: ['连接中断，正在自动重连…', 'Disconnected. Reconnecting automatically…'],
   starting: ['已连接，正在等待画面…', 'Connected. Waiting for video…'], live: ['已连接', 'Connected'],

@@ -6,7 +6,7 @@ import { VideoPlayer } from './video';
 import { Connection } from './ws';
 import { SystemMedia } from './media-session';
 import { LagProbe } from './lag';
-import { suggestedResolution, areaSize, sameStream, frameRateCheck, type Area } from './display-fit';
+import { suggestedResolution, windowResolution, areaSize, sameStream, frameRateCheck, type Area } from './display-fit';
 import { t, language, setLanguage, type Key } from './i18n';
 import { isNight, parseNightMode } from './night';
 import { reachable, TESLA_HOPS } from './tesla-fullscreen';
@@ -47,6 +47,11 @@ const customSize = el<HTMLInputElement>('custom-size');
 // Off (the default) follows the window; on keeps the typed width and height.
 customSize.checked = localStorage.getItem('f50-auto-fit') === 'false';
 const autoFitOn = () => !customSize.checked;
+/** Performance mode (the default): upsize each window to the sharpest size (long side at least 1280), then shrink it
+ *  into the window. Off: the window's own size (minimum width 720), lighter but softer. 2026-10-23, in Display. */
+const performanceMode = el<HTMLInputElement>('performance-mode');
+performanceMode.checked = readFlag('f50-performance-mode') !== '0';
+const performanceOn = () => performanceMode.checked;
 const nightSelect = el<HTMLSelectElement>('night-mode');
 nightSelect.value = parseNightMode(localStorage.getItem('f50-night-mode'));
 const darkQuery = matchMedia('(prefers-color-scheme: dark)');
@@ -436,11 +441,13 @@ async function adapt() {
  *  session (2026-10-23: one stream shared by several window shapes made small windows soft and cramped). */
 function autoTarget() {
   const pixels=fastDecoder()?Math.min(2,Math.max(1,window.devicePixelRatio||1)):1;
-  return suggestedResolution(screen.clientWidth*pixels,screen.clientHeight*pixels,fastDecoder()?2560:1920);
+  const max=fastDecoder()?2560:1920, width=screen.clientWidth*pixels, height=screen.clientHeight*pixels;
+  return performanceOn() ? suggestedResolution(width,height,max) : windowResolution(width,height,max);
 }
 el<HTMLSelectElement>('codec').value = readFlag('f50-codec') || 'auto';
 el<HTMLSelectElement>('codec').onchange=() => { saveFlag('f50-codec', el<HTMLSelectElement>('codec').value); lastAutoTarget=''; urgentChange='manual'; scheduleAuto(); };
 customSize.onchange=() => { localStorage.setItem('f50-auto-fit',String(!customSize.checked)); lastAutoTarget=''; urgentChange='manual'; render(); scheduleAuto(); };
+performanceMode.onchange=() => { saveFlag('f50-performance-mode',performanceMode.checked?'1':'0'); lastAutoTarget=''; urgentChange='manual'; scheduleAuto(); };
 el<HTMLFormElement>('display-form').onsubmit=event => {
   event.preventDefault();
   // Automatic display keeps the box's current stream and changes only frame rate, size or codec; the areas are empty
