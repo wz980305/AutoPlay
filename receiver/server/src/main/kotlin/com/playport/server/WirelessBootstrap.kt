@@ -67,6 +67,9 @@ class WirelessBootstrap(private val server: CarPlayServer) : Closeable {
                 return
             }
             val hostBluetoothMac = server.hostBluetoothMac
+            // Closed meanwhile, e.g. an iPhone was plugged into the USB port: no invitation, and no log
+            // line that reads like one (run-receiver.py marks "invitation sent" on it).
+            if (stopped) return
             log.info("wireless bootstrap: iPhone={} hostBt={} wifi={} ch={}", deviceAddress, hostBluetoothMac, wifi.ssid, wifi.channel)
 
             val stream = synchronized(this) {

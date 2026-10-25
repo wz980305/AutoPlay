@@ -57,7 +57,8 @@ data class ClientMessage(
 data class DisplayRequest(
     val width: Int,
     val height: Int,
-    val fps: Int = 60,
+    // 30 by default: at 60 the iPhone encodes twice the frames on the cable and ran hot (2026-10-12 drive).
+    val fps: Int = 30,
     val uiScale: Int = 100,
     val hevc: Boolean = false,
 )

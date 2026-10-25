@@ -420,7 +420,8 @@ class AirPlaySession(
     }
 
     private fun debugLog(message: String, uiVisible: Boolean = true) {
-        Log.i(TAG, message)
+        // Feedback every 2 s and /command traffic: debug only (they filled most of a drive's log).
+        if (uiVisible) Log.i(TAG, message) else Log.d(TAG, message)
         if (!uiVisible) return
         try {
             listener.onDebugLog(message)

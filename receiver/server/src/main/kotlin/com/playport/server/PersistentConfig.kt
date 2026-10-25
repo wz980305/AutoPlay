@@ -11,7 +11,8 @@ import kotlinx.serialization.json.Json
 data class DisplayPrefs(
     val width: Int = 1280,
     val height: Int = 720,
-    val fps: Int = 60,
+    // 30 by default: at 60 the iPhone encodes twice the frames on the cable and ran hot (2026-10-12 drive).
+    val fps: Int = 30,
     val uiScale: Int = 100,
     val hevc: Boolean = false,
 )

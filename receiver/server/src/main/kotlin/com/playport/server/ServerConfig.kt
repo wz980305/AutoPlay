@@ -30,6 +30,8 @@ data class ServerConfig(
     val wifiSecurity: Iap2WirelessSecurity = Iap2WirelessSecurity.WPA_WPA2,
     val bluetoothDeviceAddress: String? = null,
     val bluetoothBridge: Path? = null,
+    /** iphone-usb-bridge.py: also accept CarPlay from an iPhone on the USB cable (WiredBootstrap). */
+    val usbBridge: Path? = null,
     val mdns: String = "auto",
     val insecureHttp: Boolean = false,
     val accessToken: String = generateToken(),
@@ -94,6 +96,7 @@ data class ServerConfig(
                     )
                     "--bt-address" -> config = config.copy(bluetoothDeviceAddress = nextValue(flag))
                     "--bt-bridge" -> config = config.copy(bluetoothBridge = Path.of(nextValue(flag)))
+                    "--usb-bridge" -> config = config.copy(usbBridge = Path.of(nextValue(flag)))
                     "--mdns" -> config = config.copy(mdns = nextValue(flag).lowercase())
                     "--http" -> config = config.copy(insecureHttp = true)
                     "--token" -> config = config.copy(accessToken = nextValue(flag))

@@ -142,7 +142,8 @@ class AudioStream(
                             "payloadHead=${payload.copyOf(minOf(payload.size, 16)).toHexString()}",
                     )
                 } else if (decryptedNumber % PACKET_LOG_INTERVAL == 0) {
-                    com.shilapi.xcertplay.platform.Log.i(
+                    // Every 0.74 s on LPCM: debug only; the 5 s "Receive: audio" summary stays.
+                    com.shilapi.xcertplay.platform.Log.d(
                         TAG,
                         "audio stream type=$streamType decrypted=$decryptedNumber " +
                             "authFailures=${authenticationFailures.get()}",
