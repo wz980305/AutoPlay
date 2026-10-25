@@ -697,25 +697,55 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         runCatching { serverSocket?.close() }
     }
 
-    // Pair records survive restarts so the phone reconnects without pairing again.
+    /**
+     * Pair records survive restarts so the phone reconnects without pairing again. Written like config.json: a
+     * temporary file in the same directory, flushed, then renamed over the old one, which first becomes
+     * pairings.properties.bak. The old code truncated and rewrote the file in place, once per paired phone at every
+     * start: a brown-out while the JVM started could leave it empty, and every iPhone then failed pair-verify
+     * (reliability audit #7). Loading no longer writes; an empty or unreadable file falls back to the .bak.
+     */
     private fun loadPairings(): PairingStore {
-        val file = config.stateDir.resolve("pairings.properties")
+        val file = config.stateDir.resolve(PAIRINGS_FILE)
+        val backup = config.stateDir.resolve("$PAIRINGS_FILE.bak")
         val properties = Properties()
-        if (Files.isRegularFile(file)) {
-            runCatching { Files.newInputStream(file).use(properties::load) }
+        for (candidate in listOf(file, backup)) {
+            if (!Files.isRegularFile(candidate)) continue
+            val loaded = Properties()
+            if (runCatching { Files.newInputStream(candidate).use(loaded::load) }.isFailure || loaded.isEmpty) continue
+            if (candidate === backup) log.warn("pairings.properties empty or unreadable; using the .bak copy")
+            properties.putAll(loaded)
+            break
         }
+        var loading = true
         val store = PairingStore { identifier, key ->
             properties.setProperty(identifier, key.joinToString("") { "%02x".format(it) })
-            runCatching {
-                Files.createDirectories(config.stateDir)
-                Files.newOutputStream(file).use { properties.store(it, "playport paired controllers") }
-            }
+            if (!loading) persistPairings(file, backup, properties)
         }
         properties.forEach { (identifier, value) ->
             val bytes = (value as? String)?.hexToBytes()
             if (bytes != null) store.save(identifier.toString(), bytes)
         }
+        loading = false
         return store
+    }
+
+    private fun persistPairings(file: Path, backup: Path, properties: Properties) {
+        runCatching {
+            Files.createDirectories(config.stateDir)
+            val temporary = file.resolveSibling("${file.fileName}.tmp")
+            val bytes = java.io.ByteArrayOutputStream().also { properties.store(it, "playport paired controllers") }.toByteArray()
+            java.nio.channels.FileChannel.open(
+                temporary,
+                java.nio.file.StandardOpenOption.CREATE,
+                java.nio.file.StandardOpenOption.WRITE,
+                java.nio.file.StandardOpenOption.TRUNCATE_EXISTING,
+            ).use { channel ->
+                channel.write(java.nio.ByteBuffer.wrap(bytes))
+                channel.force(true)
+            }
+            if (Files.isRegularFile(file)) Files.copy(file, backup, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            Files.move(temporary, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+        }.onFailure { log.warn("pairings not saved: {}", it.message) }
     }
 
     private fun String.hexToBytes(): ByteArray? {
@@ -746,6 +776,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
 
         /** AirPlay pair-setup PIN advertised for first-time connections. */
         const val PAIRING_PIN = "3939"
+        private const val PAIRINGS_FILE = "pairings.properties"
         private const val SUPERVISOR_INTERVAL_MS = 2_000L
         private const val QUICK_RETRY_DELAY_MS = 1_500L
         internal const val QUICK_RETRY_WINDOW_MS = 15_000L
