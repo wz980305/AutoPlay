@@ -311,6 +311,15 @@ console.log('Car checks passed: aspect fit, media keys, disconnect state, single
   assert.equal(areaFor(xp4,side),-1,'a new one is not');
   assert.equal(areaFor({width:1280,height:720,hevc:false},page),-1,'nor without areas');
 }
+{ // A clearly portrait 1/3 window gets its own portrait stream (2026-10-23): inside a landscape stream the phone
+  // keeps its landscape layout and squeezes it into the area, so the page looked landscape in a portrait window.
+  const third=windowShape(490,580,1), two=windowShape(876,580,1), whole=windowShape(1372,686,1);
+  const p=areaPlan({width:1372,height:686,hevc:false},third,false,[two,whole]);
+  assert.deepEqual([p.display.width,p.display.height,p.display.areas],[490,580,[]],'portrait stream, its own size');
+  const back=areaPlan(p.display,two,false,p.shapes);
+  assert.deepEqual([back.display.width,back.display.height],[1372,686],'back to the landscape stream');
+  assert.ok(back.display.areas.some(a=>a.width===876&&a.height===580),'the 2/3 area keeps its size');
+}
 { // A screen split in thirds (2026-10-22): the areas keep the windows' proportions, the set fitted to the stream at once
   // (each shape fitted on its own made a third as wide as the full screen, and CarPlay showed both the same).
   const full=windowShape(1280,720,1), two=windowShape(853,720,1), third=windowShape(427,720,1);
@@ -318,7 +327,7 @@ console.log('Car checks passed: aspect fit, media keys, disconnect state, single
   let p=areaPlan({width:1280,height:720,hevc:true},two,true,[full]);
   assert.deepEqual(p.display.areas,[two,full],'two thirds of the screen, two thirds of the stream');
   p=areaPlan(p.display,third,true,p.shapes);
-  assert.deepEqual([p.display.width,p.display.height,p.display.areas],[1280,720,[third,two,full]],'the third joins at its own width');
+  assert.deepEqual([p.display.width,p.display.height,p.display.areas],[480,808,[]],'the portrait third gets its own stream (480 short side)');
   // A Mac at 2x with a fast decoder: 1728x1000 CSS px is 3456x2000, fitted to 2560 together with its half.
   const big=windowShape(1728,1000,2), half=windowShape(864,1000,2);
   const m=areaPlan({width:1280,height:720,hevc:true},big,true,[half],2560);

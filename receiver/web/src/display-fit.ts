@@ -74,7 +74,13 @@ export function areaPlan<T extends AreaDisplay>(display: T, target: Area, hevc: 
   let chosen = kept.filter(s => landscape(s) === wide).slice(-MAX_AREAS);
   const recent = kept.slice(-MAX_AREAS);
   const ofOrientation = (o: boolean) => recent.filter(s => landscape(s) === o);
-  if (recent.some(s => landscape(s) !== wide) &&
+  // A clearly portrait window must not share a landscape stream: the phone keeps the stream's landscape layout and
+  // squeezes it into the portrait area (the 1/3 split, 2026-10-23). It gets its own portrait stream instead, one
+  // reconnect when turning. A near-square portrait still joins, so a car's dock opening and closing does not.
+  const mixedAspect = Math.max(...recent.map(s => s.width)) / Math.max(1, Math.max(...recent.map(s => s.height)));
+  const targetAspect = target.width / Math.max(1, target.height);
+  const portraitInLandscape = !wide && mixedAspect >= 1 && Math.abs(mixedAspect / targetAspect - 1) > 0.25;
+  if (!portraitInLandscape && recent.some(s => landscape(s) !== wide) &&
       pixels(recent) <= MIXED_GROWTH * Math.max(pixels(ofOrientation(true)), pixels(ofOrientation(false)))) chosen = recent;
   chosen = [...chosen].sort((a, b) => a.width - b.width || a.height - b.height);
   const at = chosen.indexOf(entry);
