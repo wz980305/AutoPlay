@@ -132,7 +132,7 @@ object AirPlayInfoPlist {
         val wirelessInput = if (microphone) pcmMono or opus else null
 
         // callsAndSiri false: no call and no Siri audio, the iPhone keeps them on the car's own Bluetooth (DashPlay
-        // Tesla mode, 2026-10-14); the receiver plays prompts, alerts and music only.
+        // car_voice, found in a Tesla, 2026-10-14); the receiver plays prompts, alerts and music only.
         return listOfNotNull(
             format(100, "compatibility", pcm, pcmInput),
             format(101, "compatibility", pcm),

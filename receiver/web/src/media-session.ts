@@ -46,8 +46,9 @@ export class SystemMedia {
   private refreshMetadata() {
     if (this.supported) navigator.mediaSession.metadata = this.active && typeof MediaMetadata !== "undefined" ? new MediaMetadata(this.info) : null;
   }
-  /** Off in Tesla mode: the car took the page for a second music source beside the iPhone on its Bluetooth, paused
-   *  one for the other (its pause reached the page and went on to the iPhone) and the two kept fighting (2026-10-14).
+  /** Off with the music over the car's Bluetooth: a Tesla took the page for a second music source beside the
+   *  iPhone, paused one for the other (its pause reached the page and went on to the iPhone) and the two kept
+   *  fighting (2026-10-14).
    *  There the music is the car's own; the page names no song and passes on no media key. */
   readonly supported: boolean;
   /** Whether the iPhone says it plays; undefined while it has not said. */
@@ -79,8 +80,8 @@ export class SystemMedia {
     }
   }
   private command(index: number) { if (this.active) this.send({ type: 'media', media: index }); }
-  /** While Siri, a call or a prompt sounds from this page and no music does (Tesla mode): what the car's media card
-   *  shows instead of the page address (a Tesla showed the page and its address during Siri, 2026-10-14). null
+  /** While Siri, a call or a prompt sounds from this page and no music does (music over the car's Bluetooth): what
+   *  the card shows instead of the page address (a Tesla showed the page and its address during Siri, 2026-10-14). null
    *  puts the song back. */
   announce(label: string | null) {
     if (!this.supported || typeof MediaMetadata === 'undefined') return;

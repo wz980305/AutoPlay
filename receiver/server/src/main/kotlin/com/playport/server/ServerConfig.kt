@@ -20,7 +20,8 @@ data class ServerConfig(
     /** View areas of the display (the page's window shapes) and the one CarPlay starts in. */
     val displayAreas: List<ViewArea> = emptyList(),
     val displayArea: Int = 0,
-    /** Calls and Siri on the car's own Bluetooth (Tesla mode, 2026-10-14): no microphone, no call or Siri audio. */
+    /** Calls and Siri on the car's own Bluetooth (DashPlay car_voice, part of Tesla mode; 2026-10-14): no microphone,
+     *  no call or Siri audio. */
     val carVoice: Boolean = false,
     val rightHandDrive: Boolean = false,
     val bindAddress: String? = null,

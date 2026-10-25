@@ -117,16 +117,19 @@ const video = new VideoPlayer(canvas, error, () => {
   }
   lastPaintAt = now;
 }, () => send({ type:'keyframe' }), fit);
-// Tesla mode, turned on by the person on the box (2026-10-14): the music goes to the car over Bluetooth, so the
-// steering wheel, media card and volume are the car's own; this page plays only prompts and calls, prompts boosted.
-// ?promptgain=1..8 overrides the boost.
-const teslaMode = (window as unknown as { playportTeslaMode?: boolean }).playportTeslaMode === true;
-const promptGain = Number(new URLSearchParams(location.search).get('promptgain')) || (teslaMode ? 3 : 1);
+// Music over the car's Bluetooth, turned on by the person on the box (found in a Tesla, 2026-10-14; any car paired
+// with the iPhone): the steering wheel, media card and volume are the car's own; this page plays prompts (boosted)
+// and whatever else the iPhone still sends. ?promptgain=1..8 overrides the boost. Tesla mode sets it too, and adds
+// the Tesla browser's ways (fullscreen below, microphone gain in mic.ts).
+const boxFlags = window as unknown as { playportCarMusic?: boolean; playportTeslaMode?: boolean };
+const carMusic = boxFlags.playportCarMusic === true;
+const teslaMode = boxFlags.playportTeslaMode === true;
+const promptGain = Number(new URLSearchParams(location.search).get('promptgain')) || (carMusic ? 3 : 1);
 // Music the iPhone still sends here is played: it sends music to one place at a time, and after Siri from the
 // CarPlay screen it sent it here for ~27 s before going back to the car's Bluetooth, silent while it was dropped.
-const audio = new AudioEngine(error, { promptBoost: promptGain, idleClose: teslaMode });
-/** Tesla mode: the car's media card shows the page's title and address whenever the page sounds (Siri, prompts,
- *  calls); name it instead (2026-10-14). The last voice stream to start wins; the title goes back when none is left. */
+const audio = new AudioEngine(error, { promptBoost: promptGain, idleClose: carMusic });
+/** Music over the car's Bluetooth: the car's media card shows the page's title and address whenever the page sounds
+ *  (Siri, prompts, calls; a Tesla, 2026-10-14); name it instead. The last voice stream to start wins; the title goes back when none is left. */
 const voiceLabels: Record<string, string> = { speechrecognition: 'Siri', telephony: '通话', default: '导航播报' };
 const voices = new Map<number, string>();
 function showVoice() {
@@ -135,14 +138,14 @@ function showVoice() {
   media.announce(label);
 }
 function voiceStarted(streamType: number, name: string) {
-  if (!teslaMode) return;
+  if (!carMusic) return;
   voices.delete(streamType);
   if (voiceLabels[name]) voices.set(streamType, voiceLabels[name]);
   showVoice();
 }
-function voiceStopped(streamType: number) { if (teslaMode && voices.delete(streamType)) showVoice(); }
+function voiceStopped(streamType: number) { if (carMusic && voices.delete(streamType)) showVoice(); }
 const lag = new LagProbe();
-const media = new SystemMedia(send, () => { void audio.unlock().catch(error); }, () => audio.pauseMusic(), teslaMode);
+const media = new SystemMedia(send, () => { void audio.unlock().catch(error); }, () => audio.pauseMusic(), carMusic);
 const microphone = new MicrophoneUplink((payload, opus) => {
   const frame = new Uint8Array(payload.length + 1); frame[0] = opus ? 0x11 : 0x10; frame.set(payload, 1); connection.sendBinary(frame);
 }, message => { el('mic-status').textContent = message; });
@@ -478,7 +481,7 @@ window.setInterval(()=>{
   send({type:'stats',stats:{fps:reportFrames/seconds,decodeMs:video.decodeLatencyMs,queue:video.decodeQueueSize,
     kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,
     width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),...(musicBytes?{musicKbps:musicBytes*8/1000/seconds}:{}),
-    chrome:chromeMajor,build:BUILD,webView,teslaMode:teslaMode?1:0,promptGain,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...microphone.report(),...audio.farReport(),...media.report(),...musicTimeline(),...audio.musicReport(),...video.takeStalls(),...lag.take(performance.now())}});
+    chrome:chromeMajor,build:BUILD,webView,carMusic:carMusic?1:0,teslaMode:teslaMode?1:0,promptGain,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...microphone.report(),...audio.farReport(),...media.report(),...musicTimeline(),...audio.musicReport(),...video.takeStalls(),...lag.take(performance.now())}});
   judgeDecoder(video.decodeLatencyMs, reportFrames/seconds);
   reportFrames=0;reportBytes=0;reportStart=now;touchSum=0;touchCount=0;musicBytes=0;
 },10000);

@@ -36,8 +36,8 @@ export class AudioEngine {
    *  hard to hear at 1 (2026-10-14). 1 leaves them as sent. */
   private readonly promptBoost: number;
   private promptLimiter: DynamicsCompressorNode | null = null;
-  /** Tesla mode: the car takes a browser that has an audio output open, even a silent one, for a music source and
-   *  switched its media card between it and the iPhone's Bluetooth over and over (2026-10-14). The output is closed
+  /** Music over the car's Bluetooth: a Tesla took a browser that has an audio output open, even a silent one, for a
+   *  music source and switched its media card between it and the iPhone's Bluetooth over and over (2026-10-14). The output is closed
    *  (context suspended) a few seconds after the last stream ends and opened again for the next prompt or call. */
   private readonly idleClose: boolean;
   private idleTimer = 0;
