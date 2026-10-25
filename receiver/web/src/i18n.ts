@@ -9,6 +9,7 @@ const messages = {
   access: ['需要首次登录链接', 'First-time access link required'], accessHint: ['请使用私有访问资料中的完整链接打开一次，此浏览器会记住登录。', 'Open the complete link from your private access file once. This browser will remember it.'],
   sound: ['轻点启用声音', 'Tap to enable sound'], volume: ['音量', 'Volume'],
   display: ['画面', 'Display'], fullscreen: ['全屏', 'Fullscreen'], exitFullscreen: ['退出全屏', 'Exit fullscreen'], fullscreenHint: ['已全屏。退出全屏：点 CarPlay 主屏幕上的「盒子设置」图标，再点「退出全屏」。', 'Fullscreen on. To exit, tap the Box settings icon on the CarPlay home screen, then Exit fullscreen.'], fullscreenFail: ['此浏览器不允许全屏，画面仍会自动适配窗口。', 'Fullscreen unavailable. The picture still fits this window.'], tapFullscreen: ['轻点画面恢复全屏', 'Tap the picture to go back to fullscreen'],
+  teslaFullscreenOffline: ['全屏要经腾讯视频跳转，特斯拉现在上不了网。画面照常可用。', 'Fullscreen goes through a video site and the car is offline. The picture keeps working.'],
   auto: ['自动匹配屏幕', 'Match the screen'], autoHint: ['自动匹配让画面铺满当前窗口，进入或退出全屏时 CarPlay 会重连一次。只在一个显示端开启。', 'Matching fills the current window; entering or leaving fullscreen reconnects CarPlay once. Turn it on for one display only.'],
   width: ['宽度', 'Width'], height: ['高度', 'Height'], apply: ['应用并重连', 'Apply and reconnect'],
   nightMode: ['夜间模式', 'Night mode'], nightSchedule: ['自动（18:30–06:30 为夜间）', 'Auto (night 18:30–06:30)'], nightSystem: ['跟随车机浏览器深色模式', 'Follow car browser dark mode'], nightDay: ['始终白天', 'Always day'], nightNight: ['始终夜间', 'Always night'],

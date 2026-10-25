@@ -8,6 +8,7 @@ import { LagProbe } from './lag';
 import { suggestedResolution, areaPlan, areaSize, type Area } from './display-fit';
 import { t, language, setLanguage, type Key } from './i18n';
 import { isNight, parseNightMode } from './night';
+import { reachable, TESLA_HOPS } from './tesla-fullscreen';
 import type { ServerMessage, ClientMessage } from './protocol';
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
@@ -269,8 +270,17 @@ function teslaFullscreenUrl() {
   return 'https://v.qq.com/search_redirect.html?url=https://www.1905.com/api/redirec.html?redirect_url='
     + `${location.origin}?www.1905.com`;
 }
+let teslaChecking = false;
 async function toggleFullscreen() {
-  if (teslaMode && !teslaBorderless) { location.href = teslaFullscreenUrl(); return; }
+  if (teslaMode && !teslaBorderless) {
+    if (teslaChecking) return;
+    teslaChecking = true;
+    try {
+      if (await reachable(TESLA_HOPS)) location.href = teslaFullscreenUrl();
+      else toast(t('teslaFullscreenOffline'));
+    } finally { teslaChecking = false; }
+    return;
+  }
   try {
     if (document.fullscreenElement) { wantFullscreen = false; await document.exitFullscreen(); }
     else await document.documentElement.requestFullscreen();
