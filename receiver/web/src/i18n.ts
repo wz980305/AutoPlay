@@ -5,7 +5,7 @@ const messages = {
   starting: ['已连接，正在等待画面…', 'Connected. Waiting for video…'], live: ['已连接', 'Connected'],
   access: ['需要首次登录链接', 'First-time access link required'], accessHint: ['请使用私有访问资料中的完整链接打开一次，此浏览器会记住登录。', 'Open the complete link from your private access file once. This browser will remember it.'],
   sound: ['轻点启用声音', 'Tap to enable sound'], volume: ['音量', 'Volume'],
-  display: ['画面', 'Display'], fullscreen: ['全屏', 'Fullscreen'], fullscreenFail: ['此浏览器不允许全屏，画面仍会自动适配窗口。', 'Fullscreen unavailable. The picture still fits this window.'],
+  display: ['画面', 'Display'], fullscreen: ['全屏', 'Fullscreen'], exitFullscreen: ['退出全屏', 'Exit fullscreen'], fullscreenFail: ['此浏览器不允许全屏，画面仍会自动适配窗口。', 'Fullscreen unavailable. The picture still fits this window.'],
   auto: ['自动匹配屏幕比例', 'Match screen aspect ratio automatically'], autoHint: ['仅此显示端启用。比例变化时重新协商画面，最多 1920 像素长边；可能短暂重连。', 'Enable on one display only. Aspect changes renegotiate video, up to 1920 pixels on the long edge, and may briefly reconnect.'],
   width: ['宽度', 'Width'], height: ['高度', 'Height'], apply: ['应用并重连', 'Apply and reconnect'],
   ui: ['界面大小', 'UI size'], fps: ['帧率', 'Frame rate'], standard: ['标准', 'Standard'], large: ['大', 'Large'], small: ['小', 'Small'],

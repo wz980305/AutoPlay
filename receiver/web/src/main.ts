@@ -30,6 +30,7 @@ volume.value = String(Math.min(100, Math.max(0, Number(localStorage.getItem('pla
 
 function render() {
   setLanguage(language);
+  updateFullscreen();
   el<HTMLSelectElement>('language').value = language;
   el('btn-settings').setAttribute('aria-label', t('settings'));
   volume.setAttribute('aria-label', t('volume'));
@@ -112,10 +113,26 @@ el('btn-close').onclick = () => panel.close();
 el('dismiss-error').onclick = () => error('');
 el<HTMLSelectElement>('language').onchange = event => { setLanguage((event.target as HTMLSelectElement).value); render(); };
 panel.addEventListener('click', event => { if (event.target !== panel) return; const r=panel.getBoundingClientRect(); if(event.clientX<r.left || event.clientX>r.right) panel.close(); });
-el('fullscreen').onclick = async () => {
-  try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen(); }
-  catch { error(t('fullscreenFail')); }
-};
+function updateFullscreen() {
+  const full = !!document.fullscreenElement;
+  const label = t(full ? 'exitFullscreen' : 'fullscreen');
+  el('fullscreen-label').textContent = label;
+  el('fullscreen').textContent = label;
+  el('btn-fullscreen').setAttribute('aria-label', label);
+  el('btn-fullscreen').setAttribute('title', label);
+  el('btn-fullscreen').dataset.fullscreen = String(full);
+}
+async function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen();
+    if (panel.open) panel.close();
+  } catch { error(t('fullscreenFail')); }
+  updateFullscreen();
+}
+el('fullscreen').onclick = toggleFullscreen;
+el('btn-fullscreen').onclick = toggleFullscreen;
+document.addEventListener('fullscreenchange', () => { updateFullscreen(); fit(); });
 document.querySelectorAll<HTMLButtonElement>('[data-command]').forEach(button => button.onclick = () => {
   const cmd = button.dataset.command;
   if (cmd === 'home' || cmd === 'back') send({ type:'knob', knob:{ select:false, home:cmd==='home', back:cmd==='back', x:0,y:0,wheel:0 } });

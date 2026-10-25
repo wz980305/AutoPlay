@@ -14,7 +14,7 @@ button:hover { background:#414955; } button:disabled { opacity:.45; cursor:defau
 #overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:28px; text-align:center; background:#000; pointer-events:none; }
 h1 { font-size:clamp(30px,5vw,56px); margin:0 0 18px; font-weight:600; letter-spacing:-.025em; }
 #connection-text { font-size:22px; margin:8px 0; } #connection-hint { max-width:36em; color:#b9c0cb; line-height:1.65; }
-#btn-settings { position:absolute; top:max(12px,env(safe-area-inset-top)); right:max(12px,env(safe-area-inset-right)); min-width:48px; padding:10px 12px; background:#252b33d9; border-color:#5a616b; display:flex; align-items:center; gap:8px; }
+#btn-settings { position:absolute; top:max(12px,env(safe-area-inset-top)); left:max(12px,env(safe-area-inset-left)); min-width:48px; padding:10px 12px; background:#252b33d9; border-color:#5a616b; display:flex; align-items:center; gap:8px; }
 #btn-settings span[aria-hidden] { font-size:24px; line-height:1; }
 #app[data-live=true] #btn-settings { display:none; }
 #audio-unlock { position:absolute; bottom:max(16px,env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); background:#2256a4; white-space:nowrap; }
@@ -35,3 +35,8 @@ fieldset { border:0; padding:0; margin:0; min-width:0; } .pair { display:grid; g
 .primary { width:100%; background:var(--blue); border:0; } #fallback-controls { display:flex; flex-wrap:wrap; gap:10px; }
 @media (max-width:480px) { header { padding:14px 18px; } .settings-body { padding:8px 18px 20px; } }
 @media (prefers-reduced-motion:reduce) { * { scroll-behavior:auto !important; } }
+
+#btn-fullscreen { position:absolute; top:max(12px,env(safe-area-inset-top)); right:max(12px,env(safe-area-inset-right)); display:flex; align-items:center; gap:8px; min-width:48px; min-height:48px; padding:10px 12px; background:#252b33c9; border-color:#77818e; }
+#btn-fullscreen:hover, #btn-fullscreen:focus-visible { background:#303945; }
+#btn-fullscreen .collapse, #btn-fullscreen[data-fullscreen=true] .expand { display:none; }
+#btn-fullscreen[data-fullscreen=true] .collapse { display:block; }
