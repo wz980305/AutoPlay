@@ -33,10 +33,14 @@ export class VideoPlayer {
     private readonly onFrame: () => void,
     private readonly onRequestKeyframe: () => void,
     private readonly onResolutionChange: (width: number, height: number) => void = () => {},
+    compat = false,
   ) {
+    // Compatible display (compat-display.ts): neither the low-latency canvas nor the hardware-decoder preference,
+    // which on an older car browser can fail without an error - frames decoded, nothing on the screen.
+    this.preferHardware = !compat;
     // Low-latency canvas: frames reach the screen without waiting for the page compositor (about one
     // frame sooner where supported). Created first, so every later getContext('2d') returns this one.
-    this.canvas.getContext('2d', { desynchronized: true });
+    if (!compat) this.canvas.getContext('2d', { desynchronized: true });
   }
 
   get isConfigured(): boolean {
@@ -115,7 +119,7 @@ export class VideoPlayer {
         codec: candidate.codec,
         codedWidth: message.width,
         codedHeight: message.height,
-        hardwareAcceleration: candidate.software ? 'no-preference' : 'prefer-hardware',
+        hardwareAcceleration: candidate.software || !this.preferHardware ? 'no-preference' : 'prefer-hardware',
         optimizeForLatency: true,
         ...(candidate.description ? { description: candidate.description } : {}),
       };

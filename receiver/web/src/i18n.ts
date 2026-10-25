@@ -16,6 +16,7 @@ const messages = {
   nightNow: ['当前请求：', 'Requested now: '], nightOn: ['夜间', 'night'], nightOff: ['白天', 'day'], browserDark: ['车机浏览器报告深色模式', 'Car browser reports dark mode'], browserLight: ['车机浏览器报告浅色模式', 'Car browser reports light mode'],
   latency: ['解码延迟', 'Decode delay'],
   debugHud: ['画面上显示调试信息', 'Debug info over the picture'], debugHudHint: ['帧率、分辨率、码率、声音，右下角', 'Frame rate, size, bitrate, sound; bottom right'],
+  compatDisplay: ['兼容显示', 'Compatible display'], compatDisplayHint: ['有声音但画面黑屏时打开（老车机浏览器默认打开）；切换后页面会刷新', 'Turn on if there is sound but no picture (on by default in older car browsers); the page reloads'],
   ui: ['界面大小', 'UI size'], fps: ['帧率', 'Frame rate'], codec: ['视频编码', 'Video codec'], codecAuto: ['自动', 'Automatic'], standard: ['标准', 'Standard'], large: ['大', 'Large'], small: ['小', 'Small'],
   loading: ['正在读取…', 'Loading…'], applying: ['正在应用…', 'Applying…'], applied: ['已保存，正在重新连接 CarPlay。', 'Saved. Reconnecting CarPlay.'],
   loadFail: ['读取失败，请检查盒子连接后重试。', 'Could not load settings. Check the receiver connection and retry.'],

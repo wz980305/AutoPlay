@@ -258,3 +258,28 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
     ['No picture yet','Decode 63 ms · Queue 1 · RTT –','Sound none']);
   assert.equal(hudLines({...sample,playing:false},true)[2].endsWith('（静音中）'),true);
 }
+
+{ // Compatible display (2026-10-17): a Tesla on Chrome 113 decoded at full rate and showed nothing with the
+  // low-latency canvas and the hardware preference, and neither fell back without an error.
+  const {compatDisplayOn}=await load('compat-display');
+  const ua=v=>`Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${v}.0.0.0 Safari/537.36`;
+  assert.deepEqual([113,119,120,148].map(v=>compatDisplayOn('',ua(v))),[true,true,false,false],'automatic: on below Chrome 120');
+  assert.equal(compatDisplayOn('','Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15'),false,'not Chrome: as before');
+  assert.equal(compatDisplayOn('0',ua(113)),false,'the switch wins either way');assert.equal(compatDisplayOn('1',ua(148)),true);
+  const configs=[];
+  globalThis.VideoDecoder=class {constructor(){this.state='unconfigured';this.decodeQueueSize=0;}configure(c){configs.push(c);this.state='configured';}decode(){}close(){this.state='closed';}};
+  VideoDecoder.isConfigSupported=async()=>({supported:true});
+  globalThis.window=globalThis.window??{};window.setTimeout=()=>1;window.clearTimeout=()=>{};
+  const {VideoPlayer}=await load('video',s=>s.replace(/^import .*?;$/gm,'')+'\nconst VideoCodec={H264:1,H265:2};function avcCodecString(){return "avc1.640028";}function annexBToAvcc(d){return d;}');
+  const hvcC=new Uint8Array([1,1,0x60,0,0,0,0x90,0,0,0,0,0,0x5d]);
+  for (const compat of [false,true]) {
+    const contexts=[];const canvas={getContext(kind,options){contexts.push(options??null);return null;},width:0,height:0};
+    const player=new VideoPlayer(canvas,()=>{},()=>{},()=>{},()=>{},compat);
+    player.configure({codec:1,width:1280,height:846,codecData:new Uint8Array([1,0x64,0,0x28,0x40])});await Promise.resolve();
+    player.configure({codec:2,width:1280,height:846,codecData:hvcC});for(let i=0;i<5;i++)await Promise.resolve();
+    assert.deepEqual(contexts,compat?[]:[{desynchronized:true}],compat?'compatible: no low-latency canvas':'default: the low-latency canvas');
+    assert.deepEqual(configs.splice(0).map(c=>c.hardwareAcceleration),compat?['no-preference','no-preference']:['prefer-hardware','prefer-hardware'],
+      'H.264 and the first H.265 candidate');
+  }
+}
+console.log('Compatible display: automatic below Chrome 120, neither low-latency canvas nor hardware preference.');
