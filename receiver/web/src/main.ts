@@ -6,6 +6,7 @@ import { Connection } from './ws';
 import { SystemMedia } from './media-session';
 import { fittedSize, suggestedResolution, aspectChanged } from './display-fit';
 import { t, language, setLanguage, type Key } from './i18n';
+import { isNight, parseNightMode } from './night';
 import type { ServerMessage, ClientMessage } from './protocol';
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
@@ -25,6 +26,10 @@ interface Display { width: number; height: number; fps: number; uiScale: number;
 let display: Display | null = null;
 const autoFit = el<HTMLInputElement>('auto-fit');
 autoFit.checked = localStorage.getItem('f50-auto-fit') !== 'false';
+const nightSelect = el<HTMLSelectElement>('night-mode');
+nightSelect.value = parseNightMode(localStorage.getItem('f50-night-mode'));
+const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+let sentNight: boolean | null = null;
 const volume = el<HTMLInputElement>('volume');
 volume.value = String(Math.min(100, Math.max(0, Number(localStorage.getItem('playport-master') ?? 100) || 0)));
 
@@ -43,6 +48,8 @@ function render() {
   el<HTMLInputElement>('width').disabled = autoFit.checked;
   el<HTMLInputElement>('height').disabled = autoFit.checked;
   document.querySelectorAll<HTMLButtonElement>('[data-command]').forEach(b => { b.disabled = !active; });
+  const night = isNight(parseNightMode(nightSelect.value), new Date(), darkQuery.matches);
+  el('night-status').textContent = `${t('nightNow')}${t(night ? 'nightOn' : 'nightOff')}；${t(darkQuery.matches ? 'browserDark' : 'browserLight')}`;
 }
 function fit() {
   const size = fittedSize(canvas.width, canvas.height, screen.clientWidth, screen.clientHeight);
@@ -78,7 +85,15 @@ const connection = new Connection(token, {
   },
 });
 const input = new InputController(canvas, send); input.attach();
+/** Sends CarPlay day/night only on change; a new session (sentNight reset) always gets the current value. */
+function syncNight() {
+  if (!active) return;
+  const night = isNight(parseNightMode(nightSelect.value), new Date(), darkQuery.matches);
+  if (night === sentNight) return;
+  sentNight = night; send({ type:'night', night });
+}
 function reset() {
+  sentNight = null;
   active = painted = false; input.reset(); canvas.inert = true;
   video.close(); audio.stopAll(); media.setActive(false); void microphone.stop();
   canvas.getContext('2d')?.clearRect(0,0,canvas.width,canvas.height);
@@ -95,7 +110,7 @@ function server(message: ServerMessage) {
   }
   if (message.type !== 'session' && message.type !== 'hello') return;
   if (!message.sessionActive) { reset(); state = 'waiting'; }
-  else { active = true; canvas.inert = false; state = 'starting'; media.setActive(true); if(message.nowPlaying) media.setMetadata(message.nowPlaying); if(message.artwork) media.setArtwork(message.revision ?? 0,message.artwork); }
+  else { active = true; canvas.inert = false; state = 'starting'; media.setActive(true); syncNight(); if(message.nowPlaying) media.setMetadata(message.nowPlaying); if(message.artwork) media.setArtwork(message.revision ?? 0,message.artwork); }
   render();
 }
 async function unlock() {
@@ -189,10 +204,14 @@ new ResizeObserver(()=>{ fit(); scheduleAuto(); }).observe(screen);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){fit();scheduleAuto();void unlock();}});
 window.setInterval(()=>{
   const now=performance.now(),fps=frames*1000/Math.max(1,now-lastStats);frames=0;lastStats=now;
-  el('stats').textContent=painted?`${canvas.width} × ${canvas.height} / ${fps.toFixed(0)} fps`:t('noStream');
+  el('stats').textContent=painted?`${canvas.width} × ${canvas.height} / ${fps.toFixed(0)} fps / ${t('latency')} ${video.decodeLatencyMs.toFixed(0)} ms`:t('noStream');
   el('audio-unlock').hidden=!active||audio.isUnlocked;
   el('audio-status').textContent=t(audio.isPlaying?'playing':'paused');media.setPlaying(audio.isPlaying);
 },750);
 render();fit();if(token) connection.connect();
+
+nightSelect.onchange = () => { localStorage.setItem('f50-night-mode', nightSelect.value); syncNight(); render(); };
+darkQuery.addEventListener('change', () => { syncNight(); render(); });
+window.setInterval(() => { syncNight(); if (panel.open) render(); }, 30000);
 
 el('browser-check-show').onclick = () => (window as unknown as { F50BrowserCheck: { show(): void } }).F50BrowserCheck.show();

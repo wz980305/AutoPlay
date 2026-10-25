@@ -54,4 +54,11 @@ function boxes(data){const result=[];for(let offset=0;offset<data.length;){const
 assert.deepEqual(boxes(init),['ftyp','moov']);
 assert.deepEqual(boxes(aacFragment(1,0,[new Uint8Array([1,2,3])])),['moof','mdat']);
 assert.throws(()=>aacInit(48000,2,new Uint8Array()));
-console.log('Car checks passed: aspect fit, media keys, disconnect state, single music route, MP4 framing.');
+const {isNight,parseNightMode}=await load('night');
+const at=(h,m)=>new Date(2026,9,10,h,m);
+assert.equal(parseNightMode(null),'schedule');assert.equal(parseNightMode('bogus'),'schedule');assert.equal(parseNightMode('system'),'system');
+assert.equal(isNight('schedule',at(18,29),true),false);assert.equal(isNight('schedule',at(18,30),false),true);
+assert.equal(isNight('schedule',at(0,0),false),true);assert.equal(isNight('schedule',at(6,29),false),true);assert.equal(isNight('schedule',at(6,30),true),false);
+assert.equal(isNight('system',at(12,0),true),true);assert.equal(isNight('system',at(23,0),false),false);
+assert.equal(isNight('day',at(23,0),true),false);assert.equal(isNight('night',at(12,0),false),true);
+console.log('Car checks passed: aspect fit, media keys, disconnect state, single music route, MP4 framing, night schedule.');

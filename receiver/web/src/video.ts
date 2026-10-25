@@ -45,6 +45,9 @@ export class VideoPlayer {
 
   /** Timestamp of the most recent frame arrival; used for the latency readout. */
   lastArrivalAt = 0;
+  /** Smoothed time from frame arrival to canvas paint (decoder delay), in ms. */
+  decodeLatencyMs = 0;
+  private readonly arrivals = new Map<number, number>();
 
   configure(message: VideoConfigMessage): void {
     void this.configureAsync(message);
@@ -81,6 +84,7 @@ export class VideoPlayer {
       codedWidth: message.width,
       codedHeight: message.height,
       hardwareAcceleration: this.preferHardware ? 'prefer-hardware' : 'no-preference',
+      optimizeForLatency: true,
       ...(descriptionPresent ? { description: message.codecData } : {}),
     };
     const decoder = this.createDecoder();
@@ -101,6 +105,7 @@ export class VideoPlayer {
         codedWidth: message.width,
         codedHeight: message.height,
         hardwareAcceleration: candidate.software ? 'no-preference' : 'prefer-hardware',
+        optimizeForLatency: true,
         ...(candidate.description ? { description: candidate.description } : {}),
       };
       const support = await VideoDecoder.isConfigSupported(config).catch(() => null);
@@ -146,6 +151,8 @@ export class VideoPlayer {
     const data = state.usesDescription ? annexBToAvcc(message.data) : message.data;
     if (data.length === 0) return;
     state.timestampUs += state.frameIntervalUs;
+    this.arrivals.set(state.timestampUs, this.lastArrivalAt);
+    if (this.arrivals.size > 120) this.arrivals.delete(this.arrivals.keys().next().value!);
     try {
       state.decoder.decode(
         new EncodedVideoChunk({
@@ -162,6 +169,7 @@ export class VideoPlayer {
   close(): void {
     const state = this.state;
     this.state = null;
+    this.arrivals.clear();
     this.clearWatchdog();
     if (state) {
       try {
@@ -231,6 +239,12 @@ export class VideoPlayer {
       this.onResolutionChange(frame.displayWidth, frame.displayHeight);
     }
     context.drawImage(frame, 0, 0, this.canvas.width, this.canvas.height);
+    const arrived = this.arrivals.get(frame.timestamp);
+    if (arrived !== undefined) {
+      this.arrivals.delete(frame.timestamp);
+      const latency = performance.now() - arrived;
+      this.decodeLatencyMs = this.decodeLatencyMs ? this.decodeLatencyMs * 0.9 + latency * 0.1 : latency;
+    }
     this.onFrame();
   }
 
