@@ -22,6 +22,8 @@ class ProcessByteStream(
     private val output: OutputStream = process.outputStream
     private val writeLock = Any()
     @Volatile private var ended = false
+    private var remainder = ByteArray(0)
+    private var remainderOffset = 0
 
     init {
         Thread({ pump() }, "$label-reader").apply {
@@ -67,20 +69,26 @@ class ProcessByteStream(
         }
     }
 
+    @Synchronized
     override fun recv(maxBytes: Int, timeoutMillis: Long): ByteArray? {
-        val chunk = if (timeoutMillis == Long.MAX_VALUE) {
-            inbound.take()
-        } else {
-            inbound.poll(timeoutMillis, TimeUnit.MILLISECONDS) ?: return null
+        require(maxBytes > 0) { "maxBytes must be positive" }
+        require(timeoutMillis >= 0) { "timeoutMillis must not be negative" }
+        if (remainderOffset == remainder.size) {
+            remainder = ByteArray(0)
+            remainderOffset = 0
+            if (ended && inbound.isEmpty()) return ByteArray(0)
+            val chunk = if (timeoutMillis == Long.MAX_VALUE) {
+                inbound.take()
+            } else {
+                inbound.poll(timeoutMillis, TimeUnit.MILLISECONDS) ?: return null
+            }
+            if (chunk.isEmpty()) return ByteArray(0)
+            remainder = chunk
         }
-        if (chunk.isEmpty()) {
-            if (ended) return ByteArray(0)
-            return recv(maxBytes, timeoutMillis)
-        }
-        if (chunk.size <= maxBytes) return chunk
-        // Push the remainder back for the next call.
-        inbound.put(chunk.copyOfRange(maxBytes, chunk.size))
-        return chunk.copyOf(maxBytes)
+        val end = remainderOffset + minOf(maxBytes, remainder.size - remainderOffset)
+        val result = remainder.copyOfRange(remainderOffset, end)
+        remainderOffset = end
+        return result
     }
 
     override fun close() {
