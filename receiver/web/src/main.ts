@@ -298,6 +298,12 @@ async function toggleFullscreen() {
   } catch { error(t('fullscreenFail')); }
   updateFullscreen();
 }
+/** Where the button over the live picture sits, or none: it may cover a CarPlay button (a music app's search,
+ *  2026-10-19). Kept in this browser; fullscreen stays in Settings either way. */
+const fullscreenPlace = el<HTMLSelectElement>('fullscreen-button');
+fullscreenPlace.value = ['bottom', 'off'].includes(readFlag('f50-fullscreen-button')) ? readFlag('f50-fullscreen-button') : 'top';
+el('btn-fullscreen').dataset.place = fullscreenPlace.value;
+fullscreenPlace.onchange = () => { saveFlag('f50-fullscreen-button', fullscreenPlace.value); el('btn-fullscreen').dataset.place = fullscreenPlace.value; };
 el('fullscreen').onclick = toggleFullscreen;
 el('btn-fullscreen').onclick = toggleFullscreen;
 el('welcome-fullscreen').onclick = toggleFullscreen;

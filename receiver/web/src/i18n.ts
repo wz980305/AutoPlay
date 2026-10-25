@@ -15,6 +15,8 @@ const messages = {
   nightMode: ['夜间模式', 'Night mode'], nightSchedule: ['自动（18:30–06:30 为夜间）', 'Auto (night 18:30–06:30)'], nightSystem: ['跟随车机浏览器深色模式', 'Follow car browser dark mode'], nightDay: ['始终白天', 'Always day'], nightNight: ['始终夜间', 'Always night'],
   nightNow: ['当前请求：', 'Requested now: '], nightOn: ['夜间', 'night'], nightOff: ['白天', 'day'], browserDark: ['车机浏览器报告深色模式', 'Car browser reports dark mode'], browserLight: ['车机浏览器报告浅色模式', 'Car browser reports light mode'],
   latency: ['解码延迟', 'Decode delay'],
+  fullscreenButton: ['画面上的全屏按钮', 'Fullscreen button on the picture'], fullscreenButtonHint: ['挡住 CarPlay 里的按钮时换个位置或不显示；全屏仍可在本页顶部点', 'Move or hide it if it covers a CarPlay button; fullscreen stays at the top of this page'],
+  cornerTop: ['右上角', 'Top right'], cornerBottom: ['右下角', 'Bottom right'], cornerOff: ['不显示', 'Hidden'],
   debugHud: ['画面上显示调试信息', 'Debug info over the picture'], debugHudHint: ['帧率、分辨率、码率、声音，右下角', 'Frame rate, size, bitrate, sound; bottom right'],
   compatDisplay: ['兼容显示', 'Compatible display'], compatDisplayHint: ['有声音但画面黑屏时打开（老车机浏览器默认打开）；切换后页面会刷新', 'Turn on if there is sound but no picture (on by default in older car browsers); the page reloads'],
   ui: ['界面大小', 'UI size'], fps: ['帧率', 'Frame rate'], codec: ['视频编码', 'Video codec'], codecAuto: ['自动', 'Automatic'], standard: ['标准', 'Standard'], large: ['大', 'Large'], small: ['小', 'Small'],
