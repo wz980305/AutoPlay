@@ -33,8 +33,6 @@ const messages = {
   home: ['主屏幕', 'Home'], back: ['返回', 'Back'], previous: ['上一曲', 'Previous track'], play: ['播放 / 暂停', 'Play / pause'], next: ['下一曲', 'Next track'], refresh: ['刷新画面', 'Refresh video'],
   compatible: ['基础解码能力可用', 'Basic decoding APIs available'], unsupported: ['此浏览器缺少视频或音频解码能力，请使用支持 WebCodecs 的浏览器。', 'This browser lacks video or audio decoding APIs. Use a browser with WebCodecs support.'],
   insecure: ['当前页面不是安全上下文，请使用已受信任的 HTTPS 地址。', 'This page is not a secure context. Use a trusted HTTPS address.'],
-  mediaYes: ['系统媒体控制接口可用，方向盘按键需车机实测。', 'System media API available. Steering-wheel keys require a test in the car.'],
-  mediaNo: ['浏览器不提供系统媒体控制接口。', 'This browser does not expose system media controls.'],
   noStream: ['尚无音视频流', 'No media stream yet'], playing: ['音频正在播放', 'Audio playing'], paused: ['等待音频', 'Waiting for audio'],
   error: ['播放遇到问题', 'Playback problem'], technical: ['详细信息', 'Details'],
   savedHere: ['语言、音量与分辨率偏好保存在此浏览器。CarPlay 内部语言跟随 iPhone。', 'Language, volume and display preferences are saved in this browser. CarPlay itself follows the iPhone language.'],

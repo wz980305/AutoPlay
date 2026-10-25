@@ -394,24 +394,20 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         }
     }
 
-    /** Opens the tunneled iAP2 link after the phone hands the session over to Wi-Fi. */
     /**
-     * NowPlaying metadata and artwork arriving on an iAP2 link (the wireless tunnel or the USB cable),
-     * forwarded to the browser's media session while [current] holds. Returns the link's frame handler.
+     * Drains the iAP2 file transfers (album artwork) the iPhone starts on the tunneled link. Nothing shows them any
+     * more (the Tesla's own media card does, over the car's Bluetooth), but an undrained queue of 256 transfers ends
+     * the whole tunneled iAP2 link (Iap2LinkChannel: "received-file queue limit exceeded"), so every packet is taken
+     * off the link's queue by the receiver, which never expects a transfer: a SETUP waits in its own small queue and
+     * is answered CANCEL when that fills (4) or after its 15 s deadline (expire); data for an unknown transfer is
+     * answered CANCEL at once.
      */
-    fun nowPlayingFeed(channel: Iap2Session, name: String, current: () -> Boolean): (com.shilapi.xcertplay.iap2.wire.Iap2Frame) -> Unit {
-        val metadata = NowPlayingState()
+    private fun artworkDrain(channel: Iap2Session, name: String, current: () -> Boolean) {
         val artwork = com.shilapi.xcertplay.iap2.message.Iap2ArtworkReceiver(
             send = { channel.sendFileTransfer(it) { current() } },
-            complete = { revision, id, bytes ->
-                (current() && metadata.value.revision == revision && metadata.artworkId == id && hub.artwork(revision, bytes)).also {
-                    log.info("artwork id={} revision={} bytes={} sent to the page={} (song revision now {})",
-                        id, revision, bytes.size, it, metadata.value.revision)
-                }
-            },
+            complete = { _, _, _ -> false },
             clock = { System.nanoTime() / 1_000_000 },
-            // A few lines a song: covers are sometimes missing on the car, and the debug log is not kept.
-            onDiagnostic = { log.info(it) },
+            onDiagnostic = { log.debug(it) },
         )
         Thread({
             try {
@@ -421,15 +417,6 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                 }
             } catch (_: Exception) { log.debug("Artwork transport ended") }
         }, "$name-artwork").apply { isDaemon = true; start() }
-        return { frame ->
-            if (current()) {
-                try { metadata.accept(frame)?.let {
-                    hub.nowPlaying(it)
-                    artwork.expect(metadata.artworkId, it.revision)
-                } }
-                catch (_: Exception) { log.debug("Ignoring malformed NowPlaying update") }
-            }
-        }
     }
 
     fun handleWirelessTunnel(
@@ -446,7 +433,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         }
         val tunnelSession = activeSession
         val tunnelDone = java.util.concurrent.atomic.AtomicBoolean(false)
-        val nowPlaying = nowPlayingFeed(channel, "wireless") { !tunnelDone.get() && activeSession === tunnelSession }
+        artworkDrain(channel, "wireless") { !tunnelDone.get() && activeSession === tunnelSession }
         Thread(
             {
                 try {
@@ -458,7 +445,6 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                         endpoint = endpoint,
                         timeoutMillis = Iap2WirelessControlClient.NO_TIMEOUT_MILLIS,
                         onReady = { log.info("wireless iAP2 tunnel ready; CarPlay is live") },
-                        onIncoming = nowPlaying,
                         onProgress = { log.debug("iAP tunnel $it") },
                     )
                     when (result.terminal) {

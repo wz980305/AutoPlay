@@ -3,7 +3,6 @@ import { AudioEngine } from './audio';
 import { InputController } from './input';
 import { VideoPlayer } from './video';
 import { Connection } from './ws';
-import { SystemMedia } from './media-session';
 import { LagProbe } from './lag';
 import { suggestedResolution, windowResolution, areaSize, sameStream, frameRateCheck, type Area } from './display-fit';
 import { t, language, setLanguage, type Key } from './i18n';
@@ -76,7 +75,6 @@ function render() {
   el('overlay').hidden = painted || holding;
   el('app').dataset.live = String(painted || holding);
   el('capabilities').textContent = !isSecureContext ? t('insecure') : typeof VideoDecoder === 'undefined' || typeof AudioDecoder === 'undefined' ? t('unsupported') : t('compatible');
-  el('media-support').textContent = t(media.supported ? 'mediaYes' : 'mediaNo');
   el<HTMLInputElement>('width').disabled = !customSize.checked;
   el<HTMLInputElement>('height').disabled = !customSize.checked;
   el('size-row').hidden = !customSize.checked;
@@ -163,13 +161,12 @@ const promptGain = Number(new URLSearchParams(location.search).get('promptgain')
 // CarPlay screen it sent it here for ~27 s before going back to the car's Bluetooth, silent while it was dropped.
 const audio = new AudioEngine(error, { promptBoost: promptGain, idleClose: carMusic });
 /** Music over the car's Bluetooth: the car's media card shows the page's title and address whenever the page sounds
- *  (Siri, prompts, calls; a Tesla, 2026-10-14); name it instead. The last voice stream to start wins; the title goes back when none is left. */
+ *  (Siri, prompts; a Tesla, 2026-10-14); name it instead. The last voice stream to start wins; the title goes back when none is left. */
 const voiceLabels: Record<string, string> = { speechrecognition: 'Siri', telephony: '通话', default: '导航播报' };
 const voices = new Map<number, string>();
 function showVoice() {
   const label = Array.from(voices.values()).pop() ?? null;
   document.title = label ? `${label} · DashPlay` : 'DashPlay';
-  media.announce(label);
 }
 function voiceStarted(streamType: number, name: string) {
   if (!carMusic) return;
@@ -179,7 +176,6 @@ function voiceStarted(streamType: number, name: string) {
 }
 function voiceStopped(streamType: number) { if (carMusic && voices.delete(streamType)) showVoice(); }
 const lag = new LagProbe();
-const media = new SystemMedia(send, () => { void audio.unlock().catch(error); }, () => audio.pauseMusic(), carMusic);
 const connection = new Connection(token, {
   onTiming(stats) { connection.send({type:'stats', stats:{ev:16,...stats}}); },
   onWire(message) {
@@ -221,7 +217,7 @@ let holding = false, holdAwakeMs = 0, holdForDisplay = false, shownOnce = false;
 function reset(hold = false, forDisplay = false) {
   sentNight = null; lag.reset();
   active = painted = false; input.reset(); canvas.inert = true;
-  video.close(); audio.stopAll(); media.setActive(false);
+  video.close(); audio.stopAll();
   holding = hold; holdAwakeMs = 0; holdForDisplay = forDisplay;
   if (hold) toast(t(forDisplay ? 'adjusting' : 'reconnecting'));
   else clearPicture();
@@ -231,8 +227,6 @@ function server(message: ServerMessage) {
   if (message.type === 'pong') { lag.pong(performance.now()); return; }
   // Straight back, also before CarPlay starts: the box pauses the picture while this page lags behind.
   if (message.type === 'mark') { connection.send({ type: 'ack', mark: message.mark ?? 0 }); return; }
-  if(message.type === 'artwork' && message.artwork) { media.setArtwork(message.revision ?? 0,message.artwork); return; }
-  if (message.type === 'now-playing' && message.nowPlaying) { media.setMetadata(message.nowPlaying); return; }
   if (message.type === 'host-ui' && active) {
     openPanel(); return;
   }
@@ -242,7 +236,7 @@ function server(message: ServerMessage) {
     const forDisplay = message.restarting === true || expectRestart;
     endExpectRestart(); reset(forDisplay && (painted || holding), forDisplay); state = 'waiting';
   }
-  else { endExpectRestart(); void loadDisplay(); active = true; canvas.inert = false; state = 'starting'; media.setActive(true); syncNight(); if(message.nowPlaying) media.setMetadata(message.nowPlaying); if(message.artwork) media.setArtwork(message.revision ?? 0,message.artwork); }
+  else { endExpectRestart(); void loadDisplay(); active = true; canvas.inert = false; state = 'starting'; syncNight(); }
   render();
 }
 async function unlock() {
@@ -479,7 +473,7 @@ window.setInterval(()=>{
   const now=performance.now(),fps=frames*1000/Math.max(1,now-lastStats);frames=0;lastStats=now;
   el('stats').textContent=painted?`${canvas.width} × ${canvas.height} / ${fps.toFixed(0)} fps / ${t('latency')} ${video.decodeLatencyMs.toFixed(0)} ms`:t('noStream');
   el('audio-unlock').hidden=!active||audio.isUnlocked;
-  el('audio-status').textContent=t(audio.isPlaying?'playing':'paused');media.setPlaying(audio.isPlaying);media.tick();
+  el('audio-status').textContent=t(audio.isPlaying?'playing':'paused');
 },750);
 // Which browser the car runs and the music element's own timeline, which an OS media card may show instead of the song's.
 const chromeMajor=Number(/Chrome\/(\d+)/.exec(navigator.userAgent)?.[1] ?? 0),webView=/; wv\)/.test(navigator.userAgent)?1:0;
@@ -552,7 +546,7 @@ window.setInterval(()=>{
   send({type:'stats',stats:{fps:reportFrames/seconds,decodeMs:video.decodeLatencyMs,queue:video.decodeQueueSize,
     kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,
     width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),...(musicBytes?{musicKbps:musicBytes*8/1000/seconds}:{}),
-    ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,build:BUILD,webView,carMusic:carMusic?1:0,teslaMode:teslaMode?1:0,promptGain,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...audio.farReport(),...media.report(),...musicTimeline(),...audio.musicReport(),...stalls,...lag.take(performance.now())}});
+    ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,build:BUILD,webView,carMusic:carMusic?1:0,teslaMode:teslaMode?1:0,promptGain,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...audio.farReport(),...musicTimeline(),...audio.musicReport(),...stalls,...lag.take(performance.now())}});
   judgeDecoder(video.decodeLatencyMs, reportFrames/seconds);
   if (active) judgeFrameRate(stalls.caughtUp);
   reportFrames=0;reportBytes=0;reportStart=now;touchSum=0;touchCount=0;musicBytes=0;

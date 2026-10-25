@@ -85,9 +85,6 @@ data class DisplayOutcome(val error: String? = null, val deferred: Boolean = fal
 data class ServerMessage(
     val type: String,
     val mark: Long? = null,
-    val nowPlaying: NowPlaying? = null,
-    val artwork: String? = null,
-    val revision: Long? = null,
     val deviceName: String? = null,
     val sessionActive: Boolean = false,
     val width: Int? = null,
@@ -156,23 +153,6 @@ class WebHub(
     @Volatile var onApplyDisplay: ((DisplayRequest) -> DisplayOutcome)? = null
 
     @Volatile private var sessionActive = false
-    @Volatile private var nowPlaying = NowPlaying()
-
-    @Volatile private var artwork: String? = null
-
-    @Synchronized fun artwork(revision: Long, bytes: ByteArray): Boolean {
-        if (!sessionActive || nowPlaying.revision != revision) return false
-        artwork = "data:image/jpeg;base64," + java.util.Base64.getEncoder().encodeToString(bytes)
-        broadcastJson(ServerMessage(type = "artwork", artwork = artwork, revision = revision))
-        return true
-    }
-
-    @Synchronized fun nowPlaying(value: NowPlaying) {
-        if (!sessionActive || value == nowPlaying) return
-        if (value.revision != nowPlaying.revision) artwork = null
-        nowPlaying = value
-        broadcastJson(ServerMessage(type = "now-playing", nowPlaying = value.at(System.nanoTime() / 1_000_000)))
-    }
 
     @Volatile private var phoneName: String? = null
 
@@ -187,7 +167,6 @@ class WebHub(
     fun videoCodec(type: Int): VideoCodec? = codecsByStream[type]
 
     fun setSessionState(active: Boolean, name: String?, restarting: Boolean = false) {
-        if (!active) { nowPlaying = NowPlaying(); artwork = null }
         sessionActive = active
         phoneName = name
         broadcastJson(
@@ -411,9 +390,6 @@ class WebHub(
                                 ServerMessage.serializer(),
                                 ServerMessage(
                                     type = "hello",
-                                    nowPlaying = nowPlaying.at(System.nanoTime() / 1_000_000),   // not where it was when reported
-                                    artwork = artwork,
-                                    revision = nowPlaying.revision,
                                     deviceName = config.deviceName,
                                     sessionActive = sessionActive,
                                     width = display.width,

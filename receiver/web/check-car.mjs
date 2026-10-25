@@ -61,42 +61,6 @@ for(const [w,h] of [[1920,1080],[2560,1440],[1920,720],[720,1280],[800,480],[320
 }
 assert.equal(aspectChanged({width:1280,height:720},{width:1920,height:1080}),false);
 assert.equal(aspectChanged({width:1280,height:720},{width:1920,height:720}),true);
-const actions={},sent=[],positions=[];
-Object.defineProperty(globalThis,'navigator',{value:{mediaSession:{setActionHandler:(a,h)=>actions[a]=h,setPositionState:p=>positions.push(p)}},configurable:true});
-globalThis.MediaMetadata=class {constructor(value){Object.assign(this,value);}};
-const {SystemMedia}=await load('media-session');
-const media=new SystemMedia(m=>sent.push(m),()=>{});
-actions.nexttrack();assert.equal(sent.length,0,'No commands before phone connection');
-media.report();
-media.setActive(true);actions.play();actions.pause();actions.previoustrack();actions.nexttrack();actions.pause();
-assert.deepEqual(sent.map(x=>x.media),[1,2,5,4,2],'Use distinct play and pause HID commands, not toggle');
-assert.deepEqual(media.report(),{positionState:1,keyPlay:1,keyPause:2,keyPrev:1,keyNext:1},'The car media keys that reached the page, for the viewer log');
-assert.deepEqual(media.report(),{positionState:1},'counted afresh each report');
-media.setPlaying(true);assert.equal(navigator.mediaSession.playbackState,'playing');
-media.setMetadata({title:'Test song',artist:'Test artist',album:'Test album'});
-media.setPlaying(false);assert.equal(navigator.mediaSession.metadata.title,'Test song');assert.equal(navigator.mediaSession.playbackState,'paused');
-media.setMetadata({title:'Next',artist:'Artist',album:'Album',durationMs:200000,positionMs:50000,revision:1});
-assert.equal(positions.at(-1).duration,200);assert.equal(positions.at(-1).position,50);
-assert.ok(positions.at(-1).playbackRate>0&&positions.at(-1).playbackRate<1e-3,'The card is told the position, not left to run it on by its own clock (XPeng: the bar stood full)');
-{ const before=positions.length;media.tick();assert.equal(positions.length,before+1,'and is told it again on every tick'); }
-media.setArtwork(0,'data:image/jpeg;base64,/9j/');assert.equal(navigator.mediaSession.metadata.artwork.length,0,'Reject old-track cover');
-media.setArtwork(1,'data:image/jpeg;base64,/9j/');assert.equal(navigator.mediaSession.metadata.artwork.length,1);
-media.setMetadata({title:'Another',artist:'',album:'',revision:2});assert.equal(navigator.mediaSession.metadata.artwork.length,0,'Clear old cover on track change');
-assert.equal(positions.at(-1),undefined,'Missing duration must clear old timeline');
-{ let clock=0;const realNow=performance.now;Object.defineProperty(performance,'now',{value:()=>clock,configurable:true,writable:true});
-  media.setPlaying(false);   // the browser hears nothing yet, e.g. sound not unlocked
-  media.setMetadata({title:'Run',artist:'',album:'',durationMs:200000,positionMs:50000,playing:true,revision:3});
-  clock=10000;media.setPlaying(true);assert.equal(positions.at(-1).position,60,"The iPhone's playing state moves the clock, not what the browser hears");
-  clock=12000;media.setMetadata({title:'Run',artist:'',album:'',durationMs:200000,positionMs:62000,playing:false,revision:3});
-  clock=20000;media.setPlaying(false);assert.equal(positions.at(-1).position,62,'Paused on the iPhone: the clock stands');
-  media.setPlaying(true);assert.equal(navigator.mediaSession.playbackState,'paused','Paused on the iPhone: the card offers play, even while the page plays its silence');
-  sent.length=0;actions.pause();assert.deepEqual(sent.map(x=>x.media),[1],"The car's pause key while the iPhone is paused plays (the car toggles by the page)");
-  assert.equal(media.report().keyPauseAsPlay,1,'counted for the viewer log');
-  media.setMetadata({title:'Run',artist:'',album:'',durationMs:200000,positionMs:62000,playing:true,revision:3});
-  assert.equal(navigator.mediaSession.playbackState,'playing','and pause once it plays again');
-  media.setMetadata({title:'Run',artist:'',album:'',durationMs:200000,positionMs:62000,playing:false,revision:3});
-  Object.defineProperty(performance,'now',{value:realNow,configurable:true,writable:true}); }
-assert.deepEqual(media.report(),{positionState:1,songPos:62,songDur:200,art:0},'The viewer log tells whether the OS card can take our song position, and whether a cover is shown');
 { // Hiccups for the viewer log: a gap in a flowing stream (network/box) apart from frames the car's decoder held long.
   let clock=0;const realNow=performance.now;Object.defineProperty(performance,'now',{value:()=>clock,configurable:true,writable:true});
   globalThis.EncodedVideoChunk=class {constructor(v){Object.assign(this,v);}};
@@ -218,7 +182,6 @@ assert.deepEqual(media.report(),{positionState:1,songPos:62,songDur:200,art:0},'
   element.paused=true;element.currentTime=6;buffer.ranges=[[5,12]];await resumed.unlock();
   assert.equal(element.currentTime,11,'A stale buffer still jumps forward to 1 s before its end');
   Object.defineProperty(performance,'now',{value:realNow,configurable:true,writable:true}); }
-media.setActive(false);assert.equal(navigator.mediaSession.playbackState,'none');assert.equal(navigator.mediaSession.metadata,null);
 // Music must take exactly one route; voice/navigation keep the existing Web Audio path.
 const edges=[];let music;let packets=0;
 class Node {gain={value:1};connect(to){edges.push(to);}disconnect(){}}
@@ -257,7 +220,7 @@ assert.equal(isNight('schedule',at(18,29),true),false);assert.equal(isNight('sch
 assert.equal(isNight('schedule',at(0,0),false),true);assert.equal(isNight('schedule',at(6,29),false),true);assert.equal(isNight('schedule',at(6,30),true),false);
 assert.equal(isNight('system',at(12,0),true),true);assert.equal(isNight('system',at(23,0),false),false);
 assert.equal(isNight('day',at(23,0),true),false);assert.equal(isNight('night',at(12,0),false),true);
-console.log('Car checks passed: aspect fit, media keys, disconnect state, single music route, MP4 framing, night schedule.');
+console.log('Car checks passed: aspect fit, hiccups, decode backlog, single music route, MP4 framing, night schedule.');
 { // View areas (2026-10-14): a window shape seen before is an area switch, never a reconnect.
   const windowed={width:1280,height:996}, full={width:1920,height:1080};
   const start={width:1280,height:996,hevc:true,fps:30};

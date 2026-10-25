@@ -92,14 +92,9 @@ export type ClientMessage =
   | { type: 'ping' }
   | { type: 'ack'; mark: number };
 
-export interface NowPlaying { title: string; artist: string; album: string; durationMs?: number; positionMs?: number; speed?: number; playing?: boolean | null; revision?: number; }
-
 export interface ServerMessage {
   /** "mark": answered at once with an "ack", so the box knows how far behind this page is (LagGate). */
   mark?: number;
-  nowPlaying?: NowPlaying;
-  artwork?: string;
-  revision?: number;
   type: string;
   deviceName?: string;
   sessionActive?: boolean;

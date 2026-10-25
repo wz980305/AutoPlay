@@ -10,11 +10,11 @@ const CUSHION: Record<MusicKind,number> = { aac: 1 };
 const AAC_FRAGMENT = 4;
 /** Fragments (85 ms each) that may wait for a busy buffer before it counts as stuck (6.8 s). */
 const MAX_PENDING = 80;
-/** A real HTML media timeline makes received music eligible for OS media controls. Its timeline is its own and is
- *  never moved onto the song: the song position reaches the car's media card through the Media Session position
- *  state (media-session.ts), the only one the car's card reads (F50 drive 2026-10-13). Moving it (2026-10-13) seeked on every song change, a hiccup and on Chrome 120 an
- *  appendBuffer error (a shorter duration removes buffered audio), and pulled the music back every 5 s while
- *  the iPhone's position reports stalled over Bluetooth (F50 drive 2026-10-13, 93 s without one). */
+/** An HTML media element plays the AAC the iPhone still sends here (after Siri, ~27 s). Its timeline is its own and
+ *  is never moved onto the song (the Media Session that once carried the song position went with the car-Bluetooth
+ *  media card): moving it (2026-10-13) seeked on every song change, a hiccup and on Chrome 120 an appendBuffer error
+ *  (a shorter duration removes buffered audio), and pulled the music back every 5 s while the iPhone's position
+ *  reports stalled over Bluetooth (F50 drive 2026-10-13, 93 s without one). */
 export class MusicOutput {
   static supported(kind: MusicKind = 'aac') { return typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported(MIMES[kind]); }
   static key(config: AudioConfigMessage, kind: MusicKind) { return JSON.stringify([kind,config.sampleRate,config.channels,Array.from(config.description)]); }
