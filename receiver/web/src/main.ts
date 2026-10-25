@@ -43,8 +43,10 @@ let urgentChange = '';
 let expectRestart = false, expectTimer = 0;
 interface Display { width: number; height: number; fps: number; uiScale: number; hevc: boolean; areas?: Area[]; area?: number; pending?: boolean; }
 let display: Display | null = null;
-const autoFit = el<HTMLInputElement>('auto-fit');
-autoFit.checked = localStorage.getItem('f50-auto-fit') !== 'false';
+const customSize = el<HTMLInputElement>('custom-size');
+// Off (the default) follows the window; on keeps the typed width and height.
+customSize.checked = localStorage.getItem('f50-auto-fit') === 'false';
+const autoFitOn = () => !customSize.checked;
 const nightSelect = el<HTMLSelectElement>('night-mode');
 nightSelect.value = parseNightMode(localStorage.getItem('f50-night-mode'));
 const darkQuery = matchMedia('(prefers-color-scheme: dark)');
@@ -71,8 +73,9 @@ function render() {
   el('app').dataset.live = String(painted || holding);
   el('capabilities').textContent = !isSecureContext ? t('insecure') : typeof VideoDecoder === 'undefined' || typeof AudioDecoder === 'undefined' ? t('unsupported') : t('compatible');
   el('media-support').textContent = t(media.supported ? 'mediaYes' : 'mediaNo');
-  el<HTMLInputElement>('width').disabled = autoFit.checked;
-  el<HTMLInputElement>('height').disabled = autoFit.checked;
+  el<HTMLInputElement>('width').disabled = !customSize.checked;
+  el<HTMLInputElement>('height').disabled = !customSize.checked;
+  el('size-row').hidden = !customSize.checked;
   document.querySelectorAll<HTMLButtonElement>('[data-command]').forEach(b => { b.disabled = !active; });
   const night = isNight(parseNightMode(nightSelect.value), new Date(), darkQuery.matches);
   el('night-status').textContent = `${t('nightNow')}${t(night ? 'nightOn' : 'nightOff')}`;
@@ -123,7 +126,7 @@ function judgeDecoder(decodeMs: number, fps: number) {
 let behindRun = 0;
 function judgeFrameRate(caughtUp: number) {
   const check = frameRateCheck(behindRun, caughtUp, display?.fps ?? 0); behindRun = check.run;
-  if (!check.lower || !display || !autoFit.checked || displayBusy || readFlag('f50-fps-lowered') === '1') return;
+  if (!check.lower || !display || !autoFitOn() || displayBusy || readFlag('f50-fps-lowered') === '1') return;
   saveFlag('f50-fps-lowered', '1'); toast(t('fpsLowered'));
   void saveDisplay({ ...display, fps: 30 }, { reason: 'decoder' });
 }
@@ -403,13 +406,13 @@ async function saveDisplay(target: Display, how: { defer?: boolean; reason: stri
 }
 function scheduleAuto() {
   window.clearTimeout(autoTimer);
-  if (!autoFit.checked || !display || displayBusy || document.hidden || typeof VideoDecoder === 'undefined') return;
+  if (!autoFitOn() || !display || displayBusy || document.hidden || typeof VideoDecoder === 'undefined') return;
   autoTimer=window.setTimeout(() => { void adapt(); },1500);
 }
 async function adapt() {
   // Not for a hidden page (a covered page reports a small window) nor while fullscreen waits for its tap; a timer
   // set just before the car covered the page fired anyway and renegotiated to 800x400 (Chrome, 2026-10-12).
-  const busy = () => !display || !autoFit.checked || displayBusy || document.hidden || (wantFullscreen && !document.fullscreenElement);
+  const busy = () => !display || !autoFitOn() || displayBusy || document.hidden || (wantFullscreen && !document.fullscreenElement);
   if (busy()) return;
   // From the box's own, not what this page last saw: fps and size set by another page are kept, not sent back.
   const current = await fetchDisplay();
@@ -450,12 +453,12 @@ function autoTarget() {
 }
 el<HTMLSelectElement>('codec').value = readFlag('f50-codec') || 'auto';
 el<HTMLSelectElement>('codec').onchange=() => { saveFlag('f50-codec', el<HTMLSelectElement>('codec').value); lastAutoTarget=''; urgentChange='manual'; scheduleAuto(); };
-autoFit.onchange=() => { localStorage.setItem('f50-auto-fit',String(autoFit.checked)); lastAutoTarget=''; urgentChange='manual'; render(); scheduleAuto(); };
+customSize.onchange=() => { localStorage.setItem('f50-auto-fit',String(!customSize.checked)); lastAutoTarget=''; urgentChange='manual'; render(); scheduleAuto(); };
 el<HTMLFormElement>('display-form').onsubmit=event => {
   event.preventDefault();
   // Automatic display keeps the box's stream and its areas, changing only frame rate, size or codec: sent without the
   // areas, the largest window then showed less (2026-10-22).
-  const size:Pick<Display,'width'|'height'|'areas'|'area'>=autoFit.checked?(display?{width:display.width,height:display.height,areas:display.areas,area:display.area}:suggestedResolution(autoTarget().width,autoTarget().height,fastDecoder()?2560:1920))
+  const size:Pick<Display,'width'|'height'|'areas'|'area'>=autoFitOn()?(display?{width:display.width,height:display.height,areas:display.areas,area:display.area}:suggestedResolution(autoTarget().width,autoTarget().height,fastDecoder()?2560:1920))
     :{width:Number(el<HTMLInputElement>('width').value),height:Number(el<HTMLInputElement>('height').value)};
   if (![size.width,size.height].every(v=>Number.isInteger(v)&&v>=480&&v<=3840&&v%2===0)) { error(t('range')); return; }
   void saveDisplay({...size,fps:Number(el<HTMLSelectElement>('fps').value),uiScale:Number(el<HTMLSelectElement>('ui-scale').value),hevc:wantHevc()},{reason:'manual'});

@@ -324,9 +324,21 @@ console.log('Car checks passed: aspect fit, media keys, disconnect state, single
   const m=areaPlan({width:1280,height:720,hevc:true},big,true,[half],2560);
   assert.deepEqual([m.display.width,m.display.height,m.display.areas],[2560,1482,[{width:1280,height:1482},{width:2560,height:1482}]]);
   assert.equal(m.display.area,1,'the large window in use');
-  // A small car page alone still gets at least 1280 on the long side, as suggestedResolution gave it.
+  // A small car page alone keeps its true size (2026-10-23): forcing 1280 made a 2/3 window as wide as the full one.
   assert.deepEqual(areaPlan({width:1280,height:720,hevc:false},windowShape(876,518,1),false,[]).display,
-    {width:1280,height:756,hevc:false,areas:[],area:0}); }
+    {width:876,height:518,hevc:false,areas:[],area:0});
+  // A 2/3 window keeps its size before and after the full screen joins: 876x580 stays 876x580, so returning to it is
+  // the same area of the same stream, not a resolution change (2026-10-22/23).
+  {
+    const two=windowShape(876,580,1), whole=windowShape(1372,686,1);
+    let p=areaPlan({width:1280,height:720,hevc:false},two,false,[]);
+    assert.deepEqual([p.display.width,p.display.height,p.display.areas],[876,580,[]],'the 2/3 window keeps its size');
+    p=areaPlan(p.display,whole,false,p.shapes);
+    assert.deepEqual([p.display.width,p.display.height,p.display.areas],[1372,686,[two,whole]],'the full shape joins');
+    const back=areaPlan(p.display,two,false,p.shapes);
+    assert.deepEqual([back.display.width,back.display.height,back.display.area],[1372,686,0],'back to its area, same stream');
+    assert.deepEqual(back.display.areas,[two,whole],'the 2/3 area does not shrink'); }
+}
 console.log('View areas: shapes learned once, switched without reconnecting.');
 { // Tesla fullscreen leaves the page only when its video sites answer (offline Tesla, simulated 2026-10-14).
   const {reachable,TESLA_HOPS}=await load('tesla-fullscreen');

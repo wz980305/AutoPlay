@@ -43,11 +43,12 @@ export const MIXED_GROWTH = 1.1;
 export function windowShape(cssWidth: number, cssHeight: number, pixels: number): Area {
   return { width: Math.max(2, Math.round(cssWidth * pixels / 2) * 2), height: Math.max(2, Math.round(cssHeight * pixels / 2) * 2) };
 }
-/** The factor that brings a stream of `width` x `height` (the envelope of the shapes) within suggestedResolution's
- *  limits: the long side 1280 to `max`, the short side at least 480. */
+/** The factor that brings a stream of `width` x `height` (the envelope of the shapes) within the auto limits:
+ *  the long side at most `max`, the short side at least 480. A window smaller than 1280 keeps its true size: forcing
+ *  1280 made a 2/3 window as wide as the full one, and it then changed size when the full shape joined (2026-10-23). */
 function fitFactor(width: number, height: number, max: number) {
   const long = Math.max(width, height), short = Math.min(width, height);
-  const factor = long > max ? max / long : long < 1280 ? 1280 / long : 1;
+  const factor = long > max ? max / long : 1;
   return Math.max(factor, 480 / Math.max(1, short));
 }
 /** View areas (2026-10-14): each window shape the browser has shown (normal, fullscreen, the car's dock shown or not)
