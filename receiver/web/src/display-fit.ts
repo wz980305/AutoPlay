@@ -1,7 +1,8 @@
-/** Match aspect rather than blindly multiplying by DPR (a 4K car panel need not decode 4K). */
-export function suggestedResolution(width: number, height: number) {
+/** Match aspect rather than blindly multiplying by DPR (a 4K car panel need not decode 4K): the long side 1280 to
+ *  `max` (1920; auto with a fast decoder asks for up to 2560, as owners of 2.5K screens set by hand, 2026-10-19). */
+export function suggestedResolution(width: number, height: number, max = 1920) {
   const ratio = Math.min(4, Math.max(0.25, width / Math.max(1, height)));
-  const long = Math.max(1280, Math.min(1920, Math.max(width, height)));
+  const long = Math.max(1280, Math.min(max, Math.max(width, height)));
   let w = ratio >= 1 ? long : long * ratio;
   let h = ratio >= 1 ? long / ratio : long;
   const grow = Math.max(1, 480 / Math.min(w, h));

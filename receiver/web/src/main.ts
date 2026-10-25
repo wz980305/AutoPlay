@@ -89,7 +89,7 @@ function error(message: string) {
 }
 /** Auto quality (2026-10-14; a Tesla decodes a frame in ~1 ms, the XPeng in 60-100 ms): once this browser has
  *  shown it decodes fast (f50-fast-decoder, from the 10 s reports), auto picks the resolution from the screen's real
- *  pixels (CSS size x device pixel ratio, long side 1280-1920) and H.265 when the browser decodes it; a slow decoder
+ *  pixels (CSS size x device pixel ratio, long side 1280-2560) and H.265 when the browser decodes it; a slow decoder
  *  keeps the CSS-size choice and H.264. The codec list (auto / H.264 / H.265) overrides. */
 function readFlag(key: string) { try { return localStorage.getItem(key) ?? ''; } catch { return ''; } }
 function saveFlag(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* Then auto stays as it was. */ } }
@@ -393,7 +393,7 @@ function storedShapes(): Area[] {
 }
 function autoTarget() {
   const pixels=fastDecoder()?Math.min(2,Math.max(1,window.devicePixelRatio||1)):1;
-  return suggestedResolution(screen.clientWidth*pixels,screen.clientHeight*pixels);
+  return suggestedResolution(screen.clientWidth*pixels,screen.clientHeight*pixels,fastDecoder()?2560:1920);
 }
 el<HTMLSelectElement>('codec').value = readFlag('f50-codec') || 'auto';
 el<HTMLSelectElement>('codec').onchange=() => { saveFlag('f50-codec', el<HTMLSelectElement>('codec').value); lastAutoTarget=''; scheduleAuto(); };

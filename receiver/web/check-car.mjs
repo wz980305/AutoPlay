@@ -20,6 +20,12 @@ const {suggestedResolution,aspectChanged,shownSize,areaPlan,areaSize}=await load
     assert.deepEqual(next.display,{...display,area:index},'every later change only switches area');
     display=next.display; }
   assert.equal(areaPlan(display,page,false,shapes),null,'the same shape never'); }
+// Auto with a fast decoder goes up to 2560 on the long side (user 2026-10-19: owners set 2560 by hand on 2.5K screens);
+// a Tesla's 1920x1200 panel (1254x784 CSS px at 1.53) stays as it was.
+assert.deepEqual(suggestedResolution(2560,1440,2560),{width:2560,height:1440},'a 2.5K screen gets its own pixels');
+assert.deepEqual(suggestedResolution(3840,2160,2560),{width:2560,height:1440},'never beyond 2560');
+assert.deepEqual(suggestedResolution(1254*1.53,784*1.53,2560),{width:1918,height:1200},'Tesla: same as before');
+assert.deepEqual(suggestedResolution(2560,1440),{width:1920,height:1080},'1920 unless asked for more');
 assert.deepEqual(shownSize(1280,846,1280,756),{width:1280,height:756},'fullscreen picture fills the normal page without bars');
 assert.deepEqual(shownSize(1280,756,1280,846),{width:1280,height:846},'and the other way round');
 assert.deepEqual(shownSize(1280,846,1082,1280),{width:1082,height:1280},'no black bars even before a portrait renegotiation');
