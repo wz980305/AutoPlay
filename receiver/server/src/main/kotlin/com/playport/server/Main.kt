@@ -53,9 +53,16 @@ fun main(args: Array<String>) {
                     host = webHost
                     port = config.httpPort
                 }
-                // The kernel grows a socket's send buffer to megabytes, seconds of picture on a slow car Wi-Fi
-                // that WebHub's age check cannot see; a fixed 128 KiB (Linux doubles it) keeps that part short.
-                configureBootstrap = { childOption(io.netty.channel.ChannelOption.SO_SNDBUF, 128 * 1024) }
+                configureBootstrap = {
+                    // The kernel grows a socket's send buffer to megabytes, seconds of picture on a slow car Wi-Fi
+                    // that WebHub's age check cannot see; a fixed 128 KiB (Linux doubles it) keeps that part short.
+                    childOption(io.netty.channel.ChannelOption.SO_SNDBUF, 128 * 1024)
+                    // DSCP AF41 (TOS 0x88) on every viewer connection (HTTPS and WSS): the F50's Wi-Fi driver picks
+                    // its WMM access category from the TOS byte (0x80/0xA0 -> video), so the picture goes ahead of
+                    // the car's and the iPhone's own best-effort internet traffic the box also forwards
+                    // (media_performance_audit #6; the dashplay-tesla fork put the same line here, 2026-10-23).
+                    childOption(io.netty.channel.ChannelOption.IP_TOS, 0x88)
+                }
             },
         ) {
             server.hub.install(this, webRoot)
