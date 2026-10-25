@@ -37,7 +37,8 @@ export class MusicOutput {
   private recent:{sample:number;length:number;data:Uint8Array}[]=[];
   private realign:{offset:number;from:number;duration:number}|null=null;
   /** For the viewer log: the element waited for audio, skipped ahead, moved onto the song's timeline. */
-  private counts={musicWaits:0,musicSkips:0,musicAligns:0};
+  private counts={musicWaits:0,musicSkips:0,musicAligns:0,musicSysPauses:0};
+  private pausing=false;
   private readonly rate:number;
   private readonly channels:number;
   readonly configKey: string;
@@ -47,7 +48,8 @@ export class MusicOutput {
     document.body.append(this.element);
     this.element.addEventListener('playing',()=>{this.running=true;});
     this.element.addEventListener('waiting',()=>{this.running=false;if(this.started&&!this.element.paused)this.counts.musicWaits++;});
-    this.element.addEventListener('pause',()=>{this.running=false;});
+    // Paused by the car (another app took the sound), not by this page.
+    this.element.addEventListener('pause',()=>{this.running=false;if(!this.pausing&&!this.closed)this.counts.musicSysPauses++;this.pausing=false;});
     this.element.addEventListener('error',()=>{if(!this.closed)this.onError('Music playback: '+(this.element.error?.message||'media error'));});
     this.pending.push(kind==='flac'?flacInit(config.sampleRate,config.channels):aacInit(config.sampleRate,config.channels,config.description));
     this.source.addEventListener('sourceopen',()=>{
@@ -58,7 +60,7 @@ export class MusicOutput {
   }
   get unlocked(){return !this.element.paused;}
   get playing(){return this.running&&!this.element.paused&&performance.now()-this.lastPacket<1800;}
-  pause(){this.element.pause();this.running=false;this.frames=[];this.pcm=[];this.pcmBytes=0;}
+  pause(){this.pausing=!this.element.paused;this.element.pause();this.running=false;this.frames=[];this.pcm=[];this.pcmBytes=0;}
   unlock(){
     // Not right at the end: playing from the last sample ran dry at once, a crackle on opening the page.
     const b=this.buffer;
@@ -96,7 +98,7 @@ export class MusicOutput {
     this.pending.push(data);this.recent.push({sample:this.samples,length,data});this.samples+=length;
     while(this.recent.length&&this.recent[0].sample<this.samples-5*this.rate)this.recent.shift();
   }
-  report():Record<string,number>{const counts=this.counts;this.counts={musicWaits:0,musicSkips:0,musicAligns:0};return counts;}
+  report():Record<string,number>{const counts=this.counts;this.counts={musicWaits:0,musicSkips:0,musicAligns:0,musicSysPauses:0};return counts;}
   /** A car's media card may show this element's own timeline instead of the song's (2026-10-12 drive: it ran on
    *  from the start of the music, 0 to 671 s, duration unknown, while the song was at 8 of 269 s). */
   follow(song:SongTimeline|null){

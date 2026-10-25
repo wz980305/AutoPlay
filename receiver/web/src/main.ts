@@ -180,9 +180,14 @@ function updateFullscreen() {
     el(id).dataset.fullscreen = String(full);
   }
 }
+/** The car shows something else over the page (reverse camera): the page is hidden and comes back out of
+ *  fullscreen (Xpeng G6, 2026-10-12). Such an exit keeps the picture as negotiated, and the next tap on the
+ *  picture goes back to fullscreen; a browser enters fullscreen only on a tap, never by itself. */
+let wantFullscreen = false, hiddenAt = -Infinity, exitedAt = -Infinity;
+const restoring = () => wantFullscreen && !document.fullscreenElement && !document.hidden;
 async function toggleFullscreen() {
   try {
-    if (document.fullscreenElement) await document.exitFullscreen();
+    if (document.fullscreenElement) { wantFullscreen = false; await document.exitFullscreen(); }
     else await document.documentElement.requestFullscreen();
     if (panel.open) panel.close();
   } catch { error(t('fullscreenFail')); }
@@ -197,9 +202,22 @@ function toast(message: string) {
   window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => { el('toast').hidden = true; }, 6000);
 }
 document.addEventListener('fullscreenchange', () => {
-  updateFullscreen(); fit();
-  if (document.fullscreenElement) toast(t('fullscreenHint')); else el('toast').hidden = true;
+  updateFullscreen(); fit(); pageEvent(document.fullscreenElement ? 3 : 4);
+  if (document.fullscreenElement) { wantFullscreen = true; toast(t('fullscreenHint')); return; }
+  el('toast').hidden = true; exitedAt = performance.now();
+  // Not hidden around the exit (within 2 s): the user left fullscreen on purpose.
+  window.setTimeout(() => { if (!document.hidden && Math.abs(exitedAt - hiddenAt) > 2000) wantFullscreen = false; }, 2000);
 });
+function showRestoreHint() {
+  if (!restoring()) return;
+  window.clearTimeout(toastTimer); el('toast').textContent = t('tapFullscreen'); el('toast').hidden = false;
+}
+// Capture phase, ahead of the CarPlay input: this tap only goes back to fullscreen.
+for (const name of ['pointerdown', 'pointerup'] as const) window.addEventListener(name, event => {
+  if (!restoring() || !surface.contains(event.target as Node)) return;
+  event.stopPropagation(); event.preventDefault();
+  if (name === 'pointerup') void document.documentElement.requestFullscreen().catch(() => { wantFullscreen = false; el('toast').hidden = true; });
+}, { capture: true });
 document.querySelectorAll<HTMLButtonElement>('[data-command]').forEach(button => button.onclick = () => {
   const cmd = button.dataset.command;
   if (cmd === 'home' || cmd === 'back') send({ type:'knob', knob:{ select:false, home:cmd==='home', back:cmd==='back', x:0,y:0,wheel:0 } });
@@ -238,6 +256,7 @@ async function adapt() {
   if (!display || !autoFit.checked || displayBusy) return;
   const target=autoTarget();
   if (!document.fullscreenElement && closeShape(display,target)) return;
+  if (restoring()) return;   // back from the reverse camera: the next tap restores the negotiated shape
   const key=`${target.width}x${target.height}`;
   if (!aspectChanged(display,target) || key===lastAutoTarget) return;
   // Avoid a reconnect loop even when another viewer has a different screen shape.
@@ -259,7 +278,16 @@ el<HTMLFormElement>('display-form').onsubmit=event => {
   void saveDisplay({...size,fps:Number(el<HTMLSelectElement>('fps').value),uiScale:Number(el<HTMLSelectElement>('ui-scale').value),hevc:false});
 };
 new ResizeObserver(()=>{ fit(); scheduleAuto(); }).observe(screen);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){fit();scheduleAuto();void unlock();}});
+document.addEventListener('visibilitychange',()=>{
+  pageEvent(document.hidden ? 1 : 2);
+  if (document.hidden) { hiddenAt = performance.now(); return; }
+  // The picture at once instead of the phone's next keyframe; then the sound.
+  send({ type:'keyframe' }); fit(); scheduleAuto(); void unlock(); showRestoreHint();
+});
+/** Straight into the viewer log, not only every 10 s: ev 1 hidden, 2 shown, 3 fullscreen, 4 out of fullscreen. */
+function pageEvent(ev: number) {
+  send({type:'stats',stats:{ev,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,width:screen.clientWidth,height:screen.clientHeight,want:wantFullscreen?1:0}});
+}
 window.setInterval(()=>{
   const now=performance.now(),fps=frames*1000/Math.max(1,now-lastStats);frames=0;lastStats=now;
   el('stats').textContent=painted?`${canvas.width} × ${canvas.height} / ${fps.toFixed(0)} fps / ${t('latency')} ${video.decodeLatencyMs.toFixed(0)} ms`:t('noStream');

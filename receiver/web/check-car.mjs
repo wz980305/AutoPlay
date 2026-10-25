@@ -96,7 +96,7 @@ assert.equal(media.timeline().key,'Run|||200');assert.equal(media.timeline().pos
   clock=100;buffer.listeners.updateend();
   assert.equal(element.currentTime,8,'then what was being heard is the song position');assert.equal(source.duration,269,'with the song duration');
   assert.equal(buffer.timestampOffset,8-600,'and the audio not heard yet is replayed on that timeline');
-  assert.deepEqual(music.report(),{musicWaits:0,musicSkips:0,musicAligns:1},'Counted for the viewer log');
+  assert.deepEqual(music.report(),{musicWaits:0,musicSkips:0,musicAligns:1,musicSysPauses:0},'Counted for the viewer log');
   log.length=0;element.currentTime=9;buffer.ranges=[[8.1,9.6]];
   clock=1000;music.follow({position:9,duration:269,key:'A',playing:true});
   assert.ok(!log.some(x=>x.startsWith('remove')),'Following the same song moves nothing');
