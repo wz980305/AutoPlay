@@ -14,6 +14,21 @@ class WirelessReconnectTest {
         assertFalse(CarPlayServer.shouldRestartWireless(false, false, 4_999, true))
         assertFalse(CarPlayServer.shouldRestartWireless(true, false, 90_000, true))
     }
+    @Test fun acceptedHandoffIsNotInterruptedWhileThePhoneJoinsTheWifi() {
+        val accepted = 100_000L
+        assertTrue(CarPlayServer.joiningAfterHandoff(accepted + 9_000, accepted))
+        assertTrue(CarPlayServer.joiningAfterHandoff(accepted + 24_999, accepted))
+        assertFalse(CarPlayServer.joiningAfterHandoff(accepted + 25_000, accepted))
+        assertFalse(CarPlayServer.joiningAfterHandoff(accepted, Long.MIN_VALUE / 2))
+    }
+    @Test fun stalledHandoffIsRetriedRightAfterTheJoinGraceOnly() {
+        val accepted = 100_000L
+        assertFalse(CarPlayServer.handoffStalled(accepted + 24_999, accepted))
+        assertTrue(CarPlayServer.handoffStalled(accepted + 25_000, accepted))
+        assertTrue(CarPlayServer.handoffStalled(accepted + 44_999, accepted))
+        assertFalse(CarPlayServer.handoffStalled(accepted + 45_000, accepted))
+        assertFalse(CarPlayServer.handoffStalled(accepted, Long.MIN_VALUE / 2))
+    }
     @Test fun presentPhoneWithStaleBootstrapRetriesAfterBoundedHandshakeGrace() {
         assertFalse(CarPlayServer.shouldRestartWireless(false, true, 14_999, true))
         assertTrue(CarPlayServer.shouldRestartWireless(false, true, 15_000, true))
