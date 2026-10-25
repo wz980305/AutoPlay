@@ -11,24 +11,43 @@ export function suggestedResolution(width: number, height: number) {
 export function aspectChanged(a: {width: number; height: number}, b: {width: number; height: number}) {
   return Math.abs((a.width / a.height) / (b.width / b.height) - 1) > 0.025;
 }
-/** Shapes within 20% of each other (the car's page 1280x756 vs fullscreen 1280x846) are not renegotiated
- *  outside fullscreen; clearly different ones (portrait, split screen) are, at once. */
-export function closeShape(a: {width: number; height: number}, b: {width: number; height: number}) {
-  return a.width > 0 && a.height > 0 && b.width > 0 && b.height > 0 &&
-    Math.abs((a.width / a.height) / (b.width / b.height) - 1) <= 0.2;
-}
-/** Whether to renegotiate CarPlay to `target`. A close shape is renegotiated in fullscreen only once: when the
- *  current size was not itself set for fullscreen on this browser (`fullscreenSize`). The car's fullscreen is not
- *  always the same height (XPeng, 2026-10-13: 876x579 or 876x641 CSS px, its dock shown or not), and switching
- *  between 1280x846 and 1280x936 reconnected CarPlay, a crackle and seconds without a picture, on most entries. */
-export function renegotiate(display: {width: number; height: number}, target: {width: number; height: number}, fullscreen: boolean, fullscreenSize: string) {
-  if (!aspectChanged(display, target)) return false;
-  return !(closeShape(display, target) && (!fullscreen || fullscreenSize === `${display.width}x${display.height}`));
-}
 /** The picture always fills the view, stretched per axis: no black bars (user 2026-10-12). A close shape
  *  stays stretched; a clearly different one is shown stretched only until CarPlay is renegotiated.
  *  Touch input is normalized per axis, so it stays exact. */
 export function shownSize(width: number, height: number, viewWidth: number, viewHeight: number) {
   if (width <= 0 || height <= 0) return { width: 0, height: 0 };
   return { width: viewWidth, height: viewHeight };
+}
+
+export interface Area { width: number; height: number }
+export interface AreaDisplay { width: number; height: number; hevc: boolean; areas?: Area[]; area?: number }
+/** Window shapes kept per browser as CarPlay view areas (protocol: at most 4). */
+export const MAX_AREAS = 4;
+/** View areas (2026-10-14): each window shape this browser has shown (normal, fullscreen, the car's dock shown or not)
+ *  becomes an area at the stream's top left, the stream as large as all of them. A shape seen before is reached by
+ *  switching area, without reconnecting CarPlay; a new shape, or one that wants a clearly sharper size, declares the
+ *  areas again (one reconnect). Returns what to send and the shapes to keep, or null when nothing changes. */
+export function areaPlan<T extends AreaDisplay>(display: T, target: Area, hevc: boolean, known: Area[]): { display: T; shapes: Area[] } | null {
+  const shapes = known.filter(s => s.width > 0 && s.height > 0).slice(-MAX_AREAS).map(s => ({ width: s.width, height: s.height }));
+  let at = shapes.findIndex(s => !aspectChanged(s, target));
+  if (at < 0) {
+    shapes.push({ ...target });
+    if (shapes.length > MAX_AREAS) shapes.shift();
+    at = shapes.length - 1;
+  } else if (target.width * target.height > shapes[at].width * shapes[at].height * 1.2) {
+    shapes[at] = { ...target };   // sharper (a fast decoder's real pixels): worth one reconnect
+  }
+  const width = Math.max(...shapes.map(s => s.width)), height = Math.max(...shapes.map(s => s.height));
+  const areas = shapes.length > 1 ? shapes : [];
+  const declared = display.areas ?? [];
+  const same = display.width === width && display.height === height && display.hevc === hevc &&
+    declared.length === areas.length && declared.every((a, i) => a.width === areas[i].width && a.height === areas[i].height);
+  if (same) return areas.length && (display.area ?? 0) !== at ? { display: { ...display, area: at }, shapes } : null;
+  return { display: { ...display, width, height, hevc, areas, area: areas.length ? at : 0 }, shapes };
+}
+/** The picture element's size so that the area in use fills the view (the rest of the stream lies outside it, to the
+ *  right and below; touches, normalized over the element, stay in stream coordinates). Without areas: shownSize. */
+export function areaSize(streamWidth: number, streamHeight: number, area: Area | undefined, viewWidth: number, viewHeight: number) {
+  if (!area || area.width <= 0 || area.height <= 0 || streamWidth <= 0 || streamHeight <= 0) return shownSize(streamWidth, streamHeight, viewWidth, viewHeight);
+  return { width: viewWidth * streamWidth / area.width, height: viewHeight * streamHeight / area.height };
 }

@@ -22,6 +22,22 @@ data class AirPlayDisplayConfig(
     val initialUrl: String? = null,
     /** Display feature bits; null keeps the main-screen default (high-fidelity touch and knobs). */
     val features: Int? = null,
+    /**
+     * The view areas CarPlay may use on this display, or null for the whole display as one area. With several,
+     * the car moves CarPlay between them with updateViewArea, without reconnecting (as DiPlay does, GPL-3.0,
+     * shihabal3amri/DiPlay#246 and its docs/VIEW_AREAS.md).
+     */
+    val viewAreas: List<AirPlayViewArea>? = null,
+    /** The area CarPlay starts in, an index into [viewAreas]. */
+    val initialViewArea: Int = 0,
+)
+
+/** A rectangle of the display's stream that CarPlay can draw in. */
+data class AirPlayViewArea(
+    val width: Int,
+    val height: Int,
+    val originX: Int = 0,
+    val originY: Int = 0,
 )
 
 /** One OEM homescreen icon. */

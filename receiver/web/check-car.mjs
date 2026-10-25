@@ -6,20 +6,20 @@ async function load(name, transform = s => s) {
   const {outputText}=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}});
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 }
-const {suggestedResolution,aspectChanged,shownSize,closeShape,renegotiate}=await load('display-fit');
+const {suggestedResolution,aspectChanged,shownSize,areaPlan,areaSize}=await load('display-fit');
 { // XPeng fullscreen is 876x579 or 876x641 CSS px (dock shown or not): 1280x846 or 1280x936 (F50 drive 2026-10-13).
+  // With view areas the page (1280x756) and both fullscreen heights are areas: learned once, then switched.
   const s846=suggestedResolution(876,579),s936=suggestedResolution(876,641),page=suggestedResolution(876,518);
   assert.deepEqual([s846,s936],[{width:1280,height:846},{width:1280,height:936}]);
-  assert.equal(renegotiate({width:1280,height:756},s846,true,''),true,'Fullscreen gets its own size once');
-  assert.equal(renegotiate({width:1280,height:846},s936,true,'1280x846'),false,'then the other fullscreen height only stretches');
-  assert.equal(renegotiate({width:1280,height:936},s846,true,'1280x936'),false,'either way round');
-  assert.equal(renegotiate({width:1280,height:846},page,false,'1280x846'),false,'leaving fullscreen keeps it too');
-  assert.equal(renegotiate({width:1280,height:602},s846,true,'1280x846'),true,'a size far off (a test window) is renegotiated');
-  assert.equal(renegotiate({width:1280,height:846},{width:1372,height:686},false,'1280x846'),true,'split screen at once');
-  assert.equal(renegotiate({width:1280,height:846},s846,true,''),false,'the same shape never'); }
-assert.equal(closeShape({width:1280,height:846},{width:1280,height:756}),true,'page vs fullscreen: no renegotiation outside fullscreen');
-assert.equal(closeShape({width:1280,height:846},{width:1082,height:1280}),false,'portrait renegotiates at once');
-assert.equal(closeShape({width:1280,height:846},{width:1372,height:686}),false,'split screen renegotiates at once');
+  const start={width:1280,height:756,hevc:false,fps:30};
+  let plan=areaPlan(start,s846,false,[page]); let display=plan.display, shapes=plan.shapes;
+  plan=areaPlan(display,s936,false,shapes); display=plan.display; shapes=plan.shapes;
+  assert.deepEqual([display.width,display.height,display.areas.length],[1280,936,3],'three shapes, the stream as tall as the tallest');
+  for (const [shape,index] of [[page,0],[s846,1],[s936,2],[page,0]]) {
+    const next=areaPlan(display,shape,false,shapes);
+    assert.deepEqual(next.display,{...display,area:index},'every later change only switches area');
+    display=next.display; }
+  assert.equal(areaPlan(display,page,false,shapes),null,'the same shape never'); }
 assert.deepEqual(shownSize(1280,846,1280,756),{width:1280,height:756},'fullscreen picture fills the normal page without bars');
 assert.deepEqual(shownSize(1280,756,1280,846),{width:1280,height:846},'and the other way round');
 assert.deepEqual(shownSize(1280,846,1082,1280),{width:1082,height:1280},'no black bars even before a portrait renegotiation');
@@ -181,3 +181,24 @@ assert.equal(isNight('schedule',at(0,0),false),true);assert.equal(isNight('sched
 assert.equal(isNight('system',at(12,0),true),true);assert.equal(isNight('system',at(23,0),false),false);
 assert.equal(isNight('day',at(23,0),true),false);assert.equal(isNight('night',at(12,0),false),true);
 console.log('Car checks passed: aspect fit, media keys, disconnect state, single music route, MP4 framing, night schedule.');
+{ // View areas (2026-10-14): a window shape seen before is an area switch, never a reconnect.
+  const windowed={width:1280,height:996}, full={width:1920,height:1080};
+  const start={width:1280,height:996,hevc:true,fps:30};
+  const first=areaPlan(start,windowed,true,[]);
+  assert.equal(first,null,'the shape in use: nothing to do');
+  const learn=areaPlan(start,full,true,[windowed]);
+  assert.deepEqual([learn.display.width,learn.display.height],[1920,1080],'the stream covers both shapes');
+  assert.deepEqual(learn.display.areas,[windowed,full],'both shapes declared as areas');
+  assert.equal(learn.display.area,1,'and the fullscreen one in use');
+  const back=areaPlan(learn.display,windowed,true,learn.shapes);
+  assert.deepEqual(back.display,{...learn.display,area:0},'back to the window: only the area changes');
+  assert.equal(areaPlan(back.display,{width:1282,height:998},true,back.shapes),null,'a shape within 2.5% is the same area');
+  const sharper=areaPlan(back.display,{width:1280,height:996},false,back.shapes);
+  assert.equal(sharper.display.hevc,false,'another codec declares again');
+  const s=areaSize(1920,1080,windowed,773,601);
+  assert.ok(Math.abs(s.width-773*1920/1280)<1e-6 && Math.abs(s.height-601*1080/996)<1e-6,'the area fills the view');
+  assert.deepEqual(areaSize(1280,996,undefined,773,601),{width:773,height:601},'without areas as before');
+  const four=areaPlan(start,{width:800,height:1280},true,[{width:1280,height:720},{width:1280,height:996},{width:1920,height:1080},{width:1280,height:640}]);
+  assert.equal(four.display.areas.length,4,'at most four areas');
+}
+console.log('View areas: shapes learned once, switched without reconnecting.');

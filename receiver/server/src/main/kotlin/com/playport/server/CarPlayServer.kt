@@ -5,6 +5,7 @@ import com.shilapi.xcertplay.airplay.AirPlayConfig
 import com.shilapi.xcertplay.airplay.AirPlayContact
 import com.shilapi.xcertplay.airplay.AirPlayDeviceInfo
 import com.shilapi.xcertplay.airplay.AirPlayDisplayConfig
+import com.shilapi.xcertplay.airplay.AirPlayViewArea
 import com.shilapi.xcertplay.airplay.AirPlayKnobState
 import com.shilapi.xcertplay.airplay.AirPlayMediaHandler
 import com.shilapi.xcertplay.airplay.AirPlaySession
@@ -56,6 +57,9 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         config.displayFps,
         config.uiScale,
         config.hevc,
+        config.displayAreas.takeIf { DisplayState.validateAreas(config.displayWidth, config.displayHeight, it, config.displayArea) == null }
+            ?: emptyList(),
+        config.displayArea,
     )
     val hub = WebHub(config, display)
     val bridge = WebBridge(hub)
@@ -119,6 +123,9 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                     widthPixels = display.width,
                     heightPixels = display.height,
                     fps = display.fps,
+                    viewAreas = display.areas.takeIf { it.size > 1 }?.map { AirPlayViewArea(it.width, it.height) },
+                    initialViewArea = display.area,
+                    widthPhysicalMm = display.physicalWidthMm(),
                 ),
                 display.uiScale,
             ),
@@ -618,9 +625,23 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
      * Applies a new display configuration and restarts CarPlay so the phone re-negotiates the
      * display. Returns null on success or a human-readable error.
      */
-    fun applyDisplay(width: Int, height: Int, fps: Int, uiScale: Int, hevc: Boolean): String? {
+    fun applyDisplay(request: DisplayRequest): String? {
+        val (width, height, fps, uiScale, hevc) = request
         DisplayState.validate(width, height, fps)?.let { return it }
-        display.update(width, height, fps, uiScale, hevc)
+        val areas = request.areas.takeIf { it.size > 1 } ?: emptyList()
+        DisplayState.validateAreas(width, height, areas, request.area)?.let { return it }
+        // Only another of the declared areas (the page's window changed shape): move CarPlay there, no reconnect.
+        val session = activeSession
+        if (areas.isNotEmpty() && session != null && display.sameStream(width, height, fps, uiScale, hevc, areas)) {
+            if (request.area == display.area) return null
+            display.useArea(request.area)
+            configStore?.save(PersistentConfig.of(config, display))
+            val sent = session.showViewArea(request.area)
+            log.info("view area {} ({}x{}) of {}x{} sent={}", request.area, areas[request.area].width,
+                areas[request.area].height, width, height, sent)
+            return if (sent) null else "view area not sent"
+        }
+        display.update(width, height, fps, uiScale, hevc, areas, request.area)
         configStore?.save(PersistentConfig.of(config, display))
         log.info(
             "display changed to {}x{} @{}fps uiScale={} codec={} ({}); restarting CarPlay",

@@ -139,6 +139,10 @@ class AirPlaySession(
             sendCommand(mapOf("type" to "forceKeyFrame", "params" to mapOf("uuid" to uuid)))
     }
 
+    /** Moves CarPlay on the main screen to one of its declared view areas, without reconnecting. */
+    fun showViewArea(index: Int): Boolean =
+        sendCommand(AirPlayInfoPlist.viewAreaCommand(index, config.main.viewAreas?.size ?: 1))
+
     fun sendCommand(command: Map<String, Any?>): Boolean = synchronized(eventWriteLock) {
         sendCommandLocked(command)
     }

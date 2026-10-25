@@ -8,7 +8,12 @@ import com.shilapi.xcertplay.airplay.CarPlayUiScale
  * Portrait orientation is simply `height > width`. [uiScale] maps to [CarPlayUiScale]: a larger
  * canvas requests proportionally smaller CarPlay controls.
  */
-class DisplayState(width: Int, height: Int, fps: Int, uiScale: Int, hevc: Boolean = false) {
+/** One view area: a width x height rectangle at the stream's top left (a browser window's shape). */
+@kotlinx.serialization.Serializable
+data class ViewArea(val width: Int, val height: Int)
+
+class DisplayState(width: Int, height: Int, fps: Int, uiScale: Int, hevc: Boolean = false,
+                   areas: List<ViewArea> = emptyList(), area: Int = 0) {
     @Volatile var width: Int = width
         private set
     @Volatile var height: Int = height
@@ -19,13 +24,36 @@ class DisplayState(width: Int, height: Int, fps: Int, uiScale: Int, hevc: Boolea
         private set
     @Volatile var hevc: Boolean = hevc
         private set
+    /** The view areas declared to the phone (none: the whole stream), and the one in use. */
+    @Volatile var areas: List<ViewArea> = areas
+        private set
+    @Volatile var area: Int = area.coerceIn(0, maxOf(0, areas.lastIndex))
+        private set
 
-    fun update(width: Int, height: Int, fps: Int, uiScale: Int, hevc: Boolean) {
+    fun update(width: Int, height: Int, fps: Int, uiScale: Int, hevc: Boolean, areas: List<ViewArea> = emptyList(), area: Int = 0) {
         this.width = width
         this.height = height
         this.fps = fps
         this.uiScale = CarPlayUiScale.sanitize(uiScale)
         this.hevc = hevc
+        this.areas = areas
+        this.area = area.coerceIn(0, maxOf(0, areas.lastIndex))
+    }
+
+    /** Whether [width]..[areas] are what the phone was told: then only the area in use may differ. */
+    fun sameStream(width: Int, height: Int, fps: Int, uiScale: Int, hevc: Boolean, areas: List<ViewArea>): Boolean =
+        width == this.width && height == this.height && fps == this.fps && CarPlayUiScale.sanitize(uiScale) == this.uiScale &&
+            hevc == this.hevc && areas == this.areas
+
+    fun useArea(index: Int) { area = index.coerceIn(0, maxOf(0, areas.lastIndex)) }
+
+    /**
+     * CarPlay sizes its icons by pixels per millimetre. With areas the stream is wider than the window shape it mostly
+     * shows, and at the plain 200 mm the windowed area looked crowded (Tesla, 2026-10-14): the narrowest area keeps the
+     * plain density, 200 mm per its width. null (the plain 200 mm) without areas.
+     */
+    fun physicalWidthMm(): Int? = areas.takeIf { it.size > 1 }?.minOf { it.width }?.let {
+        com.shilapi.xcertplay.airplay.AirPlayDisplaySettings.DEFAULT_WIDTH_PHYSICAL_MM * width / it
     }
 
     val orientation: String get() = if (height > width) "portrait" else "landscape"
@@ -35,6 +63,16 @@ class DisplayState(width: Int, height: Int, fps: Int, uiScale: Int, hevc: Boolea
     companion object {
         const val MIN_EDGE = 480
         const val MAX_EDGE = 3840
+
+        const val MAX_AREAS = 4
+
+        fun validateAreas(width: Int, height: Int, areas: List<ViewArea>, area: Int): String? = when {
+            areas.size > MAX_AREAS -> "at most $MAX_AREAS view areas"
+            areas.any { it.width !in 2..width || it.height !in 2..height || it.width % 2 != 0 || it.height % 2 != 0 } ->
+                "each view area must be even and fit the stream"
+            areas.isNotEmpty() && area !in areas.indices -> "no such view area"
+            else -> null
+        }
 
         fun validate(width: Int, height: Int, fps: Int): String? = when {
             width !in MIN_EDGE..MAX_EDGE || height !in MIN_EDGE..MAX_EDGE ->

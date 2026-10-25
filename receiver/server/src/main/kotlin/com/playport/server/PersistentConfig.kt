@@ -15,6 +15,8 @@ data class DisplayPrefs(
     val fps: Int = 30,
     val uiScale: Int = 100,
     val hevc: Boolean = false,
+    val areas: List<ViewArea> = emptyList(),
+    val area: Int = 0,
 )
 
 /** Settings persisted between runs in `~/.playport/config.json`. */
@@ -46,6 +48,8 @@ data class PersistentConfig(
         displayFps = display.fps,
         uiScale = display.uiScale,
         hevc = display.hevc,
+        displayAreas = display.areas,
+        displayArea = display.area,
         wireless = wireless,
         wifiSsid = wifiSsid,
         wifiPassphrase = wifiPassphrase,
@@ -75,6 +79,8 @@ data class PersistentConfig(
                 fps = display.fps,
                 uiScale = display.uiScale,
                 hevc = display.hevc,
+                areas = display.areas,
+                area = display.area,
             ),
             wireless = config.wireless,
             wifiSsid = config.wifiSsid,

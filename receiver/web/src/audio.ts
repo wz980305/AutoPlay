@@ -36,9 +36,6 @@ export class AudioEngine {
    *  hard to hear at 1 (2026-10-14). 1 leaves them as sent. */
   private readonly promptBoost: number;
   private promptLimiter: DynamicsCompressorNode | null = null;
-  /** Tesla mode: music is the car's, over Bluetooth; music the iPhone still sends here is not played, so that the
-   *  two never sound together. */
-  private readonly musicOff: boolean;
   /** Tesla mode: the car takes a browser that has an audio output open, even a silent one, for a music source and
    *  switched its media card between it and the iPhone's Bluetooth over and over (2026-10-14). The output is closed
    *  (context suspended) a few seconds after the last stream ends and opened again for the next prompt or call. */
@@ -46,12 +43,11 @@ export class AudioEngine {
   private idleTimer = 0;
   private sleeping = false;
 
-  constructor(private readonly onError: (message: string) => void, options: { promptBoost?: number; musicOff?: boolean; idleClose?: boolean } = {}) {
+  constructor(private readonly onError: (message: string) => void, options: { promptBoost?: number; idleClose?: boolean } = {}) {
     this.context = new AudioContext({ latencyHint: 'interactive' });
     this.gain = this.context.createGain();
     this.gain.connect(this.context.destination);
     this.promptBoost = Math.min(8, Math.max(1, options.promptBoost ?? 1));
-    this.musicOff = options.musicOff ?? false;
     this.idleClose = options.idleClose ?? false;
   }
 
@@ -118,7 +114,6 @@ export class AudioEngine {
   handleConfig(message: AudioConfigMessage): void {
     this.closeStream(message.streamType);
     this.wake();
-    if (this.musicOff && message.name === 'media') return;   // its packets find no stream and are dropped
     const streamGain = this.context.createGain();
     streamGain.gain.value = this.streamGainValue(message.name);
     streamGain.connect(this.streamOutput(message.name));

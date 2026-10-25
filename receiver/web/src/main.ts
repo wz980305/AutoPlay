@@ -5,7 +5,7 @@ import { VideoPlayer } from './video';
 import { Connection } from './ws';
 import { SystemMedia } from './media-session';
 import { LagProbe } from './lag';
-import { shownSize, suggestedResolution, renegotiate } from './display-fit';
+import { suggestedResolution, areaPlan, areaSize, type Area } from './display-fit';
 import { t, language, setLanguage, type Key } from './i18n';
 import { isNight, parseNightMode } from './night';
 import type { ServerMessage, ClientMessage } from './protocol';
@@ -31,7 +31,7 @@ let musicBytes = 0;
 let state: Key = token ? 'connecting' : 'access';
 let hint: Key = token ? 'waitingHint' : 'accessHint';
 let lastAutoTarget = '', autoTimer = 0, displayBusy = false;
-interface Display { width: number; height: number; fps: number; uiScale: number; hevc: boolean; }
+interface Display { width: number; height: number; fps: number; uiScale: number; hevc: boolean; areas?: Area[]; area?: number; }
 let display: Display | null = null;
 const autoFit = el<HTMLInputElement>('auto-fit');
 autoFit.checked = localStorage.getItem('f50-auto-fit') !== 'false';
@@ -57,8 +57,8 @@ function render() {
   volume.setAttribute('aria-label', t('volume'));
   el('connection-text').textContent = t(state);
   el('connection-hint').textContent = t(hint);
-  el('overlay').hidden = painted;
-  el('app').dataset.live = String(painted);
+  el('overlay').hidden = painted || holding;
+  el('app').dataset.live = String(painted || holding);
   el('capabilities').textContent = !isSecureContext ? t('insecure') : typeof VideoDecoder === 'undefined' || typeof AudioDecoder === 'undefined' ? t('unsupported') : t('compatible');
   el('media-support').textContent = t(media.supported ? 'mediaYes' : 'mediaNo');
   el<HTMLInputElement>('width').disabled = autoFit.checked;
@@ -69,8 +69,12 @@ function render() {
   el('night-status').title = t(darkQuery.matches ? 'browserDark' : 'browserLight');
 }
 function fit() {
-  const size = shownSize(canvas.width, canvas.height, screen.clientWidth, screen.clientHeight);
+  // With view areas the stream is larger than the area in use: the area fills the view from the top left and the
+  // rest of the picture lies outside it (areaSize, display-fit.ts).
+  const areas = display?.areas ?? [], area = areas.length > 1 ? areas[display?.area ?? 0] : undefined;
+  const size = areaSize(canvas.width, canvas.height, area, screen.clientWidth, screen.clientHeight);
   surface.style.width = `${size.width}px`; surface.style.height = `${size.height}px`;
+  screen.classList.toggle('area', !!area);
 }
 function error(message: string) {
   // This browser said it decodes H.265 but cannot: auto goes back to H.264 for good (on this browser).
@@ -103,7 +107,9 @@ function judgeDecoder(decodeMs: number, fps: number) {
 function send(message: ClientMessage) { if (active) connection.send(message); }
 const video = new VideoPlayer(canvas, error, () => {
   if (!active) return;
-  frames++; reportFrames++; painted = true; el('overlay').hidden = true; el('app').dataset.live = 'true';
+  frames++; reportFrames++; painted = true; shownOnce = true; el('overlay').hidden = true; el('app').dataset.live = 'true';
+  if (holding) { holding = false; el('toast').hidden = true; }
+  if (wokeAt) { lifeEvent(14, { pictureMs: Math.round(performance.now() - wokeAt) }); wokeAt = 0; }
   const now = performance.now();
   if (input.lastDownAt > handledDownAt) {
     handledDownAt = input.lastDownAt;
@@ -150,10 +156,11 @@ const connection = new Connection(token, {
       case 'audio-stopped': audio.stopStream(message.streamType); voiceStopped(message.streamType); break;
     }
   },
-  onServer: server,
-  onBytes(count) { reportBytes += count; },
+  onServer(message) { lastHeard = performance.now(); server(message); },
+  onBytes(count) { reportBytes += count; lastHeard = performance.now(); },
   onState(value) {
-    if (value === 'closed') { reset(); state = 'reconnecting'; }
+    if (value === 'open' && closedAt) { lifeEvent(11, { downMs: Math.round(performance.now() - closedAt), failures: connection.failures }); closedAt = 0; }
+    if (value === 'closed') { if (!closedAt) closedAt = performance.now(); if (!wokeAt) wokeAt = closedAt; reset(shownOnce); state = 'reconnecting'; }
     else if (value === 'connecting') state = 'connecting';
     else { state = 'waiting'; void loadDisplay(); void unlock(); }
     render();
@@ -167,12 +174,21 @@ function syncNight() {
   if (night === sentNight) return;
   sentNight = night; send({ type:'night', night });
 }
-function reset() {
+/** hold: the link dropped after a picture was shown (the car froze the browser, 2026-10-14). The last picture stays
+ *  up with a small notice while the link comes back, instead of the full "connecting" screen. Only time the page is
+ *  awake counts towards HOLD_MS (the one-second tick adds it): a wall-clock timer ran on while a Tesla had the page
+ *  frozen and cleared the picture the moment it came back, just before the new one arrived. */
+const HOLD_MS = 8000;
+let holding = false, holdAwakeMs = 0, shownOnce = false;
+function reset(hold = false) {
   sentNight = null; lag.reset();
   active = painted = false; input.reset(); canvas.inert = true;
   video.close(); audio.stopAll(); media.setActive(false); void microphone.stop();
-  canvas.getContext('2d')?.clearRect(0,0,canvas.width,canvas.height);
+  holding = hold; holdAwakeMs = 0;
+  if (hold) toast(t('reconnecting'));
+  else clearPicture();
 }
+function clearPicture() { canvas.getContext('2d')?.clearRect(0,0,canvas.width,canvas.height); }
 function server(message: ServerMessage) {
   if (message.type === 'pong') { lag.pong(performance.now()); return; }
   // Straight back, also before CarPlay starts: the box pauses the picture while this page lags behind.
@@ -328,22 +344,24 @@ async function adapt() {
   // Not for a hidden page (a covered page reports a small window) nor while fullscreen waits for its tap; a timer
   // set just before the car covered the page fired anyway and renegotiated to 800x400 (Chrome, 2026-10-12).
   if (!display || !autoFit.checked || displayBusy || document.hidden || (wantFullscreen && !document.fullscreenElement)) return;
-  const target=autoTarget(),fullscreen=!!document.fullscreenElement,hevc=wantHevc();
-  // Sharper than now (a fast decoder's real pixels, or the codec changed): once; else the shape rules below.
-  const sharper=target.width*target.height>display.width*display.height*1.2||hevc!==display.hevc;
-  if (!sharper && !renegotiate(display,target,fullscreen,storedFullscreenSize())) return;
-  const key=`${target.width}x${target.height}${hevc?'-h265':''}`;
+  const plan=areaPlan(display,autoTarget(),wantHevc(),storedShapes());
+  if (!plan) return;
+  const next=plan.display,key=`${next.width}x${next.height}${next.hevc?'-h265':''}/${(next.areas??[]).map(a=>`${a.width}x${a.height}`).join(',')}/${next.area??0}`;
   if (key===lastAutoTarget) return;
   // Avoid a reconnect loop even when another viewer has a different screen shape.
   lastAutoTarget=key;
-  if (!(await saveDisplay({...display,...target,hevc}))) { error(t('autoFail')); return; }
-  if (fullscreen) try { localStorage.setItem('f50-fullscreen-shape',key); } catch { /* Then fullscreen may renegotiate once more. */ }
+  if (!(await saveDisplay(next))) { error(t('autoFail')); return; }
+  saveFlag('f50-view-areas', JSON.stringify(plan.shapes));
+  fit();
 }
-function storedFullscreenSize() { try { return localStorage.getItem('f50-fullscreen-shape') ?? ''; } catch { return ''; } }
-/** A close shape is renegotiated only in fullscreen, and there only once (renegotiate, display-fit.ts): opening
- *  the page or leaving fullscreen shows the current picture stretched (shownSize, never black bars) instead of a
- *  black reconnect right after opening. A clearly different shape (portrait, split screen) is renegotiated at
- *  once, as before (user 2026-10-12, replacing 2026-10-11's reconnect on every window change). */
+/** The window shapes this browser has shown, kept as CarPlay view areas (areaPlan, display-fit.ts): switching
+ *  between them (fullscreen in and out, the car's dock, a Tesla's own fullscreen) moves CarPlay to another area
+ *  without reconnecting; only a shape seen the first time reconnects, once (2026-10-14, replacing the earlier
+ *  "renegotiate a close shape in fullscreen only, once per browser"). */
+function storedShapes(): Area[] {
+  try { const value = JSON.parse(readFlag('f50-view-areas') || '[]'); return Array.isArray(value) ? value.filter(a => Number.isInteger(a?.width) && Number.isInteger(a?.height)) : []; }
+  catch { return []; }
+}
 function autoTarget() {
   const pixels=fastDecoder()?Math.min(2,Math.max(1,window.devicePixelRatio||1)):1;
   return suggestedResolution(screen.clientWidth*pixels,screen.clientHeight*pixels);
@@ -368,10 +386,10 @@ document.addEventListener('visibilitychange',()=>{
 });
 /** Straight into the viewer log, not only every 10 s: ev 1 hidden, 2 shown, 3 fullscreen, 4 out of fullscreen, 5 resized. */
 function pageEvent(ev: number) {
-  send({type:'stats',stats:{ev,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,width:screen.clientWidth,height:screen.clientHeight,want:wantFullscreen?1:0,...viewport()}});
+  connection.send({type:'stats',stats:{ev,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,width:screen.clientWidth,height:screen.clientHeight,want:wantFullscreen?1:0,...viewport()}});
 }
 /** Which page build runs (raised with each build tried in the car). */
-const BUILD = 202610141550;
+const BUILD = 202610142250;
 /** What the browser says of the space it gives the page, to find the car's bar over a fullscreen page (2026-10-13):
  *  window, visual viewport (and its offset), screen, available screen, outer window, pixel ratio. */
 function viewport(): Record<string, number> {
@@ -380,20 +398,6 @@ function viewport(): Record<string, number> {
     vt:Math.round(v?.offsetTop ?? -1), sw:d.width, sh:d.height, sah:d.availHeight, oh:window.outerHeight,
     dpr:Math.round(window.devicePixelRatio*100) };
 }
-/** Every key, wheel and focus move the page receives, by name ("inK<code>", "inWheelUp", "inFocus"), sent within a
- *  second as ev 6: what a car's steering-wheel buttons and scroll wheels reach the browser as (Tesla, 2026-10-14). */
-const inputSeen: Record<string, number> = {};
-let inputTimer = 0;
-function seenInput(name: string) {
-  const key = ('in' + name.replace(/[^A-Za-z]/g, '')).slice(0, 24);
-  inputSeen[key] = (inputSeen[key] ?? 0) + 1;
-  window.clearTimeout(inputTimer);
-  inputTimer = window.setTimeout(() => send({type:'stats',stats:{ev:6,...inputSeen}}), 1000);
-}
-window.addEventListener('keydown', e => seenInput('K' + (e.code || e.key || 'Unknown')), { capture: true });
-window.addEventListener('wheel', e => seenInput(Math.abs(e.deltaY) >= Math.abs(e.deltaX)
-  ? (e.deltaY < 0 ? 'WheelUp' : 'WheelDown') : (e.deltaX < 0 ? 'WheelLeft' : 'WheelRight')), { capture: true, passive: true });
-document.addEventListener('focusin', () => seenInput('Focus'), true);
 // ev 5: the window changed size (debounced), with what the browser says of it.
 let resizeTimer = 0;
 window.addEventListener('resize', () => { window.clearTimeout(resizeTimer); resizeTimer = window.setTimeout(() => pageEvent(5), 400); });
@@ -412,12 +416,69 @@ function musicTimeline(): Record<string, number> {
 }
 // Once a second while CarPlay runs: the pong comes back behind every frame still queued for this page.
 window.setInterval(()=>{ if (active) { lag.sent(performance.now()); connection.send({type:'ping'}); } },1000);
+/** Coming back after the car froze the browser (a Tesla away from it: reverse gear, another app; 2026-10-14). The
+ *  iPhone's CarPlay never stopped; only this page's link to the box may have. On a sign of coming back (a one-second
+ *  tick over 2.5 s late, the page shown again, "resume", the network back) the page asks on its link first: the box
+ *  keeps a silent page's link for 10 minutes with its sound held back, and an answer within PROBE_MS means a
+ *  keyframe and the picture go on over it (21 ms to the first picture in the car). Without an answer a new link
+ *  replaces it (the box drops the old one by this page's id). A reload, which loses the sound's unlock, only as the
+ *  last resort: no link for RELOAD_AFTER_MS while the box answers. The last picture stays up meanwhile (reset, hold).
+ *  A Tesla also leaves its Wi-Fi out of Park unless "Remain connected in Drive" is on: then the link comes back on
+ *  "online". Viewer log: ev 8 frozen (gapMs), 11 link open again (downMs), 12 reloading, 13 back (how: 1 same link,
+ *  2 new link, 3 network back), 14 first picture (pictureMs since waking). */
+const PROBE_MS = 600, RELOAD_AFTER_MS = 15000;
+let lastTick = performance.now(), lastHeard = performance.now(), revived = 0, hiddenMeanwhile = document.hidden;
+let reloading = false, closedAt = 0, lifecycle: Record<string, number> = {}, probing = 0, wokeAt = 0;
+/** Straight into the viewer log whenever the link is open (also before CarPlay runs), else with the next open. */
+function lifeEvent(ev: number, data: Record<string, number> = {}) {
+  lifecycle = { ...lifecycle, ev, ...data };
+  if (connection.send({ type:'stats', stats: lifecycle })) lifecycle = {};
+}
+function revive() { revived++; lastHeard = performance.now(); connection.restart(); }
+function wake(why: number) {
+  if (!token || probing || reloading) return;
+  const asked = performance.now();
+  if (asked - lastHeard < 1500) return;   // the box was heard just now: nothing was frozen
+  wokeAt = asked;
+  if (!connection.isOpen) { revive(); lifeEvent(13, { how: 2, why }); return; }   // no link to ask on
+  probing = window.setTimeout(() => {
+    probing = 0;
+    if (lastHeard > asked) { lifeEvent(13, { how: 1, why, ms: Math.round(lastHeard - asked) }); send({ type:'keyframe' }); return; }
+    revive();
+    lifeEvent(13, { how: 2, why });
+  }, PROBE_MS);
+  connection.send({ type:'ping' });
+  connection.send({ type:'keyframe' });
+}
+/** The last resort: a reload, as a refresh by hand always came back, while the box answers (a reload while the box
+ *  restarts would leave the browser's own error page). */
+function reloadWhenBoxAnswers() {
+  if (reloading) return;
+  reloading = true;
+  lifeEvent(12);
+  void fetch('./receiver-access.json', { cache: 'no-store' }).then(r => { if (r.ok) location.reload(); else reloading = false; })
+    .catch(() => { reloading = false; });
+}
+// A hidden page's timers are slowed on purpose (the XPeng's reverse camera hides the page, and its link lives on):
+// lateness then is no freeze.
+document.addEventListener('visibilitychange', () => { if (document.hidden) hiddenMeanwhile = true; else wake(4); });
+document.addEventListener('resume', () => wake(6));
+window.addEventListener('online', () => { if (token && !connection.isOpen) { lifeEvent(13, { how: 3 }); revive(); } });
+window.setInterval(() => {
+  const now = performance.now(), gap = now - lastTick, late = gap > 2500 && !hiddenMeanwhile;
+  lastTick = now; hiddenMeanwhile = document.hidden;
+  if (!token) return;
+  if (holding && !late) { holdAwakeMs += Math.min(gap, 1000); if (holdAwakeMs > HOLD_MS) { holding = false; clearPicture(); render(); } }
+  if (late) { lifeEvent(8, { gapMs: Math.round(gap) }); wake(1); }
+  else if (active && !document.hidden && now - lastHeard > 8000) revive();   // the link died while in view
+  else if (!document.hidden && closedAt && now - closedAt > RELOAD_AFTER_MS) reloadWhenBoxAnswers();
+}, 1000);
 window.setInterval(()=>{
   const now=performance.now(),seconds=Math.max(1,(now-reportStart)/1000);
   send({type:'stats',stats:{fps:reportFrames/seconds,decodeMs:video.decodeLatencyMs,queue:video.decodeQueueSize,
     kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,
     width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),...(musicBytes?{musicKbps:musicBytes*8/1000/seconds}:{}),
-    chrome:chromeMajor,build:BUILD,webView,teslaMode:teslaMode?1:0,promptGain,fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...microphone.report(),...audio.farReport(),...media.report(),...musicTimeline(),...audio.musicReport(),...video.takeStalls(),...lag.take(performance.now())}});
+    chrome:chromeMajor,build:BUILD,webView,teslaMode:teslaMode?1:0,promptGain,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...microphone.report(),...audio.farReport(),...media.report(),...musicTimeline(),...audio.musicReport(),...video.takeStalls(),...lag.take(performance.now())}});
   judgeDecoder(video.decodeLatencyMs, reportFrames/seconds);
   reportFrames=0;reportBytes=0;reportStart=now;touchSum=0;touchCount=0;musicBytes=0;
 },10000);

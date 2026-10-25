@@ -33,7 +33,13 @@ object CarPlayUiScale {
                 right = (it.right * width.toDouble() / display.widthPixels).roundToInt(),
             )
         }
+        fun area(value: AirPlayViewArea) = AirPlayViewArea(
+            width = minOf(width, pixels(value.width)), height = minOf(height, pixels(value.height)),
+            originX = (value.originX * width.toDouble() / display.widthPixels).roundToInt(),
+            originY = (value.originY * height.toDouble() / display.heightPixels).roundToInt(),
+        )
         return display.copy(widthPixels = width, heightPixels = height,
-            viewArea = insets(display.viewArea), safeArea = insets(display.safeArea))
+            viewArea = insets(display.viewArea), safeArea = insets(display.safeArea),
+            viewAreas = display.viewAreas?.map(::area))
     }
 }

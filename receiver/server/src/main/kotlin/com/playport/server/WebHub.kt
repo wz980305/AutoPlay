@@ -4,6 +4,7 @@ import com.shilapi.xcertplay.airplay.AudioFormat
 import com.shilapi.xcertplay.airplay.VideoCodec
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
+import io.ktor.server.plugins.origin
 import io.ktor.server.request.receiveText
 import io.ktor.server.request.uri
 import io.ktor.server.response.respondText
@@ -19,6 +20,7 @@ import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.webSocket
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -64,6 +66,9 @@ data class DisplayRequest(
     val fps: Int = 30,
     val uiScale: Int = 100,
     val hevc: Boolean = false,
+    /** Shapes the page's window takes (each at the stream's top left), and the one in use now. */
+    val areas: List<ViewArea> = emptyList(),
+    val area: Int = 0,
 )
 
 @Serializable
@@ -101,12 +106,24 @@ private class WsClient(
     }
     val keyframeRequested = AtomicLong(0)
     val id = nextClientId.incrementAndGet()
+    /** When anything last came from the page (it answers a mark every 200 ms while it runs). */
+    val lastHeard = AtomicLong(System.nanoTime())
+    val since: Long = System.nanoTime()
+    /** The page instance (a random id the page picks when it loads), so a reconnect replaces its old link at once. */
+    @Volatile var page: String = ""
+    @Volatile var session: kotlinx.coroutines.CoroutineScope? = null
+    /** Silent for 3 s: the browser froze the page (a Tesla away from its browser). Its sound is held back and the
+     *  picture waits for a keyframe (LagGate) until it answers again; the link itself is kept (SILENT_VIEWER_MS). */
+    fun paused(now: Long = System.nanoTime()) = now - lastHeard.get() > PAUSE_NANOS
+    @Volatile var wasPaused = false
     val videoSent = AtomicLong(0)
     val videoDropped = AtomicLong(0)
     val bytesSent = AtomicLong(0)
 
     private companion object {
         val nextClientId = AtomicLong(0)
+        // 3 s, not 1.5: a page just opened was once quiet for 1.6 s (2026-10-14), and a slow car's page may be.
+        const val PAUSE_NANOS = 3_000_000_000L
     }
 }
 
@@ -130,7 +147,7 @@ class WebHub(
     val viewerCount: Int get() = clients.size
 
     /** Applies a display change; returns null on success or an error message. */
-    @Volatile var onApplyDisplay: ((Int, Int, Int, Int, Boolean) -> String?)? = null
+    @Volatile var onApplyDisplay: ((DisplayRequest) -> String?)? = null
 
     /** Browser microphone payloads: (isOpus, payload). */
     @Volatile var onMicrophoneData: ((Boolean, ByteArray) -> Unit)? = null
@@ -242,7 +259,11 @@ class WebHub(
     }
 
     fun broadcastAudioPacket(type: Int, timestampUs: Long, payload: ByteArray) {
-        broadcastBinary(Wire.audioPacket(type, timestampUs, payload))
+        val bytes = Wire.audioPacket(type, timestampUs, payload)
+        val now = System.nanoTime()
+        for (client in clients) {
+            if (!client.paused(now)) client.offer(Frame.Binary(true, bytes))   // a frozen page gets no stale sound
+        }
     }
 
     fun broadcastAudioStopped(type: Int) {
@@ -309,7 +330,7 @@ class WebHub(
                     )
                     return@post
                 }
-                val error = applier(request.width, request.height, request.fps, request.uiScale, request.hevc)
+                val error = applier(request)
                 if (error != null) {
                     call.respondText(
                         "{\"error\":\"$error\"}",
@@ -327,7 +348,18 @@ class WebHub(
                     return@webSocket
                 }
                 val client = WsClient(Channel(capacity = SEND_QUEUE_CAPACITY))
+                client.page = call.request.queryParameters["page"]?.take(32)?.filter { it.isLetterOrDigit() } ?: ""
+                client.session = this
+                // The same page connecting again (it came back from a freeze): its old link goes at once, not after
+                // SILENT_VIEWER_MS, so the two never share the stream.
+                if (client.page.isNotEmpty()) clients.filter { it.page == client.page }.forEach { old ->
+                    log.info("viewer client={} replaced by client={}", old.id, client.id)
+                    old.session?.cancel()
+                }
                 clients.add(client)
+                val from = "${call.request.origin.remoteHost}:${call.request.origin.remotePort}"
+                log.info("viewer connected client={} from={} page={} viewers={}", client.id, from, client.page, clients.size)
+                var ending = "page closed"
                 val wsSession = this
                 val writer = launch {
                     try {
@@ -341,6 +373,20 @@ class WebHub(
                 val marker = launch {
                     while (true) {
                         delay(MARK_INTERVAL_MS)
+                        // A page that stopped answering marks was frozen (a Tesla's reverse gear, 2026-10-14) or lost:
+                        // close it, so it holds nothing and the log says when.
+                        val silentMs = (System.nanoTime() - client.lastHeard.get()) / 1_000_000
+                        if (client.paused() && !client.wasPaused) {
+                            client.wasPaused = true
+                            log.info("viewer paused client={} (silent {} ms)", client.id, silentMs)
+                        }
+                        if (silentMs > SILENT_VIEWER_MS) {
+                            ending = "silent ${silentMs} ms"
+                            // Cancel, not close(): a close frame waits behind a frozen page's full socket and never
+                            // finished (Tesla, 2026-10-14: the frozen viewer stayed listed next to its successor).
+                            wsSession.cancel()
+                            break
+                        }
                         val id = client.nextMark.incrementAndGet()
                         val frame = Frame.Text("""{"type":"mark","mark":$id}""")
                         // Counted with the mark itself, so its answer confirms everything up to here.
@@ -379,6 +425,14 @@ class WebHub(
                     }
                     configByStream.keys.forEach { streamType -> onViewerJoined?.invoke(streamType) }
                     for (frame in incoming) {
+                        val heardAt = System.nanoTime()
+                        if (client.wasPaused) {
+                            // Back from a freeze on the same link: a fresh keyframe at once.
+                            client.wasPaused = false
+                            log.info("viewer resumed client={} after {} ms", client.id, (heardAt - client.lastHeard.get()) / 1_000_000)
+                            configByStream.keys.forEach { streamType -> onViewerJoined?.invoke(streamType) }
+                        }
+                        client.lastHeard.set(heardAt)
                         if (frame is Frame.Binary) {
                             val data = frame.data
                             if (data.size >= 2) {
@@ -410,11 +464,16 @@ class WebHub(
                             inputHandler?.invoke(message)
                         }
                     }
+                } catch (error: Exception) {
+                    if (ending == "page closed") ending = "${error.javaClass.simpleName}: ${error.message}"
+                    throw error
                 } finally {
                     clients.remove(client)
                     client.channel.close()
                     writer.cancel()
                     marker.cancel()
+                    log.info("viewer closed client={} after {} s ({}) viewers={}", client.id,
+                        (System.nanoTime() - client.since) / 1_000_000_000, ending, clients.size)
                 }
             }
             get("/{path...}") {
@@ -461,6 +520,13 @@ class WebHub(
         put("fps", kotlinx.serialization.json.JsonPrimitive(display.fps))
         put("uiScale", kotlinx.serialization.json.JsonPrimitive(display.uiScale))
         put("hevc", kotlinx.serialization.json.JsonPrimitive(display.hevc))
+        put("areas", kotlinx.serialization.json.buildJsonArray {
+            display.areas.forEach { area -> add(kotlinx.serialization.json.buildJsonObject {
+                put("width", kotlinx.serialization.json.JsonPrimitive(area.width))
+                put("height", kotlinx.serialization.json.JsonPrimitive(area.height))
+            }) }
+        })
+        put("area", kotlinx.serialization.json.JsonPrimitive(display.area))
         put("orientation", kotlinx.serialization.json.JsonPrimitive(display.orientation))
         put(
             "presets",
@@ -541,5 +607,8 @@ class WebHub(
         const val ACCESS_FILE = "receiver-access.json"
         private const val KEYFRAME_REQUEST_INTERVAL_NS = 1_000_000_000L
         private const val MARK_INTERVAL_MS = 200L
+        /** No answer to marks for this long: the page is gone. A shorter silence only pauses it (WsClient.paused):
+         *  a Tesla page back within 10 minutes goes on over the same link. */
+        private const val SILENT_VIEWER_MS = 600_000L
     }
 }

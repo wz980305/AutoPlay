@@ -17,6 +17,9 @@ data class ServerConfig(
     val displayFps: Int = 60,
     val uiScale: Int = com.shilapi.xcertplay.airplay.CarPlayUiScale.DEFAULT,
     val hevc: Boolean = false,
+    /** View areas of the display (the page's window shapes) and the one CarPlay starts in. */
+    val displayAreas: List<ViewArea> = emptyList(),
+    val displayArea: Int = 0,
     /** Calls and Siri on the car's own Bluetooth (Tesla mode, 2026-10-14): no microphone, no call or Siri audio. */
     val carVoice: Boolean = false,
     val rightHandDrive: Boolean = false,

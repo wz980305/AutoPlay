@@ -35,6 +35,52 @@ class AirPlayInfoPlistTest {
     }
 
     @Test
+    fun severalViewAreasAreDeclaredAndSwitchedWithoutReconnecting() {
+        // A browser whose window changes shape (a Tesla windowed 1280x996 and fullscreen 1920x1080): the stream
+        // covers both, each shape is an area at its top left, and the car switches with updateViewArea.
+        val info = AirPlayInfoPlist.build(
+            AirPlayConfig(
+                deviceName = "test",
+                deviceId = "02:00:00:00:00:02",
+                btMac = "02:00:00:00:00:02",
+                sourceVersion = "366.0",
+                main = AirPlayDisplayConfig(widthPixels = 1920, heightPixels = 1080,
+                    viewAreas = listOf(AirPlayViewArea(1920, 1080), AirPlayViewArea(1280, 996)), initialViewArea = 1),
+            ),
+        )
+        val display = (info["displays"] as List<*>).first() as Map<*, *>
+        val areas = display["viewAreas"] as List<*>
+        assertEquals(2, areas.size)
+        assertEquals(1, display["initialViewArea"])
+        assertEquals(true, display["viewAreaTransitionControl"])
+        val small = areas[1] as Map<*, *>
+        assertEquals(1280, small["widthPixels"]); assertEquals(996, small["heightPixels"])
+        assertEquals(0, small["originXPixels"]); assertEquals(0, small["originYPixels"])
+        val safe = small["safeArea"] as Map<*, *>
+        assertEquals(1280, safe["widthPixels"]); assertEquals(996, safe["heightPixels"])
+
+        val command = AirPlayInfoPlist.viewAreaCommand(0, 2)
+        assertEquals("updateViewArea", command["type"])
+        val params = command["params"] as Map<*, *>
+        assertEquals(AirPlayInfoPlist.MAIN_UUID, params["uuid"])
+        assertEquals(0, params["viewAreaIndex"])
+        assertEquals(listOf(1), params["adjacentViewAreas"])
+    }
+
+    @Test
+    fun oneViewAreaKeepsTheEarlierDeclaration() {
+        val info = AirPlayInfoPlist.build(
+            AirPlayConfig(
+                deviceName = "test", deviceId = "02:00:00:00:00:02", btMac = "02:00:00:00:00:02", sourceVersion = "366.0",
+                main = AirPlayDisplayConfig(widthPixels = 1280, heightPixels = 720),
+            ),
+        )
+        val display = (info["displays"] as List<*>).first() as Map<*, *>
+        assertEquals(1, (display["viewAreas"] as List<*>).size)
+        assertFalse(display.containsKey("viewAreaTransitionControl"))
+    }
+
+    @Test
     fun callsAndSiriCanBeLeftToTheCar() {
         fun types(callsAndSiri: Boolean) = (AirPlayInfoPlist.build(
             AirPlayConfig(
