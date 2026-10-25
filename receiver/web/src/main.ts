@@ -4,6 +4,7 @@ import { MicrophoneUplink } from './mic';
 import { VideoPlayer } from './video';
 import { Connection } from './ws';
 import { SystemMedia } from './media-session';
+import { LagProbe } from './lag';
 import { shownSize, suggestedResolution, aspectChanged, closeShape } from './display-fit';
 import { t, language, setLanguage, type Key } from './i18n';
 import { isNight, parseNightMode } from './night';
@@ -84,6 +85,7 @@ const video = new VideoPlayer(canvas, error, () => {
   lastPaintAt = now;
 }, () => send({ type:'keyframe' }), fit);
 const audio = new AudioEngine(error);
+const lag = new LagProbe();
 const media = new SystemMedia(send, () => { void audio.unlock().catch(error); }, () => audio.pauseMusic());
 const microphone = new MicrophoneUplink((payload, opus) => {
   const frame = new Uint8Array(payload.length + 1); frame[0] = opus ? 0x11 : 0x10; frame.set(payload, 1); connection.sendBinary(frame);
@@ -116,12 +118,13 @@ function syncNight() {
   sentNight = night; send({ type:'night', night });
 }
 function reset() {
-  sentNight = null;
+  sentNight = null; lag.reset();
   active = painted = false; input.reset(); canvas.inert = true;
   video.close(); audio.stopAll(); media.setActive(false); void microphone.stop();
   canvas.getContext('2d')?.clearRect(0,0,canvas.width,canvas.height);
 }
 function server(message: ServerMessage) {
+  if (message.type === 'pong') { lag.pong(performance.now()); return; }
   if(message.type === 'artwork' && message.artwork) { media.setArtwork(message.revision ?? 0,message.artwork); return; }
   if (message.type === 'now-playing' && message.nowPlaying) { media.setMetadata(message.nowPlaying); return; }
   if (message.type === 'host-ui' && active) {
@@ -268,12 +271,14 @@ function musicTimeline(): Record<string, number> {
   if(!element) return {};
   return {elTime:Math.round(element.currentTime),elDur:Number.isFinite(element.duration)?Math.round(element.duration):-1};
 }
+// Once a second while CarPlay runs: the pong comes back behind every frame still queued for this page.
+window.setInterval(()=>{ if (active) { lag.sent(performance.now()); connection.send({type:'ping'}); } },1000);
 window.setInterval(()=>{
   const now=performance.now(),seconds=Math.max(1,(now-reportStart)/1000);
   send({type:'stats',stats:{fps:reportFrames/seconds,decodeMs:video.decodeLatencyMs,queue:video.decodeQueueSize,
     kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,
     width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),...(musicBytes?{musicKbps:musicBytes*8/1000/seconds}:{}),
-    chrome:chromeMajor,webView,...media.report(),...musicTimeline(),...video.takeStalls()}});
+    chrome:chromeMajor,webView,...media.report(),...musicTimeline(),...video.takeStalls(),...lag.take(performance.now())}});
   reportFrames=0;reportBytes=0;reportStart=now;touchSum=0;touchCount=0;musicBytes=0;
 },10000);
 render();fit();if(token) connection.connect();

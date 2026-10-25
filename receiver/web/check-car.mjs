@@ -79,6 +79,15 @@ function boxes(data){const result=[];for(let offset=0;offset<data.length;){const
 assert.deepEqual(boxes(init),['ftyp','moov']);
 assert.deepEqual(boxes(aacFragment(1,0,[new Uint8Array([1,2,3])])),['moof','mdat']);
 assert.throws(()=>aacInit(48000,2,new Uint8Array()));
+{ // The pong waits behind every queued frame, so its round trip is how far the picture lags behind.
+  const {LagProbe}=await load('lag');const probe=new LagProbe();
+  probe.sent(0);probe.sent(1000);probe.pong(120);probe.pong(1900);
+  assert.deepEqual(probe.take(2000),{lagMs:900},'Worst round trip of the window');
+  assert.deepEqual(probe.take(3000),{},'Nothing measured, nothing reported');
+  probe.sent(3000);probe.sent(4000);
+  assert.deepEqual(probe.take(14000),{lagMs:11000},'A pong still queued counts with its age, so a lag beyond the window shows');
+  probe.reset();assert.deepEqual(probe.take(15000),{},'A new connection starts clean');
+  for(let i=0;i<100;i++)probe.sent(i);assert.ok(probe.pending<=30,'No unbounded list when pongs never come'); }
 const {isNight,parseNightMode}=await load('night');
 const at=(h,m)=>new Date(2026,9,10,h,m);
 assert.equal(parseNightMode(null),'schedule');assert.equal(parseNightMode('bogus'),'schedule');assert.equal(parseNightMode('system'),'system');
