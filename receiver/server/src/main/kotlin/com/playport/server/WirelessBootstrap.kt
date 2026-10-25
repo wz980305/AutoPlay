@@ -50,7 +50,7 @@ class WirelessBootstrap(private val server: CarPlayServer) : Closeable {
             if (!wifi.ssid.isNullOrBlank() && config.wifiPassphrase.isNullOrBlank()) {
                 log.warn("no --wifi-passphrase configured; the phone must already know network {}", wifi.ssid)
             }
-            val bridgePath = resolveBridgePath(config.bluetoothBridge)
+            val bridgePath = BluetoothBridge.resolvePath(config.bluetoothBridge)
             if (bridgePath == null) {
                 log.warn(
                     "wireless bootstrap skipped: bt-bridge helper not found; " +
@@ -64,7 +64,7 @@ class WirelessBootstrap(private val server: CarPlayServer) : Closeable {
                 log.warn("wireless bootstrap skipped: no paired iPhone found; pass --bt-address AA:BB:CC:DD:EE:FF")
                 return
             }
-            val hostBluetoothMac = BluetoothBridge.localAddress(bridgePath) ?: server.deviceId
+            val hostBluetoothMac = server.hostBluetoothMac
             log.info("wireless bootstrap: iPhone={} hostBt={} wifi={} ch={}", deviceAddress, hostBluetoothMac, wifi.ssid, wifi.channel)
 
             val stream = BluetoothBridge.open(bridgePath, deviceAddress).also { bridgeProcess = it }
@@ -122,15 +122,6 @@ class WirelessBootstrap(private val server: CarPlayServer) : Closeable {
         }
     }
 
-    private fun resolveBridgePath(configured: Path?): Path? {
-        val candidates = listOfNotNull(
-            configured,
-            Path.of("macos/bt-bridge/bt-bridge"),
-            Path.of("macos/bt-bridge/.build/bt-bridge"),
-        )
-        return candidates.firstOrNull { Files.isExecutable(it) }
-    }
-
     override fun close() {
         stopped = true
         running = false
@@ -141,6 +132,15 @@ class WirelessBootstrap(private val server: CarPlayServer) : Closeable {
 
 /** Helpers around the macOS bt-bridge executable. */
 object BluetoothBridge {
+    fun resolvePath(configured: Path?): Path? {
+        val candidates = listOfNotNull(
+            configured,
+            Path.of("macos/bt-bridge/bt-bridge"),
+            Path.of("macos/bt-bridge/.build/bt-bridge"),
+        )
+        return candidates.firstOrNull { Files.isExecutable(it) }
+    }
+
     private val log = LoggerFactory.getLogger("bt-bridge")
 
     fun localAddress(bridgePath: Path): String? = runCatching {
