@@ -6,6 +6,11 @@ export type MusicKind = 'aac' | 'flac';
 /** The song as the iPhone reports it: position and duration in seconds, and what identifies the song. */
 export interface SongTimeline { position: number; duration: number; key: string; playing: boolean; }
 const MIMES: Record<MusicKind,string> = { aac: 'audio/mp4; codecs="mp4a.40.2"', flac: FLAC_MIME };
+/** How far behind the newest audio the element plays. Over Wi-Fi (AAC) the iPhone's packets come with gaps of
+ *  about 400 ms every few seconds (F50, 2026-10-12): 0.65 s ran dry and the music stuttered. */
+const CUSHION: Record<MusicKind,number> = { aac: 1, flac: .65 };
+/** AAC frames (1024 samples, 21 ms) per MP4 fragment: small, so audio reaches the element as it arrives. */
+const AAC_FRAGMENT = 4;
 /** A real HTML media timeline makes received music eligible for OS media controls. */
 export class MusicOutput {
   static supported(kind: MusicKind = 'aac') { return typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported(MIMES[kind]); }
@@ -50,7 +55,9 @@ export class MusicOutput {
   get playing(){return this.running&&!this.element.paused&&performance.now()-this.lastPacket<1800;}
   pause(){this.element.pause();this.running=false;this.frames=[];this.pcm=[];this.pcmBytes=0;}
   unlock(){
-    if(this.element.paused && this.buffer?.buffered.length) this.element.currentTime=this.buffer.buffered.end(this.buffer.buffered.length-1);
+    // Not right at the end: playing from the last sample ran dry at once, a crackle on opening the page.
+    const b=this.buffer;
+    if(this.element.paused && b?.buffered.length) this.element.currentTime=Math.max(b.buffered.start(0),b.buffered.end(b.buffered.length-1)-CUSHION[this.kind]);
     return this.element.play();
   }
   volume(value:number){this.element.volume=Math.max(0,Math.min(1,value));}
@@ -58,9 +65,9 @@ export class MusicOutput {
     if(this.closed)return;
     if(this.kind==='flac'){this.pcmPacket(data);return;}
     this.lastPacket=performance.now();this.frames.push(data.slice());
-    if(this.frames.length<20)return;
+    if(this.frames.length<AAC_FRAGMENT)return;
     this.pending.push(aacFragment(this.sequence++,this.samples,this.frames));this.samples+=1024*this.frames.length;this.frames=[];
-    if(this.pending.length>12){this.onError('Music buffer is not advancing');this.close();return;}
+    if(this.pending.length>48){this.onError('Music buffer is not advancing');this.close();return;}
     this.pump();
   }
   /** LPCM packets (352 samples each) are cut into fixed FLAC_BLOCK blocks, one MP4 fragment each. */
@@ -107,7 +114,7 @@ export class MusicOutput {
       if(this.align(b))return;
       if(b.buffered.length){
         const end=b.buffered.end(b.buffered.length-1),now=this.element.currentTime;
-        if(end-now>2)this.element.currentTime=Math.max(b.buffered.start(0),end-.65);
+        if(end-now>CUSHION[this.kind]+1.35)this.element.currentTime=Math.max(b.buffered.start(0),end-CUSHION[this.kind]);
         if(now-b.buffered.start(0)>15){b.remove(0,now-10);return;}
       }
       const next=this.pending.shift();if(next){b.appendBuffer(next as Uint8Array<ArrayBuffer>);this.started=true;}
