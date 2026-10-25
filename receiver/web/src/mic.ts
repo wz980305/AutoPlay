@@ -213,7 +213,10 @@ export class MicrophoneUplink {
  *  not cancelled (open); ducking the microphone while the far end played only made it rough; at 1 it was faint. */
 function micGain(): number {
   const value = Number(new URLSearchParams(location.search).get('micgain'));
-  return Number.isFinite(value) && value >= 1 && value <= 64 ? value : 16;
+  // A Tesla's microphone reaches the page about 90 times louder than the XPeng's (Siri peaks near full scale at 16,
+  // 2026-10-14): 4 in Tesla mode.
+  const tesla = (window as unknown as { playportTeslaMode?: boolean }).playportTeslaMode === true;
+  return Number.isFinite(value) && value >= 1 && value <= 64 ? value : tesla ? 4 : 16;
 }
 
 function describeError(error: unknown): string {

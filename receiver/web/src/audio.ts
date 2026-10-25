@@ -31,20 +31,70 @@ export class AudioEngine {
       (this.context.state === 'running' && performance.now() - this.lastAudioAt < 1800);
   }
 
-  constructor(private readonly onError: (message: string) => void) {
+  /** Navigation prompts and alerts (audioType "default") boosted by this much through a limiter: in a Tesla the
+   *  music goes to the car over Bluetooth at the car's volume while prompts come through the browser, and they were
+   *  hard to hear at 1 (2026-10-14). 1 leaves them as sent. */
+  private readonly promptBoost: number;
+  private promptLimiter: DynamicsCompressorNode | null = null;
+  /** Tesla mode: music is the car's, over Bluetooth; music the iPhone still sends here is not played, so that the
+   *  two never sound together. */
+  private readonly musicOff: boolean;
+  /** Tesla mode: the car takes a browser that has an audio output open, even a silent one, for a music source and
+   *  switched its media card between it and the iPhone's Bluetooth over and over (2026-10-14). The output is closed
+   *  (context suspended) a few seconds after the last stream ends and opened again for the next prompt or call. */
+  private readonly idleClose: boolean;
+  private idleTimer = 0;
+  private sleeping = false;
+
+  constructor(private readonly onError: (message: string) => void, options: { promptBoost?: number; musicOff?: boolean; idleClose?: boolean } = {}) {
     this.context = new AudioContext({ latencyHint: 'interactive' });
     this.gain = this.context.createGain();
     this.gain.connect(this.context.destination);
+    this.promptBoost = Math.min(8, Math.max(1, options.promptBoost ?? 1));
+    this.musicOff = options.musicOff ?? false;
+    this.idleClose = options.idleClose ?? false;
+  }
+
+  /** idleClose: open the output for a stream, close it again when none is left. */
+  private wake(): void {
+    if (!this.idleClose) return;
+    window.clearTimeout(this.idleTimer);
+    if (this.context.state === 'suspended' && this.unlocked) void this.context.resume().then(() => { this.sleeping = false; }).catch(() => {});
+  }
+  private sleepWhenIdle(): void {
+    if (!this.idleClose) return;
+    window.clearTimeout(this.idleTimer);
+    this.idleTimer = window.setTimeout(() => {
+      if (this.streams.size === 0 && this.context.state === 'running') { this.sleeping = true; void this.context.suspend().catch(() => { this.sleeping = false; }); }
+    }, 3000);
+  }
+
+  private streamGainValue(name: string): number {
+    return (this.streamGains.get(name) ?? 1) * (name === 'default' ? this.promptBoost : 1);
+  }
+
+  private streamOutput(name: string): AudioNode {
+    if (name !== 'default' || this.promptBoost === 1) return this.gain;
+    if (!this.promptLimiter) {
+      const limiter = this.context.createDynamicsCompressor();
+      limiter.threshold.value = -6; limiter.knee.value = 0; limiter.ratio.value = 20;
+      limiter.attack.value = 0.003; limiter.release.value = 0.1;
+      limiter.connect(this.gain);
+      this.promptLimiter = limiter;
+    }
+    return this.promptLimiter;
   }
 
   get isUnlocked(): boolean {
-    return this.unlocked && this.context.state === 'running' && Array.from(this.streams.values()).every(s => !s.music || s.music.unlocked);
+    return this.unlocked && (this.context.state === 'running' || this.sleeping) && Array.from(this.streams.values()).every(s => !s.music || s.music.unlocked);
   }
 
   /** Must run inside a user gesture so the browser allows audio playback. */
   async unlock(): Promise<void> {
     await Promise.all([this.context.resume(), ...Array.from(this.streams.values()).flatMap(s => s.music ? [s.music.unlock()] : [])]);
     this.unlocked = this.context.state === 'running';
+    this.sleeping = false;
+    if (this.streams.size === 0) this.sleepWhenIdle();
   }
 
   setVolume(volume: number): void {
@@ -57,7 +107,7 @@ export class AudioEngine {
     const gain = Math.min(1, Math.max(0, value));
     this.streamGains.set(name, gain);
     for (const state of this.streams.values()) {
-      if (state.name === name) state.gain.gain.value = gain;
+      if (state.name === name) state.gain.gain.value = this.streamGainValue(name);
     }
   }
 
@@ -67,9 +117,11 @@ export class AudioEngine {
 
   handleConfig(message: AudioConfigMessage): void {
     this.closeStream(message.streamType);
+    this.wake();
+    if (this.musicOff && message.name === 'media') return;   // its packets find no stream and are dropped
     const streamGain = this.context.createGain();
-    streamGain.gain.value = this.streamGains.get(message.name) ?? 1;
-    streamGain.connect(this.gain);
+    streamGain.gain.value = this.streamGainValue(message.name);
+    streamGain.connect(this.streamOutput(message.name));
     const state: StreamState = {
       codec: message.codec,
       sampleRate: message.sampleRate,
@@ -171,6 +223,7 @@ export class AudioEngine {
       state.music = null;
     }
     this.closeStream(streamType);
+    this.sleepWhenIdle();
   }
 
   /** Music element counters for the viewer log (music-output.ts). */

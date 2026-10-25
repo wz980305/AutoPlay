@@ -17,6 +17,8 @@ data class ServerConfig(
     val displayFps: Int = 60,
     val uiScale: Int = com.shilapi.xcertplay.airplay.CarPlayUiScale.DEFAULT,
     val hevc: Boolean = false,
+    /** Calls and Siri on the car's own Bluetooth (Tesla mode, 2026-10-14): no microphone, no call or Siri audio. */
+    val carVoice: Boolean = false,
     val rightHandDrive: Boolean = false,
     val bindAddress: String? = null,
     val identityDir: Path,
@@ -75,6 +77,7 @@ data class ServerConfig(
                     "--fps" -> config = config.copy(displayFps = nextValue(flag).toInt())
                     "--ui-scale" -> config = config.copy(uiScale = com.shilapi.xcertplay.airplay.CarPlayUiScale.sanitize(nextValue(flag).toInt()))
                     "--hevc" -> config = config.copy(hevc = true)
+                    "--car-voice" -> config = config.copy(carVoice = true)
                     "--rhd" -> config = config.copy(rightHandDrive = true)
                     "--bind" -> config = config.copy(bindAddress = nextValue(flag))
                     "--identity-dir" -> config = config.copy(identityDir = Path.of(nextValue(flag)))

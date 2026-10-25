@@ -46,7 +46,7 @@ object AirPlayInfoPlist {
         )
         if (!config.disableAudioOutput) {
             info["audioLatencies"] = audioLatencies()
-            info["audioFormats"] = audioFormats(config.entertainmentSampleRate, config.microphone)
+            info["audioFormats"] = audioFormats(config.entertainmentSampleRate, config.microphone, config.callsAndSiri)
         }
         info["extendedFeatures"] = listOf("vocoderInfo", "enhancedRequestCarUI")
         info["displays"] = displays
@@ -110,6 +110,7 @@ object AirPlayInfoPlist {
     private fun audioFormats(
         entertainmentRate: Int,
         microphone: Boolean,
+        callsAndSiri: Boolean = true,
     ): List<Map<String, Any?>> {
         fun format(type: Int, audioType: String, outputFormats: Int, inputFormats: Int? = null): Map<String, Any?> {
             val entry = linkedMapOf<String, Any?>(
@@ -130,14 +131,16 @@ object AirPlayInfoPlist {
         val pcmInput = if (microphone) pcmMono else null
         val wirelessInput = if (microphone) pcmMono or opus else null
 
-        return listOf(
+        // callsAndSiri false: no call and no Siri audio, the iPhone keeps them on the car's own Bluetooth (DashPlay
+        // Tesla mode, 2026-10-14); the receiver plays prompts, alerts and music only.
+        return listOfNotNull(
             format(100, "compatibility", pcm, pcmInput),
             format(101, "compatibility", pcm),
             format(100, "default", pcm or opus, wirelessInput),
             format(100, "alert", pcm or opus),
             format(100, "media", pcm),
-            format(100, "telephony", pcmMono or opus, wirelessInput),
-            format(100, "speechRecognition", pcmMono or opus, wirelessInput),
+            if (callsAndSiri) format(100, "telephony", pcmMono or opus, wirelessInput) else null,
+            if (callsAndSiri) format(100, "speechRecognition", pcmMono or opus, wirelessInput) else null,
             format(101, "default", pcm or opus),
             format(102, "media", aacLc),
         )

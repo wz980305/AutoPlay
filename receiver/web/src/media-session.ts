@@ -46,7 +46,10 @@ export class SystemMedia {
   private refreshMetadata() {
     if (this.supported) navigator.mediaSession.metadata = this.active && typeof MediaMetadata !== "undefined" ? new MediaMetadata(this.info) : null;
   }
-  readonly supported = 'mediaSession' in navigator;
+  /** Off in Tesla mode: the car took the page for a second music source beside the iPhone on its Bluetooth, paused
+   *  one for the other (its pause reached the page and went on to the iPhone) and the two kept fighting (2026-10-14).
+   *  There the music is the car's own; the page names no song and passes on no media key. */
+  readonly supported: boolean;
   /** Whether the iPhone says it plays; undefined while it has not said. */
   get phoneState() { return this.phonePlaying; }
   /** For the box's viewer log: can the OS media card take our song position at all, and which one we give it. */
@@ -56,7 +59,8 @@ export class SystemMedia {
     const actions = this.actions; this.actions = {};
     return this.duration > 0 ? { positionState, songPos: Math.round(this.positionNow()), songDur: Math.round(this.duration), art, ...actions } : { positionState, ...actions };
   }
-  constructor(private readonly send: (message: ClientMessage) => void, unlock: () => void, pause: () => void = () => {}) {
+  constructor(private readonly send: (message: ClientMessage) => void, unlock: () => void, pause: () => void = () => {}, passive = false) {
+    this.supported = !passive && 'mediaSession' in navigator;
     if (!this.supported) return;
     const handlers: Partial<Record<MediaSessionAction, () => void>> = {
       play: () => { unlock(); this.command(1); },
@@ -75,6 +79,14 @@ export class SystemMedia {
     }
   }
   private command(index: number) { if (this.active) this.send({ type: 'media', media: index }); }
+  /** While Siri, a call or a prompt sounds from this page and no music does (Tesla mode): what the car's media card
+   *  shows instead of the page address (a Tesla showed the page and its address during Siri, 2026-10-14). null
+   *  puts the song back. */
+  announce(label: string | null) {
+    if (!this.supported || typeof MediaMetadata === 'undefined') return;
+    if (label) navigator.mediaSession.metadata = new MediaMetadata({ title: label, artist: 'DashPlay' });
+    else this.refreshMetadata();
+  }
   setActive(active: boolean) {
     this.active = active;
     if (!this.supported) return;

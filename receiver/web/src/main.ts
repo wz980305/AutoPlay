@@ -72,7 +72,34 @@ function fit() {
   const size = shownSize(canvas.width, canvas.height, screen.clientWidth, screen.clientHeight);
   surface.style.width = `${size.width}px`; surface.style.height = `${size.height}px`;
 }
-function error(message: string) { el('error-text').textContent = message; el('error-banner').hidden = !message; }
+function error(message: string) {
+  // This browser said it decodes H.265 but cannot: auto goes back to H.264 for good (on this browser).
+  if (message.includes('H.265/HEVC')) { saveFlag('f50-hevc-failed', '1'); lastAutoTarget = ''; scheduleAuto(); }
+  el('error-text').textContent = message; el('error-banner').hidden = !message;
+}
+/** Auto quality (2026-10-14; a Tesla decodes a frame in ~1 ms, the XPeng in 60-100 ms): once this browser has
+ *  shown it decodes fast (f50-fast-decoder, from the 10 s reports), auto picks the resolution from the screen's real
+ *  pixels (CSS size x device pixel ratio, long side 1280-1920) and H.265 when the browser decodes it; a slow decoder
+ *  keeps the CSS-size choice and H.264. The codec list (auto / H.264 / H.265) overrides. */
+function readFlag(key: string) { try { return localStorage.getItem(key) ?? ''; } catch { return ''; } }
+function saveFlag(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* Then auto stays as it was. */ } }
+let hevcDecodes = false;
+if (typeof VideoDecoder !== 'undefined') void VideoDecoder.isConfigSupported({codec:'hvc1.1.6.L120.B0',codedWidth:1920,codedHeight:1080})
+  .then(support => { hevcDecodes = support.supported === true; scheduleAuto(); }).catch(() => {});
+const fastDecoder = () => readFlag('f50-fast-decoder') === '1';
+function wantHevc() {
+  const codec = el<HTMLSelectElement>('codec').value;
+  return codec === 'h265' || (codec === 'auto' && fastDecoder() && hevcDecodes && readFlag('f50-hevc-failed') !== '1');
+}
+let fastReports = 0, slowReports = 0;
+/** Called with each 10 s report: three fast ones in a row mark this browser fast, three slow ones unmark it. */
+function judgeDecoder(decodeMs: number, fps: number) {
+  if (!(decodeMs > 0) || fps < 5) return;
+  fastReports = decodeMs < 12 ? fastReports + 1 : 0;
+  slowReports = decodeMs > 40 ? slowReports + 1 : 0;
+  if (fastReports >= 3 && !fastDecoder()) { saveFlag('f50-fast-decoder', '1'); lastAutoTarget = ''; scheduleAuto(); }
+  if (slowReports >= 3 && fastDecoder()) { saveFlag('f50-fast-decoder', '0'); lastAutoTarget = ''; scheduleAuto(); }
+}
 function send(message: ClientMessage) { if (active) connection.send(message); }
 const video = new VideoPlayer(canvas, error, () => {
   if (!active) return;
@@ -84,9 +111,32 @@ const video = new VideoPlayer(canvas, error, () => {
   }
   lastPaintAt = now;
 }, () => send({ type:'keyframe' }), fit);
-const audio = new AudioEngine(error);
+// Tesla mode, turned on by the person on the box (2026-10-14): the music goes to the car over Bluetooth, so the
+// steering wheel, media card and volume are the car's own; this page plays only prompts and calls, prompts boosted.
+// ?promptgain=1..8 overrides the boost.
+const teslaMode = (window as unknown as { playportTeslaMode?: boolean }).playportTeslaMode === true;
+const promptGain = Number(new URLSearchParams(location.search).get('promptgain')) || (teslaMode ? 3 : 1);
+// Music the iPhone still sends here is played: it sends music to one place at a time, and after Siri from the
+// CarPlay screen it sent it here for ~27 s before going back to the car's Bluetooth, silent while it was dropped.
+const audio = new AudioEngine(error, { promptBoost: promptGain, idleClose: teslaMode });
+/** Tesla mode: the car's media card shows the page's title and address whenever the page sounds (Siri, prompts,
+ *  calls); name it instead (2026-10-14). The last voice stream to start wins; the title goes back when none is left. */
+const voiceLabels: Record<string, string> = { speechrecognition: 'Siri', telephony: '通话', default: '导航播报' };
+const voices = new Map<number, string>();
+function showVoice() {
+  const label = Array.from(voices.values()).pop() ?? null;
+  document.title = label ? `${label} · DashPlay` : 'DashPlay';
+  media.announce(label);
+}
+function voiceStarted(streamType: number, name: string) {
+  if (!teslaMode) return;
+  voices.delete(streamType);
+  if (voiceLabels[name]) voices.set(streamType, voiceLabels[name]);
+  showVoice();
+}
+function voiceStopped(streamType: number) { if (teslaMode && voices.delete(streamType)) showVoice(); }
 const lag = new LagProbe();
-const media = new SystemMedia(send, () => { void audio.unlock().catch(error); }, () => audio.pauseMusic());
+const media = new SystemMedia(send, () => { void audio.unlock().catch(error); }, () => audio.pauseMusic(), teslaMode);
 const microphone = new MicrophoneUplink((payload, opus) => {
   const frame = new Uint8Array(payload.length + 1); frame[0] = opus ? 0x11 : 0x10; frame.set(payload, 1); connection.sendBinary(frame);
 }, message => { el('mic-status').textContent = message; });
@@ -95,9 +145,9 @@ const connection = new Connection(token, {
     switch (message.kind) {
       case 'video-config': video.configure(message); break;
       case 'video-frame': video.pushFrame(message); break;
-      case 'audio-config': audio.handleConfig(message); break;
+      case 'audio-config': audio.handleConfig(message); voiceStarted(message.streamType, message.name); break;
       case 'audio-packet': if (message.streamType === 102) musicBytes += message.data.length; audio.handlePacket(message); break;
-      case 'audio-stopped': audio.stopStream(message.streamType); break;
+      case 'audio-stopped': audio.stopStream(message.streamType); voiceStopped(message.streamType); break;
     }
   },
   onServer: server,
@@ -189,7 +239,19 @@ let wantFullscreen = false, hiddenAt = -Infinity, shownAt = -Infinity, coveredIn
  *  and never reached CarPlay (2026-10-13). */
 let restoreArmed = false;
 const restoring = () => restoreArmed && wantFullscreen && !document.fullscreenElement && !document.hidden;
+/** A Tesla's browser ignores a page's fullscreen request; it shows a page without its address bar when it comes
+ *  through a video site it lists (in China v.qq.com and 1905.com, as tesla-kit.com does; elsewhere
+ *  youtube.com/redirect). In Tesla mode the fullscreen button takes that way back to this page (2026-10-14); the
+ *  "?www.1905.com" it ends with marks a page already shown that way. */
+const teslaBorderless = location.search.includes('www.1905.com');
+function teslaFullscreenUrl() {
+  // 1905.com goes on only when the text between "//" and the first "/" ends in "1905.com": no "/" before the "?"
+  // (with "/?" it went to its own home page, 2026-10-14); this page is the site's root anyway.
+  return 'https://v.qq.com/search_redirect.html?url=https://www.1905.com/api/redirec.html?redirect_url='
+    + `${location.origin}?www.1905.com`;
+}
 async function toggleFullscreen() {
+  if (teslaMode && !teslaBorderless) { location.href = teslaFullscreenUrl(); return; }
   try {
     if (document.fullscreenElement) { wantFullscreen = false; await document.exitFullscreen(); }
     else await document.documentElement.requestFullscreen();
@@ -241,7 +303,8 @@ async function loadDisplay() {
     display = await r.json() as Display;
     el<HTMLInputElement>('width').value = String(display.width); el<HTMLInputElement>('height').value = String(display.height);
     el<HTMLSelectElement>('fps').value = String(display.fps); el<HTMLSelectElement>('ui-scale').value = String(display.uiScale);
-    el('display-status').textContent = `${display.width} × ${display.height} / ${display.fps} fps`;
+    el('display-status').dataset.codec = display.hevc ? 'H.265' : 'H.264';
+    el('display-status').textContent = `${display.width} × ${display.height} / ${display.fps} fps / ${display.hevc ? 'H.265' : 'H.264'}`;
     scheduleAuto();
   } catch { el('display-status').textContent = t('loadFail'); }
 }
@@ -265,13 +328,15 @@ async function adapt() {
   // Not for a hidden page (a covered page reports a small window) nor while fullscreen waits for its tap; a timer
   // set just before the car covered the page fired anyway and renegotiated to 800x400 (Chrome, 2026-10-12).
   if (!display || !autoFit.checked || displayBusy || document.hidden || (wantFullscreen && !document.fullscreenElement)) return;
-  const target=autoTarget(),fullscreen=!!document.fullscreenElement;
-  if (!renegotiate(display,target,fullscreen,storedFullscreenSize())) return;
-  const key=`${target.width}x${target.height}`;
+  const target=autoTarget(),fullscreen=!!document.fullscreenElement,hevc=wantHevc();
+  // Sharper than now (a fast decoder's real pixels, or the codec changed): once; else the shape rules below.
+  const sharper=target.width*target.height>display.width*display.height*1.2||hevc!==display.hevc;
+  if (!sharper && !renegotiate(display,target,fullscreen,storedFullscreenSize())) return;
+  const key=`${target.width}x${target.height}${hevc?'-h265':''}`;
   if (key===lastAutoTarget) return;
   // Avoid a reconnect loop even when another viewer has a different screen shape.
   lastAutoTarget=key;
-  if (!(await saveDisplay({...display,...target,hevc:false}))) { error(t('autoFail')); return; }
+  if (!(await saveDisplay({...display,...target,hevc}))) { error(t('autoFail')); return; }
   if (fullscreen) try { localStorage.setItem('f50-fullscreen-shape',key); } catch { /* Then fullscreen may renegotiate once more. */ }
 }
 function storedFullscreenSize() { try { return localStorage.getItem('f50-fullscreen-shape') ?? ''; } catch { return ''; } }
@@ -280,14 +345,17 @@ function storedFullscreenSize() { try { return localStorage.getItem('f50-fullscr
  *  black reconnect right after opening. A clearly different shape (portrait, split screen) is renegotiated at
  *  once, as before (user 2026-10-12, replacing 2026-10-11's reconnect on every window change). */
 function autoTarget() {
-  return suggestedResolution(screen.clientWidth,screen.clientHeight);
+  const pixels=fastDecoder()?Math.min(2,Math.max(1,window.devicePixelRatio||1)):1;
+  return suggestedResolution(screen.clientWidth*pixels,screen.clientHeight*pixels);
 }
+el<HTMLSelectElement>('codec').value = readFlag('f50-codec') || 'auto';
+el<HTMLSelectElement>('codec').onchange=() => { saveFlag('f50-codec', el<HTMLSelectElement>('codec').value); lastAutoTarget=''; scheduleAuto(); };
 autoFit.onchange=() => { localStorage.setItem('f50-auto-fit',String(autoFit.checked)); lastAutoTarget=''; render(); scheduleAuto(); };
 el<HTMLFormElement>('display-form').onsubmit=event => {
   event.preventDefault();
   const size=autoFit.checked?autoTarget():{width:Number(el<HTMLInputElement>('width').value),height:Number(el<HTMLInputElement>('height').value)};
   if (![size.width,size.height].every(v=>Number.isInteger(v)&&v>=480&&v<=3840&&v%2===0)) { error(t('range')); return; }
-  void saveDisplay({...size,fps:Number(el<HTMLSelectElement>('fps').value),uiScale:Number(el<HTMLSelectElement>('ui-scale').value),hevc:false});
+  void saveDisplay({...size,fps:Number(el<HTMLSelectElement>('fps').value),uiScale:Number(el<HTMLSelectElement>('ui-scale').value),hevc:wantHevc()});
 };
 new ResizeObserver(()=>{ fit(); scheduleAuto(); }).observe(screen);
 document.addEventListener('visibilitychange',()=>{
@@ -303,7 +371,7 @@ function pageEvent(ev: number) {
   send({type:'stats',stats:{ev,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,width:screen.clientWidth,height:screen.clientHeight,want:wantFullscreen?1:0,...viewport()}});
 }
 /** Which page build runs (raised with each build tried in the car). */
-const BUILD = 202610132400;
+const BUILD = 202610141550;
 /** What the browser says of the space it gives the page, to find the car's bar over a fullscreen page (2026-10-13):
  *  window, visual viewport (and its offset), screen, available screen, outer window, pixel ratio. */
 function viewport(): Record<string, number> {
@@ -312,6 +380,20 @@ function viewport(): Record<string, number> {
     vt:Math.round(v?.offsetTop ?? -1), sw:d.width, sh:d.height, sah:d.availHeight, oh:window.outerHeight,
     dpr:Math.round(window.devicePixelRatio*100) };
 }
+/** Every key, wheel and focus move the page receives, by name ("inK<code>", "inWheelUp", "inFocus"), sent within a
+ *  second as ev 6: what a car's steering-wheel buttons and scroll wheels reach the browser as (Tesla, 2026-10-14). */
+const inputSeen: Record<string, number> = {};
+let inputTimer = 0;
+function seenInput(name: string) {
+  const key = ('in' + name.replace(/[^A-Za-z]/g, '')).slice(0, 24);
+  inputSeen[key] = (inputSeen[key] ?? 0) + 1;
+  window.clearTimeout(inputTimer);
+  inputTimer = window.setTimeout(() => send({type:'stats',stats:{ev:6,...inputSeen}}), 1000);
+}
+window.addEventListener('keydown', e => seenInput('K' + (e.code || e.key || 'Unknown')), { capture: true });
+window.addEventListener('wheel', e => seenInput(Math.abs(e.deltaY) >= Math.abs(e.deltaX)
+  ? (e.deltaY < 0 ? 'WheelUp' : 'WheelDown') : (e.deltaX < 0 ? 'WheelLeft' : 'WheelRight')), { capture: true, passive: true });
+document.addEventListener('focusin', () => seenInput('Focus'), true);
 // ev 5: the window changed size (debounced), with what the browser says of it.
 let resizeTimer = 0;
 window.addEventListener('resize', () => { window.clearTimeout(resizeTimer); resizeTimer = window.setTimeout(() => pageEvent(5), 400); });
@@ -335,7 +417,8 @@ window.setInterval(()=>{
   send({type:'stats',stats:{fps:reportFrames/seconds,decodeMs:video.decodeLatencyMs,queue:video.decodeQueueSize,
     kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,
     width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),...(musicBytes?{musicKbps:musicBytes*8/1000/seconds}:{}),
-    chrome:chromeMajor,build:BUILD,webView,...microphone.report(),...audio.farReport(),...media.report(),...musicTimeline(),...audio.musicReport(),...video.takeStalls(),...lag.take(performance.now())}});
+    chrome:chromeMajor,build:BUILD,webView,teslaMode:teslaMode?1:0,promptGain,fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...microphone.report(),...audio.farReport(),...media.report(),...musicTimeline(),...audio.musicReport(),...video.takeStalls(),...lag.take(performance.now())}});
+  judgeDecoder(video.decodeLatencyMs, reportFrames/seconds);
   reportFrames=0;reportBytes=0;reportStart=now;touchSum=0;touchCount=0;musicBytes=0;
 },10000);
 render();fit();if(token) connection.connect();

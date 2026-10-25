@@ -35,6 +35,26 @@ class AirPlayInfoPlistTest {
     }
 
     @Test
+    fun callsAndSiriCanBeLeftToTheCar() {
+        fun types(callsAndSiri: Boolean) = (AirPlayInfoPlist.build(
+            AirPlayConfig(
+                deviceName = "test",
+                deviceId = "02:00:00:00:00:02",
+                btMac = "02:00:00:00:00:02",
+                sourceVersion = "366.0",
+                main = AirPlayDisplayConfig(widthPixels = 1280, heightPixels = 720),
+                microphone = callsAndSiri,
+                callsAndSiri = callsAndSiri,
+            ),
+        )["audioFormats"] as List<*>).map { (it as Map<*, *>)["audioType"] }
+        assertTrue("telephony" in types(true))
+        assertTrue("speechRecognition" in types(true))
+        assertFalse("telephony" in types(false))
+        assertFalse("speechRecognition" in types(false))
+        assertTrue("default" in types(false) && "media" in types(false))
+    }
+
+    @Test
     fun hevcCapabilityIsAdvertisedOnlyWhenEnabled() {
         val base = AirPlayConfig(
             deviceName = "test",

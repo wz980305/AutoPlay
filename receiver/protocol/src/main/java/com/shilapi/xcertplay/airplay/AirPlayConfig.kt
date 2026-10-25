@@ -45,6 +45,8 @@ data class AirPlayConfig(
     val hevc: Boolean = false,
     val disableAudioOutput: Boolean = false,
     val microphone: Boolean = false,
+    /** false: offer no call and no Siri audio, so the iPhone keeps them on the car's own Bluetooth (DashPlay Tesla mode). */
+    val callsAndSiri: Boolean = true,
     val manufacturer: String = "xcertplay",
     val model: String = "xcertplay",
     val oemLabel: String = "xcertplay",
