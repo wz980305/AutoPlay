@@ -393,13 +393,21 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         }
     }
 
+    private var touchDownIds = emptySet<Int>()
+
     private fun routeInput(message: ClientMessage) {
         val session = activeSession ?: return
         try {
             when (message.type) {
-                "touch" -> session.sendTouch(
-                    message.contacts.map { AirPlayContact(it.id, it.x, it.y, it.down) },
-                )
+                "touch" -> {
+                    val down = message.contacts.filter { it.down }.map { it.id }.toSet()
+                    val receivedMs = System.currentTimeMillis()
+                    val sent = session.sendTouch(message.contacts.map { AirPlayContact(it.id, it.x, it.y, it.down) })
+                    // Only down/up transitions, never positions or every drag packet. Correlate with packet counts.
+                    if (down != touchDownIds || !sent) log.info("touch forwarded receivedMs={} epochMs={} down={} sent={}",
+                        receivedMs, System.currentTimeMillis(), down.size, sent)
+                    touchDownIds = down
+                }
                 "media" -> message.media?.let {
                     // Media keys from the page (1 play, 2 pause, 3 toggle, 4 next, 5 previous): the log then tells a
                     // pause from the car's media card or steering wheel apart from one made on the CarPlay screen.

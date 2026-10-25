@@ -1,3 +1,4 @@
+import { startup, startupStats } from './startup';
 import { parseWireMessage, type ClientMessage, type ServerMessage, type WireMessage } from './protocol';
 
 export type ConnectionState = 'connecting' | 'open' | 'closed';
@@ -14,6 +15,7 @@ export interface ConnectionHandlers {
   onServer: (message: ServerMessage) => void;
   onState: (state: ConnectionState) => void;
   onBytes?: (count: number) => void;
+  onTiming?: (stats: Record<string, number>) => void;
 }
 
 /** Reconnecting WebSocket client for the playport server. */
@@ -40,10 +42,11 @@ export class Connection {
     const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
     // page: this page's id, so the box replaces this page's old link at once when it connects again.
     const url = `${scheme}://${location.host}/ws?token=${encodeURIComponent(this.token)}&page=${PAGE_ID}`;
+    startup.mark('wsNewMs');
     const socket = new WebSocket(url);
     socket.binaryType = 'arraybuffer';
     this.socket = socket;
-    let opened = false, openedAt = 0;
+    let opened = false, openedAt = 0, firstMessage = true;
     // After a Tesla unfroze its browser (reverse gear, 2026-10-14) a new socket hung half-open, neither open nor
     // closed, and the page said "connecting" until refreshed: one that is not open in time is left for another.
     // A timer that runs late means the page was frozen meanwhile: the socket may have opened with its "open" not
@@ -63,10 +66,13 @@ export class Connection {
       opened = true; openedAt = performance.now();
       this.retryDelayMs = 500;
       this.failures = 0;
+      startup.mark('wsOpenMs');
       this.handlers.onState('open');
+      this.handlers.onTiming?.(startupStats());
     });
     socket.addEventListener('message', (event: MessageEvent<string | ArrayBuffer>) => {
       if (this.socket !== socket) return;   // a socket left by restart()
+      if (firstMessage) { firstMessage = false; startup.mark('wsFirstMs'); this.handlers.onTiming?.(startupStats()); }
       if (typeof event.data === 'string') {
         try {
           this.handlers.onServer(JSON.parse(event.data) as ServerMessage);

@@ -216,3 +216,24 @@ console.log('View areas: shapes learned once, switched without reconnecting.');
   assert.ok(Date.now()-started<1000,'gives up at the timeout');
 }
 console.log('Tesla fullscreen: only with its video sites reachable.');
+
+{ // Refresh timing must survive reconnects and never confuse connection time with the first painted frame.
+  const {StartupTiming}=await load('startup'); let clock=12;
+  const timing=new StartupTiming(()=>clock); timing.mark('bootMs');
+  clock=10010;timing.mark('wsNewMs');clock=10030;timing.mark('wsOpenMs');
+  clock=10040;timing.mark('wsFirstMs');clock=11600;timing.mark('firstFrameMs');
+  clock=20000;timing.mark('wsNewMs');
+  assert.deepEqual(timing.snapshot(),{navStartMs:0,bootMs:12,wsNewMs:10010,wsOpenMs:10030,wsFirstMs:10040,firstFrameMs:11600});
+  const copy=timing.snapshot();copy.wsOpenMs=0;assert.equal(timing.snapshot().wsOpenMs,10030);
+}
+
+{ // Tesla browser UI can keep sound in the webpage: explicit false wins over the legacy Tesla default.
+  const savedWindow=globalThis.window, savedFetch=globalThis.fetch, savedStorage=globalThis.localStorage;
+  globalThis.window={};globalThis.localStorage={setItem(){}};
+  const {access}=await load('boot',s=>s.replace(/^import .*?;$/gm,'const startup={mark(){}};').replace('async function access()', 'export async function access()'));
+  for(const [flags,want] of [[{tesla:true},true],[{tesla:true,carMusic:false},false],[{tesla:false,carMusic:true},true]]) {
+    globalThis.fetch=async()=>({ok:true,json:async()=>flags});await access();
+    assert.equal(window.playportCarMusic,want);assert.equal(window.playportTeslaMode,flags.tesla);
+  }
+  globalThis.window=savedWindow;globalThis.fetch=savedFetch;globalThis.localStorage=savedStorage;
+}

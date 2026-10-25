@@ -3,6 +3,9 @@ package com.playport.server
 import com.shilapi.xcertplay.airplay.AudioFormat
 import com.shilapi.xcertplay.airplay.VideoCodec
 import io.ktor.server.application.Application
+import io.ktor.server.application.call
+import io.ktor.server.application.ApplicationCallPipeline
+import io.ktor.util.AttributeKey
 import io.ktor.server.application.install
 import io.ktor.server.plugins.origin
 import io.ktor.server.request.receiveText
@@ -284,17 +287,37 @@ class WebHub(
         }
     }
 
+    private val recoveringStreams = ConcurrentHashMap.newKeySet<Int>()
+
+    /** The phone command can wait on its event socket. Never hold the viewer's Netty reader/writer behind it.
+     * Coalesce recovery per stream so a stalled phone cannot accumulate an unbounded number of workers. */
+    private fun requestKeyframe(type: Int) {
+        val handler = onViewerJoined ?: return
+        if (!recoveringStreams.add(type)) return
+        val job = scope.launch(Dispatchers.IO) {
+            val started = System.nanoTime()
+            try { handler(type) }
+            catch (error: Exception) { log.warn("keyframe request failed stream={} kind={}", type, error.javaClass.simpleName) }
+            finally { log.info("keyframe request stream={} elapsedMs={}", type, (System.nanoTime() - started) / 1_000_000) }
+        }
+        job.invokeOnCompletion { recoveringStreams.remove(type) }
+    }
+
     private fun maybeRequestKeyframe(client: WsClient, type: Int) {
         val now = System.nanoTime()
         val last = client.keyframeRequested.get()
         if (now - last > KEYFRAME_REQUEST_INTERVAL_NS && client.keyframeRequested.compareAndSet(last, now)) {
-            onViewerJoined?.invoke(type)
+            requestKeyframe(type)
         }
     }
 
     /** Ktor module: WebSocket endpoint with token auth plus status API. */
     fun install(application: Application, webRoot: Path) {
         application.install(WebSockets)
+        val wsReceived = AttributeKey<Long>("dashplayWsReceived")
+        application.intercept(ApplicationCallPipeline.Monitoring) {
+            if (call.request.uri.substringBefore('?') == "/ws") call.attributes.put(wsReceived, System.nanoTime())
+        }
         application.routing {
             get("/api/status") {
                 call.respondText(statusJson(), io.ktor.http.ContentType.Application.Json)
@@ -347,6 +370,8 @@ class WebHub(
                     close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "invalid token"))
                     return@webSocket
                 }
+                val upgradedAt = System.nanoTime()
+                val upgradeMs = (upgradedAt - (call.attributes.getOrNull(wsReceived) ?: upgradedAt)) / 1_000_000
                 val client = WsClient(Channel(capacity = SEND_QUEUE_CAPACITY))
                 client.page = call.request.queryParameters["page"]?.take(32)?.filter { it.isLetterOrDigit() } ?: ""
                 client.session = this
@@ -359,6 +384,7 @@ class WebHub(
                 clients.add(client)
                 val from = "${call.request.origin.remoteHost}:${call.request.origin.remotePort}"
                 log.info("viewer connected client={} from={} page={} viewers={}", client.id, from, client.page, clients.size)
+                log.info("viewer upgraded client={} epochMs={} upgradeMs={}", client.id, System.currentTimeMillis(), upgradeMs)
                 var ending = "page closed"
                 val wsSession = this
                 val writer = launch {
@@ -423,14 +449,17 @@ class WebHub(
                     audioFormatByStream.forEach { (type, format) ->
                         client.offer(Frame.Binary(true, Wire.audioConfig(type, format)))
                     }
-                    configByStream.keys.forEach { streamType -> onViewerJoined?.invoke(streamType) }
+                    val readyAt = System.nanoTime()
+                    configByStream.keys.forEach { streamType -> requestKeyframe(streamType) }
+                    log.info("viewer ready client={} setupMs={} keyframeQueueMs={}", client.id,
+                        (System.nanoTime() - upgradedAt) / 1_000_000, (System.nanoTime() - readyAt) / 1_000_000)
                     for (frame in incoming) {
                         val heardAt = System.nanoTime()
                         if (client.wasPaused) {
                             // Back from a freeze on the same link: a fresh keyframe at once.
                             client.wasPaused = false
                             log.info("viewer resumed client={} after {} ms", client.id, (heardAt - client.lastHeard.get()) / 1_000_000)
-                            configByStream.keys.forEach { streamType -> onViewerJoined?.invoke(streamType) }
+                            configByStream.keys.forEach { streamType -> requestKeyframe(streamType) }
                         }
                         client.lastHeard.set(heardAt)
                         if (frame is Frame.Binary) {
@@ -454,7 +483,7 @@ class WebHub(
                         if (message.type == "ack") {
                             message.mark?.let { client.lag.acked(it, System.nanoTime()) }
                         } else if (message.type == "keyframe") {
-                            configByStream.keys.forEach { streamType -> onViewerJoined?.invoke(streamType) }
+                            configByStream.keys.forEach { streamType -> requestKeyframe(streamType) }
                         } else if (message.type == "stats") {
                             log.info(statsLine(client.id, client.videoSent.get(), client.videoDropped.get(),
                                 client.bytesSent.get(), message.stats.orEmpty()))
