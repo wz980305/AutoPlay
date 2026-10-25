@@ -1,27 +1,46 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/><meta name="color-scheme" content="dark"/><title>F50 CarPlay</title><link rel="stylesheet" href="/src/style.css"/><noscript><style>#browser-check{display:block!important}</style></noscript></head>
+<html lang="zh-CN"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/><meta name="color-scheme" content="dark"/><title>DashPlay</title><link rel="stylesheet" href="/src/style.css"/><noscript><style>#browser-check{display:block!important}</style></noscript></head>
 <body><section id="browser-check" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:99999;background:#141920;color:#f4f6f8;overflow:auto;padding:24px;font:16px/1.6 sans-serif;box-sizing:border-box">
 <h1 id="browser-check-title" style="font-size:24px">浏览器兼容性检测</h1><p id="browser-check-note">正在检测。如果此提示一直不变，请确认 JavaScript 已启用，或刷新页面重新加载检测脚本。</p><noscript>此浏览器禁用了 JavaScript，无法使用 CarPlay。</noscript><ul id="browser-check-list" style="padding-left:22px"></ul><button id="browser-check-continue" disabled style="padding:12px 20px;font-size:18px">正在检测…</button><p id="browser-check-agent" style="word-wrap:break-word;font-size:12px"></p></section><script src="./browser-check.js"></script><main id="app">
   <div id="screen-container"><div id="surface"><canvas id="screen" width="1280" height="720" tabindex="0" aria-label="CarPlay" inert></canvas></div></div>
-  <div id="overlay" role="status"><h1>CarPlay</h1><p id="connection-text"></p><p id="connection-hint"></p></div>
-  <button id="btn-settings" aria-haspopup="dialog" aria-controls="settings"><span aria-hidden="true">⚙</span><span data-i18n="settings">盒子设置</span></button>
-  <button id="btn-fullscreen" aria-label="全屏" title="全屏"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path class="expand" d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><path class="collapse" d="M3 8h5V3m8 0v5h5M8 21v-5H3m13 5v-5h5"/></svg><span id="fullscreen-label">全屏</span></button>
-  <div id="toast" role="status" hidden></div>
-  <button id="audio-unlock" data-i18n="sound" hidden>轻点启用声音</button>
-  <div id="error-banner" role="alert" hidden><span data-i18n="error"></span><details><summary data-i18n="technical"></summary><p id="error-text"></p></details><button id="dismiss-error" data-i18n="close"></button></div>
+  <div id="overlay" role="status"><div class="welcome">
+    <h1>DashPlay</h1>
+    <p class="status"><span class="spinner" aria-hidden="true"></span><span id="connection-text"></span></p>
+    <p id="connection-hint"></p>
+    <div class="group actions">
+      <a id="box-link" class="cell" href="/" hidden><span class="tile green"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.8" width="10" height="18.4" rx="2.6"/><path d="M10.8 5.2h2.4"/></svg></span><span class="main"><b data-i18n="boxLink"></b><span data-i18n="boxLinkHint"></span></span><span class="chev"></span></a>
+      <button id="welcome-fullscreen" class="cell" type="button"><span class="tile blue"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path class="expand" d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><path class="collapse" d="M3 8h5V3m8 0v5h5M8 21v-5H3m13 5v-5h5"/></svg></span><span class="main"><b id="welcome-fullscreen-text">全屏</b></span></button>
+      <button id="btn-settings" class="cell" type="button" aria-haspopup="dialog" aria-controls="settings"><span class="tile gray"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></span><span class="main"><b data-i18n="playerSettings"></b></span><span class="chev"></span></button>
+    </div>
+  </div></div>
+  <button id="btn-fullscreen" class="glass" type="button" aria-label="全屏" title="全屏"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path class="expand" d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><path class="collapse" d="M3 8h5V3m8 0v5h5M8 21v-5H3m13 5v-5h5"/></svg><span id="fullscreen-label" class="sr">全屏</span></button>
+  <div id="toast" class="capsule" role="status" hidden></div>
+  <button id="audio-unlock" class="capsule" data-i18n="sound" hidden>轻点启用声音</button>
+  <div id="error-banner" role="alert" hidden><b data-i18n="error"></b><details><summary data-i18n="technical"></summary><p id="error-text"></p></details><button id="dismiss-error" class="text" data-i18n="close"></button></div>
 </main>
-<dialog id="settings" aria-labelledby="settings-title"><header><h2 id="settings-title" data-i18n="settings"></h2><button id="btn-close" data-i18n="close"></button></header><div class="settings-body">
-  <button id="fullscreen" class="primary fullscreen-action" type="button"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path class="expand" d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><path class="collapse" d="M3 8h5V3m8 0v5h5M8 21v-5H3m13 5v-5h5"/></svg><span id="fullscreen-text">全屏</span></button>
-  <label class="row"><span data-i18n="language"></span><select id="language"><option value="zh">简体中文</option><option value="en">English</option></select></label>
-  <label class="volume"><span data-i18n="volume"></span><output id="volume-value">100%</output><input id="volume" type="range" min="0" max="100" value="100"/></label>
-  <p id="audio-status" class="hint"></p>
-  <section><div class="section-title"><h3 data-i18n="display"></h3></div>
-  <label class="row"><span data-i18n="nightMode"></span><select id="night-mode"><option value="schedule" data-i18n="nightSchedule"></option><option value="system" data-i18n="nightSystem"></option><option value="day" data-i18n="nightDay"></option><option value="night" data-i18n="nightNight"></option></select></label><p id="night-status" class="hint" role="status"></p>
-  <label class="check"><input id="auto-fit" type="checkbox"/><span data-i18n="auto"></span></label><p class="hint" data-i18n="autoHint"></p>
-  <form id="display-form"><fieldset id="display-fields"><div class="pair"><label><span data-i18n="width"></span><input id="width" type="number" min="480" max="3840" step="2" required/></label><label><span data-i18n="height"></span><input id="height" type="number" min="480" max="3840" step="2" required/></label></div><div class="pair"><label><span data-i18n="ui"></span><select id="ui-scale"><option value="85" data-i18n="small"></option><option value="100" data-i18n="standard"></option><option value="115" data-i18n="large"></option></select></label><label><span data-i18n="fps"></span><select id="fps"><option value="30">30 fps</option><option value="60">60 fps</option></select></label></div></fieldset><button id="apply" class="primary" data-i18n="apply"></button><p id="display-status" class="hint" role="status"></p></form></section>
-  <details><summary data-i18n="diagnostics"></summary><button id="browser-check-show" type="button">浏览器兼容性检测 / Browser check</button><p id="capabilities"></p><p id="media-support"></p><p id="stats"></p><p data-i18n="micHint"></p><p id="mic-status"></p><p class="hint" data-i18n="privacy"></p></details>
-  <details><summary data-i18n="advanced"></summary><div id="fallback-controls"><button data-command="home" data-i18n="home"></button><button data-command="back" data-i18n="back"></button><button data-command="previous" data-i18n="previous"></button><button data-command="play" data-i18n="play"></button><button data-command="next" data-i18n="next"></button><button data-command="refresh" data-i18n="refresh"></button></div></details>
-  <p class="hint" data-i18n="savedHere"></p>
+<dialog id="settings" aria-labelledby="settings-title"><header><h2 id="settings-title" data-i18n="settings" tabindex="-1" autofocus></h2><button id="btn-close" class="text" data-i18n="done"></button></header><div class="settings-body">
+  <div class="group">
+    <button id="fullscreen" class="cell" type="button"><span class="tile blue"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path class="expand" d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><path class="collapse" d="M3 8h5V3m8 0v5h5M8 21v-5H3m13 5v-5h5"/></svg></span><span class="main"><b id="fullscreen-text">全屏</b></span></button>
+    <a id="box-link-panel" class="cell" href="/" hidden><span class="tile green"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.8" width="10" height="18.4" rx="2.6"/><path d="M10.8 5.2h2.4"/></svg></span><span class="main"><b data-i18n="boxLink"></b><span data-i18n="boxLinkHintLive"></span></span><span class="chev"></span></a>
+  </div>
+  <p class="group-title" data-i18n="volume"></p>
+  <div class="group"><div class="cell volume"><svg class="ico dim" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M4 9h3l5-4v14l-5-4H4z"/></svg><input id="volume" type="range" min="0" max="100" value="100"/><svg class="ico dim" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9h3l5-4v14l-5-4H4z" fill="currentColor" stroke="none"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg><output id="volume-value">100%</output></div></div>
+  <p id="audio-status" class="foot"></p>
+  <p class="group-title" data-i18n="display"></p>
+  <div class="group">
+    <label class="cell"><span class="main"><b data-i18n="nightMode"></b><span id="night-status"></span></span><select id="night-mode"><option value="schedule" data-i18n="nightSchedule"></option><option value="system" data-i18n="nightSystem"></option><option value="day" data-i18n="nightDay"></option><option value="night" data-i18n="nightNight"></option></select></label>
+    <label class="cell"><span class="main"><b data-i18n="auto"></b></span><input id="auto-fit" class="switch" type="checkbox"/></label>
+    <details><summary class="cell"><span class="main"><b data-i18n="custom"></b></span><span id="display-status" class="value" role="status"></span><span class="chev"></span></summary>
+      <form id="display-form" class="inner"><fieldset id="display-fields"><div class="pair"><label><span data-i18n="width"></span><input id="width" type="number" min="480" max="3840" step="2" required/></label><label><span data-i18n="height"></span><input id="height" type="number" min="480" max="3840" step="2" required/></label></div><div class="pair"><label><span data-i18n="ui"></span><select id="ui-scale"><option value="85" data-i18n="small"></option><option value="100" data-i18n="standard"></option><option value="115" data-i18n="large"></option></select></label><label><span data-i18n="fps"></span><select id="fps"><option value="30">30 fps</option><option value="60">60 fps</option></select></label></div></fieldset><button id="apply" class="btn" data-i18n="apply"></button></form></details>
+  </div>
+  <p class="foot" data-i18n="autoHint"></p>
+  <div class="group"><label class="cell"><span class="main"><b data-i18n="language"></b></span><select id="language"><option value="zh">简体中文</option><option value="en">English</option></select></label></div>
+  <div class="gap"></div>
+  <div class="group">
+    <details><summary class="cell"><span class="main"><b data-i18n="diagnostics"></b></span><span class="chev"></span></summary><div class="inner text"><p id="capabilities"></p><p id="media-support"></p><p id="stats"></p><p data-i18n="micHint"></p><p id="mic-status"></p><p data-i18n="privacy"></p><button id="browser-check-show" class="btn plain" type="button">浏览器兼容性检测 / Browser check</button></div></details>
+    <details><summary class="cell"><span class="main"><b data-i18n="advanced"></b></span><span class="chev"></span></summary><div id="fallback-controls" class="inner"><button data-command="home" data-i18n="home"></button><button data-command="back" data-i18n="back"></button><button data-command="previous" data-i18n="previous"></button><button data-command="play" data-i18n="play"></button><button data-command="next" data-i18n="next"></button><button data-command="refresh" data-i18n="refresh"></button></div></details>
+  </div>
+  <p class="foot" data-i18n="savedHere"></p>
 </div></dialog>
 <script src="./receiver-access.js"></script>
 <script type="module" src="/src/boot.ts"></script></body></html>

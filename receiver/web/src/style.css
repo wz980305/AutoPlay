@@ -1,46 +1,135 @@
-:root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; color: #f4f6f8; background: #000; --panel:#191c22; --line:#424750; --blue:#327cf6; }
-* { box-sizing: border-box; }
-body { margin:0; overflow:hidden; }
-button, input, select { font:inherit; }
-button, select, input[type=number] { color:inherit; background:#30353d; border:1px solid var(--line); border-radius:10px; min-height:48px; padding:10px 16px; }
+/* iOS dark Settings language, shared with the box settings page (scripts/onecloud/settings_ui.py).
+   The player stays dark in both day and night: it sits next to CarPlay on a car screen. */
+:root { color-scheme: dark; --bg:#000; --cell:#1C1C1E; --cell-hi:#2C2C2E; --press:#3A3A3C; --sep:rgba(84,84,88,.6);
+  --label:#FFF; --secondary:rgba(235,235,245,.6); --tint:#0A84FF; --green:#30D158; --red:#FF453A; --gray:#8E8E93;
+  --fill:rgba(120,120,128,.24); --glass:rgba(30,30,32,.62);
+  font:17px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
+  color:var(--label); background:var(--bg); -webkit-text-size-adjust:100%; }
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body { margin:0; overflow:hidden; background:var(--bg); }
+button, input, select { font:inherit; color:inherit; }
 button { cursor:pointer; touch-action:manipulation; }
-button:hover { background:#414955; } button:disabled { opacity:.45; cursor:default; }
-:focus-visible { outline:3px solid #91b8ff; outline-offset:3px; }
+button:disabled { opacity:.4; cursor:default; }
+:focus-visible { outline:3px solid var(--tint); outline-offset:2px; }
 [hidden] { display:none !important; }
+.sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+.ico { width:22px; height:22px; flex:none; display:block; }
+.ico.dim { color:var(--secondary); }
+
 #app { width:100vw; height:100vh; height:100dvh; position:relative; background:#000; }
-#screen-container { position:absolute; top:0;right:0;bottom:0;left:0; inset:0; display:flex; justify-content:center; align-items:center; }
+#screen-container { position:absolute; top:0; right:0; bottom:0; left:0; inset:0; display:flex; justify-content:center; align-items:center; }
 #surface { flex:none; }
 #screen { display:block; width:100%; height:100%; touch-action:none; user-select:none; -webkit-user-select:none; }
-#overlay { position:absolute; top:0;right:0;bottom:0;left:0; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:28px; text-align:center; background:#000; pointer-events:none; }
-h1 { font-size:clamp(30px,5vw,56px); margin:0 0 18px; font-weight:600; letter-spacing:-.025em; }
-#connection-text { font-size:22px; margin:8px 0; } #connection-hint { max-width:36em; color:#b9c0cb; line-height:1.65; }
-#btn-settings { position:absolute; top:12px;top:max(12px,env(safe-area-inset-top)); left:12px;left:max(12px,env(safe-area-inset-left)); min-width:48px; padding:10px 12px; background:#252b33d9; border-color:#5a616b; display:flex; align-items:center; gap:8px; }
-#btn-settings span[aria-hidden] { font-size:24px; line-height:1; }
-#app[data-live=true] #btn-settings { display:none; }
-#audio-unlock { position:absolute; bottom:max(16px,env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); background:#2256a4; white-space:nowrap; }
-#error-banner { position:absolute; bottom:12px; left:12px; right:12px; max-width:650px; margin:auto; padding:14px; background:#542a28; border-radius:12px; max-height:40vh; overflow:auto; }
-#error-text { overflow-wrap:anywhere; } #error-banner button { float:right; }
-dialog { margin:0 0 0 auto; height:100%; max-height:100%; width:min(560px,100vw); max-width:100%; border:0; padding:0; background:var(--panel); color:inherit; }
-dialog::backdrop { background:#0009; }
-header { position:sticky; top:0; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:20px; padding:18px 24px; background:var(--panel); border-bottom:1px solid var(--line); }
-h2 { font-size:25px; margin:0; } h3 { font-size:19px; margin:0; }
-.settings-body { padding:8px 24px 24px; }
-.row,.section-title { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:16px 0; }
-.volume { display:grid; grid-template-columns:1fr auto; gap:12px; margin:24px 0 8px; } input[type=range] { width:100%; grid-column:1/-1; min-height:40px; accent-color:var(--blue); }
-section,details { border-top:1px solid var(--line); padding:18px 0; }
-summary { min-height:44px; cursor:pointer; padding:10px 0; font-size:18px; }
-.hint { color:#b9c0cb; font-size:14px; line-height:1.65; }
-.check { display:flex; align-items:center; gap:12px; min-height:48px; } input[type=checkbox] { width:24px; height:24px; accent-color:var(--blue); }
-fieldset { border:0; padding:0; margin:0; min-width:0; } .pair { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:16px 0; } .pair label { display:flex; flex-direction:column; gap:8px; } .pair input,.pair select { min-width:0; width:100%; }
-.primary { width:100%; background:var(--blue); border:0; } #fallback-controls { display:flex; flex-wrap:wrap; gap:10px; }
-@media (max-width:480px) { header { padding:14px 18px; } .settings-body { padding:8px 18px 20px; } }
-@media (prefers-reduced-motion:reduce) { * { scroll-behavior:auto !important; } }
 
-#btn-fullscreen { position:absolute; top:12px;top:max(12px,env(safe-area-inset-top)); right:12px;right:max(12px,env(safe-area-inset-right)); display:flex; align-items:center; gap:8px; min-width:48px; min-height:48px; padding:10px 12px; background:#252b33c9; border-color:#77818e; }
-#btn-fullscreen:hover, #btn-fullscreen:focus-visible { background:#303945; }
-/* Top-right button only enters fullscreen; once fullscreen it hides and exit lives in Settings (CarPlay gear icon). */
-#btn-fullscreen[data-fullscreen=true] { display:none; }
-#toast { position:absolute; top:max(16px,env(safe-area-inset-top)); left:50%; transform:translateX(-50%); max-width:calc(100vw - 32px); padding:12px 18px; border-radius:12px; background:#252b33f2; border:1px solid #77818e; font-size:17px; line-height:1.5; text-align:center; pointer-events:none; }
-.fullscreen-action { display:flex; align-items:center; justify-content:center; gap:10px; min-height:56px; margin:18px 0 8px; font-size:19px; }
-#btn-fullscreen .collapse, #btn-fullscreen[data-fullscreen=true] .expand, #fullscreen .collapse, #fullscreen[data-fullscreen=true] .expand { display:none; }
-#btn-fullscreen[data-fullscreen=true] .collapse, #fullscreen[data-fullscreen=true] .collapse { display:block; }
+/* Waiting screen: what is happening, then the three things a driver can do here. */
+#overlay { position:absolute; top:0; right:0; bottom:0; left:0; inset:0; display:flex; align-items:center; justify-content:center;
+  padding:max(24px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom)); background:#000; overflow:auto; pointer-events:none; }
+.welcome { width:min(440px,100%); text-align:center; animation:rise .45s cubic-bezier(.2,.8,.2,1) both; }
+.welcome h1 { font-size:clamp(34px,6vw,48px); line-height:1.05; letter-spacing:-.025em; font-weight:700; margin:0 0 14px; }
+.status { display:flex; align-items:center; justify-content:center; gap:10px; font-size:20px; font-weight:600; margin:0; }
+#connection-hint { color:var(--secondary); font-size:15px; line-height:1.45; margin:8px auto 28px; max-width:30em; }
+.spinner { width:18px; height:18px; flex:none; border-radius:50%; border:2.5px solid var(--fill); border-top-color:var(--secondary); animation:spin .9s linear infinite; }
+#app[data-state=waiting] .spinner, #app[data-state=access] .spinner { display:none; }
+.actions { text-align:left; pointer-events:auto; }
+@keyframes rise { from { opacity:0; transform:translateY(8px); } }
+@keyframes spin { to { transform:rotate(1turn); } }
+
+/* Inset grouped list */
+.group { background:var(--cell); border-radius:12px; overflow:hidden; }
+.cell { display:flex; align-items:center; gap:12px; width:100%; min-height:52px; padding:10px 16px; position:relative;
+  background:none; border:0; border-radius:0; color:inherit; text-align:left; text-decoration:none; font:inherit; }
+.group > :not([hidden]) ~ :not([hidden]), .group details > .inner { border-top:.5px solid var(--sep); }
+a.cell, button.cell, summary.cell, label.cell { cursor:pointer; transition:background-color .12s ease-out; }
+a.cell:active, button.cell:active, summary.cell:active, label.cell:active { background:var(--press); transition:none; }
+.cell .main { flex:1; min-width:0; }
+.cell .main b { display:block; font-weight:400; }
+.cell .main span { display:block; color:var(--secondary); font-size:13px; line-height:1.35; margin-top:1px; }
+.cell .value { color:var(--secondary); font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; max-width:55%; }
+.tile { width:30px; height:30px; flex:none; border-radius:7px; display:grid; place-items:center; color:#fff; }
+.tile .ico { width:19px; height:19px; }
+.tile.blue { background:var(--tint); } .tile.green { background:var(--green); } .tile.gray { background:var(--gray); }
+.chev { flex:none; display:block; }
+.chev::after { content:""; display:block; width:8px; height:8px; margin-right:4px; border:solid rgba(235,235,245,.3); border-width:0 2px 2px 0; transform:rotate(-45deg); }
+details[open] > summary .chev::after { transform:rotate(45deg); }
+summary { list-style:none; } summary::-webkit-details-marker { display:none; }
+.group-title { color:var(--secondary); font-size:13px; margin:26px 16px 7px; }
+.foot { color:var(--secondary); font-size:13px; line-height:1.45; margin:7px 16px 0; }
+.gap { height:26px; }
+.foot + .group { margin-top:22px; }
+.inner { padding:12px 16px 16px; }
+.inner.text p { color:var(--secondary); font-size:14px; line-height:1.5; margin:0 0 8px; overflow-wrap:anywhere; }
+select { background:none; border:0; color:var(--secondary); font-size:17px; text-align:right; min-width:0; max-width:55%; padding:6px 0; cursor:pointer; text-overflow:ellipsis; }
+select option { color:#000; }
+.cell select { margin-left:auto; }
+
+/* iOS switch */
+.switch { appearance:none; -webkit-appearance:none; flex:none; width:51px; height:31px; margin:0; border-radius:16px; background:var(--fill);
+  position:relative; cursor:pointer; transition:background-color .2s ease-out; }
+.switch::after { content:""; position:absolute; top:2px; left:2px; width:27px; height:27px; border-radius:50%; background:#fff;
+  box-shadow:0 3px 8px rgba(0,0,0,.15), 0 3px 1px rgba(0,0,0,.06); transition:transform .25s cubic-bezier(.3,.7,.4,1); }
+.switch:checked { background:var(--green); }
+.switch:checked::after { transform:translateX(20px); }
+
+.volume { gap:14px; }
+.volume input[type=range] { flex:1; min-width:0; height:32px; margin:0; accent-color:#fff; }
+.volume output { min-width:3.2em; text-align:right; color:var(--secondary); font-variant-numeric:tabular-nums; }
+
+.btn { display:block; width:100%; min-height:50px; margin:14px 0 0; padding:13px 16px; border:0; border-radius:12px; background:var(--tint);
+  color:#fff; font-weight:600; text-align:center; transition:transform .1s ease-out; }
+.btn:active { transform:scale(.97); }
+.btn.plain { background:var(--fill); color:var(--tint); font-weight:400; }
+button.text { background:none; border:0; color:var(--tint); font-size:17px; font-weight:600; padding:10px 4px; min-height:44px; }
+button.text:active { opacity:.5; }
+fieldset { border:0; padding:0; margin:0; min-width:0; }
+.pair { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:0 0 12px; }
+.pair label { display:flex; flex-direction:column; gap:6px; color:var(--secondary); font-size:13px; }
+.pair input, .pair select { width:100%; min-width:0; max-width:none; min-height:44px; padding:8px 12px; border:0; border-radius:10px;
+  background:var(--cell-hi); color:var(--label); font-size:17px; text-align:left; }
+#fallback-controls { display:flex; flex-wrap:wrap; gap:10px; }
+#fallback-controls button { min-height:44px; padding:10px 16px; border:0; border-radius:10px; background:var(--cell-hi); }
+#fallback-controls button:active { background:var(--press); }
+
+/* Floating chrome over the live picture: translucent material, never an opaque bar. */
+.glass { background:var(--glass); -webkit-backdrop-filter:blur(20px) saturate(180%); backdrop-filter:blur(20px) saturate(180%);
+  border:.5px solid rgba(255,255,255,.18); color:#fff; }
+#btn-fullscreen { position:absolute; top:max(12px,env(safe-area-inset-top)); right:max(12px,env(safe-area-inset-right));
+  width:48px; height:48px; padding:0; border-radius:50%; display:grid; place-items:center; transition:transform .1s ease-out; }
+#btn-fullscreen:active { transform:scale(.92); }
+#app:not([data-live=true]) #btn-fullscreen, #btn-fullscreen[data-fullscreen=true] { display:none; }
+.capsule { position:absolute; left:50%; transform:translateX(-50%); max-width:calc(100vw - 32px); padding:12px 20px; border-radius:22px;
+  background:rgba(44,44,46,.92); -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); border:.5px solid rgba(255,255,255,.14);
+  color:#fff; font-size:16px; line-height:1.45; text-align:center; box-shadow:0 8px 30px rgba(0,0,0,.4); }
+#toast { top:max(16px,env(safe-area-inset-top)); pointer-events:none; animation:drop .3s cubic-bezier(.2,.8,.2,1); }
+#audio-unlock { bottom:max(20px,env(safe-area-inset-bottom)); white-space:nowrap; font-weight:600; min-height:48px; }
+@keyframes drop { from { opacity:0; transform:translate(-50%,-10px); } }
+#error-banner { position:absolute; bottom:max(16px,env(safe-area-inset-bottom)); left:16px; right:16px; max-width:560px; max-height:40vh; margin:auto;
+  overflow:auto; padding:14px 16px; border-radius:14px; background:var(--cell); box-shadow:inset 4px 0 var(--red), 0 8px 30px rgba(0,0,0,.4); }
+#error-banner summary { color:var(--secondary); font-size:15px; padding:6px 0; cursor:pointer; }
+#error-text { overflow-wrap:anywhere; color:var(--secondary); font-size:14px; }
+#error-banner button { float:right; margin-top:-36px; }
+.ico .collapse, [data-fullscreen=true] .ico .expand { display:none; }
+[data-fullscreen=true] .ico .collapse { display:block; }
+
+/* Settings sheet: slides in from the right edge and leaves the same way. */
+dialog { margin:0 0 0 auto; height:100%; max-height:100%; width:min(480px,100vw); max-width:100%; padding:0; border:0;
+  background:#000; color:inherit; overflow:auto; overscroll-behavior:contain; }
+dialog[open] { animation:sheet-in .32s cubic-bezier(.2,.8,.2,1); }
+dialog.closing { animation:sheet-out .2s cubic-bezier(.4,0,1,1) forwards; }
+dialog::backdrop { background:rgba(0,0,0,.45); }
+@keyframes sheet-in { from { transform:translateX(100%); } }
+@keyframes sheet-out { to { transform:translateX(100%); } }
+header { position:sticky; top:0; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:16px;
+  padding:max(10px,env(safe-area-inset-top)) 16px 8px 20px; background:rgba(0,0,0,.72);
+  -webkit-backdrop-filter:blur(20px) saturate(180%); backdrop-filter:blur(20px) saturate(180%); }
+h2:focus { outline:none; }
+h2 { font-size:28px; line-height:1.15; font-weight:700; letter-spacing:-.02em; margin:6px 0; }
+.settings-body { padding:4px 16px max(32px,env(safe-area-inset-bottom)); }
+.settings-body > .group:first-child { margin-top:8px; }
+
+@media (max-width:480px) { dialog { width:100vw; } }
+@media (prefers-reduced-motion:reduce) {
+  *, *::before, *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
+}
+@media (prefers-reduced-transparency:reduce) {
+  .glass, .capsule, header { -webkit-backdrop-filter:none; backdrop-filter:none; background:#2C2C2E; }
+}

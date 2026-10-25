@@ -33,11 +33,18 @@ let sentNight: boolean | null = null;
 const volume = el<HTMLInputElement>('volume');
 volume.value = String(Math.min(100, Math.max(0, Number(localStorage.getItem('playport-master') ?? 100) || 0)));
 
+/** Box settings page (pairing, hotspot), when the device startup announced one: same host, plain HTTP. */
+const boxPort = Number((window as unknown as { playportBoxSettingsPort?: number }).playportBoxSettingsPort) || 0;
+if (boxPort) for (const id of ['box-link', 'box-link-panel']) {
+  const link = el<HTMLAnchorElement>(id);
+  link.href = `http://${location.hostname}${boxPort === 80 ? '' : `:${boxPort}`}/`;
+  link.hidden = false;
+}
 function render() {
   setLanguage(language);
   updateFullscreen();
   el<HTMLSelectElement>('language').value = language;
-  el('btn-settings').setAttribute('aria-label', t('settings'));
+  el('app').dataset.state = state;
   volume.setAttribute('aria-label', t('volume'));
   el('connection-text').textContent = t(state);
   el('connection-hint').textContent = t(hint);
@@ -49,7 +56,8 @@ function render() {
   el<HTMLInputElement>('height').disabled = autoFit.checked;
   document.querySelectorAll<HTMLButtonElement>('[data-command]').forEach(b => { b.disabled = !active; });
   const night = isNight(parseNightMode(nightSelect.value), new Date(), darkQuery.matches);
-  el('night-status').textContent = `${t('nightNow')}${t(night ? 'nightOn' : 'nightOff')}；${t(darkQuery.matches ? 'browserDark' : 'browserLight')}`;
+  el('night-status').textContent = `${t('nightNow')}${t(night ? 'nightOn' : 'nightOff')}`;
+  el('night-status').title = t(darkQuery.matches ? 'browserDark' : 'browserLight');
 }
 function fit() {
   const size = fittedSize(canvas.width, canvas.height, screen.clientWidth, screen.clientHeight);
@@ -102,7 +110,7 @@ function server(message: ServerMessage) {
   if(message.type === 'artwork' && message.artwork) { media.setArtwork(message.revision ?? 0,message.artwork); return; }
   if (message.type === 'now-playing' && message.nowPlaying) { media.setMetadata(message.nowPlaying); return; }
   if (message.type === 'host-ui' && active) {
-    panel.showModal(); void loadDisplay(); return;
+    openPanel(); return;
   }
   if (message.type === 'mic') {
     if (message.micActive) void microphone.start({ sampleRate:message.micRate ?? 16000, channels:message.micChannels ?? 1, codec:message.micCodec ?? 'lpcm', samplesPerPacket:message.micSamplesPerPacket ?? 320, bitrate:message.micBitrate ?? null });
@@ -123,17 +131,30 @@ window.addEventListener('keydown', () => { void unlock(); });
 el('audio-unlock').onclick = () => { void unlock(); };
 function setVolume() { audio.setVolume(Number(volume.value) / 100); el('volume-value').textContent = `${volume.value}%`; localStorage.setItem('playport-master',volume.value); }
 volume.oninput = setVolume; setVolume();
-el('btn-settings').onclick = () => { panel.showModal(); void loadDisplay(); };
-el('btn-close').onclick = () => panel.close();
+function openPanel() {
+  if (!panel.open) { panel.classList.remove('closing'); panel.showModal(); }
+  void loadDisplay();
+}
+/** Leave along the path it came in (to the right), unless motion is reduced. */
+function closePanel() {
+  if (!panel.open || panel.classList.contains('closing')) return;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { panel.close(); return; }
+  panel.classList.add('closing');
+  window.setTimeout(() => { panel.classList.remove('closing'); panel.close(); }, 200);
+}
+el('btn-settings').onclick = openPanel;
+el('btn-close').onclick = closePanel;
+panel.addEventListener('cancel', event => { event.preventDefault(); closePanel(); });
 el('dismiss-error').onclick = () => error('');
 el<HTMLSelectElement>('language').onchange = event => { setLanguage((event.target as HTMLSelectElement).value); render(); };
-panel.addEventListener('click', event => { if (event.target !== panel) return; const r=panel.getBoundingClientRect(); if(event.clientX<r.left || event.clientX>r.right) panel.close(); });
+panel.addEventListener('click', event => { if (event.target !== panel) return; const r=panel.getBoundingClientRect(); if(event.clientX<r.left || event.clientX>r.right) closePanel(); });
 function updateFullscreen() {
   const full = !!document.fullscreenElement;
   const label = t(full ? 'exitFullscreen' : 'fullscreen');
   el('fullscreen-label').textContent = label;
   el('fullscreen-text').textContent = label;
-  for (const id of ['btn-fullscreen', 'fullscreen']) {
+  el('welcome-fullscreen-text').textContent = label;
+  for (const id of ['btn-fullscreen', 'fullscreen', 'welcome-fullscreen']) {
     el(id).setAttribute('aria-label', label);
     el(id).setAttribute('title', label);
     el(id).dataset.fullscreen = String(full);
@@ -149,6 +170,7 @@ async function toggleFullscreen() {
 }
 el('fullscreen').onclick = toggleFullscreen;
 el('btn-fullscreen').onclick = toggleFullscreen;
+el('welcome-fullscreen').onclick = toggleFullscreen;
 let toastTimer = 0;
 function toast(message: string) {
   el('toast').textContent = message; el('toast').hidden = false;
@@ -194,17 +216,22 @@ function scheduleAuto() {
 }
 async function adapt() {
   if (!display || !autoFit.checked || displayBusy) return;
-  const target=suggestedResolution(screen.clientWidth,screen.clientHeight);
+  const target=autoTarget();
   const key=`${target.width}x${target.height}`;
   if (!aspectChanged(display,target) || key===lastAutoTarget) return;
   // Avoid a reconnect loop even when another viewer has a different screen shape.
   lastAutoTarget=key;
   if (!(await saveDisplay({...display,...target,hevc:false}))) error(t('autoFail'));
 }
+/** The current window sets the resolution, so neither fullscreen nor the normal window shows black bars;
+ *  switching between them renegotiates CarPlay once (user's choice 2026-10-11 over bars without a reconnect). */
+function autoTarget() {
+  return suggestedResolution(screen.clientWidth,screen.clientHeight);
+}
 autoFit.onchange=() => { localStorage.setItem('f50-auto-fit',String(autoFit.checked)); lastAutoTarget=''; render(); scheduleAuto(); };
 el<HTMLFormElement>('display-form').onsubmit=event => {
   event.preventDefault();
-  const size=autoFit.checked?suggestedResolution(screen.clientWidth,screen.clientHeight):{width:Number(el<HTMLInputElement>('width').value),height:Number(el<HTMLInputElement>('height').value)};
+  const size=autoFit.checked?autoTarget():{width:Number(el<HTMLInputElement>('width').value),height:Number(el<HTMLInputElement>('height').value)};
   if (![size.width,size.height].every(v=>Number.isInteger(v)&&v>=480&&v<=3840&&v%2===0)) { error(t('range')); return; }
   void saveDisplay({...size,fps:Number(el<HTMLSelectElement>('fps').value),uiScale:Number(el<HTMLSelectElement>('ui-scale').value),hevc:false});
 };
