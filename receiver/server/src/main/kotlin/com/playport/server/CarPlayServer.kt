@@ -162,9 +162,16 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             // A session the receiver closed itself to apply a new display is already being re-invited;
             // flagging it as ended made the supervisor start a second invitation that cut off the first
             // (fullscreen switch took 19 s instead of ~12 s, 2026-10-11).
-            sessionEnded = !closingForDisplay.getAndSet(false)
+            val forDisplay = closingForDisplay.getAndSet(false)
+            sessionEnded = !forDisplay
+            // Ended by itself (the phone left, the car slept): the next session can take up a change that waited.
+            if (!forDisplay && display.applyPending()) {
+                configStore?.save(PersistentConfig.of(config, display))
+                log.info("display changed to {}x{} @{}fps codec={} for the next session (it waited for this one to end)",
+                    display.width, display.height, display.fps, if (display.hevc) "h265" else "h264")
+            }
             bridge.endMicrophone()
-            hub.setSessionState(false, null)
+            hub.setSessionState(false, null, restarting = forDisplay)
         }
 
         override fun onDeviceInfo(session: AirPlaySession, info: AirPlayDeviceInfo) {
@@ -636,27 +643,44 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
      * Applies a new display configuration and restarts CarPlay so the phone re-negotiates the
      * display. Returns null on success or a human-readable error.
      */
-    fun applyDisplay(request: DisplayRequest): String? {
+    fun applyDisplay(request: DisplayRequest): DisplayOutcome {
         val (width, height, fps, uiScale, hevc) = request
-        DisplayState.validate(width, height, fps)?.let { return it }
+        DisplayState.validate(width, height, fps)?.let { return DisplayOutcome(it) }
         val areas = request.areas.takeIf { it.size > 1 } ?: emptyList()
-        DisplayState.validateAreas(width, height, areas, request.area)?.let { return it }
+        DisplayState.validateAreas(width, height, areas, request.area)?.let { return DisplayOutcome(it) }
+        val reason = request.reason.take(16).filter { it.isLetterOrDigit() || it == '-' }.ifEmpty { "-" }
         // Only another of the declared areas (the page's window changed shape): move CarPlay there, no reconnect.
         val session = activeSession
         if (areas.isNotEmpty() && session != null && display.sameStream(width, height, fps, uiScale, hevc, areas)) {
-            if (request.area == display.area) return null
+            if (request.area == display.area) return DisplayOutcome()
             display.useArea(request.area)
             configStore?.save(PersistentConfig.of(config, display))
             val sent = session.showViewArea(request.area)
-            log.info("view area {} ({}x{}) of {}x{} sent={}", request.area, areas[request.area].width,
-                areas[request.area].height, width, height, sent)
-            return if (sent) null else "view area not sent"
+            log.info("view area {} ({}x{}) of {}x{} sent={} ({})", request.area, areas[request.area].width,
+                areas[request.area].height, width, height, sent, reason)
+            return if (sent) DisplayOutcome() else DisplayOutcome("view area not sent")
+        }
+        if (session == null && display.pending == null && display.sameStream(width, height, fps, uiScale, hevc, areas)) {
+            // Between sessions (CarPlay is coming back, perhaps for this very display): the phone reads the area at its
+            // next connection; restarting the invitation cut the reconnection in progress (two restarts within 5 s for
+            // the same display, F50 2026-10-19).
+            if (request.area != display.area) display.useArea(request.area)
+            configStore?.save(PersistentConfig.of(config, display))
+            log.info("display {}x{} area {} kept for the next session ({})", width, height, request.area, reason)
+            return DisplayOutcome()
+        }
+        if (request.defer && session != null) {
+            display.defer(request.copy(areas = areas))
+            log.info("display {}x{} @{}fps codec={} waits for the session to end ({})", width, height, fps,
+                if (hevc) "h265" else "h264", reason)
+            return DisplayOutcome(deferred = true)
         }
         display.update(width, height, fps, uiScale, hevc, areas, request.area)
         configStore?.save(PersistentConfig.of(config, display))
         log.info(
-            "display changed to {}x{} @{}fps uiScale={} codec={} ({}); restarting CarPlay",
+            "display changed to {}x{} @{}fps uiScale={} codec={} ({}) areas={} ({}); restarting CarPlay",
             width, height, fps, display.uiScale, if (display.hevc) "h265" else "h264", display.orientation,
+            areas.joinToString(",") { "${it.width}x${it.height}" }.ifEmpty { "-" }, reason,
         )
         val wasActive = activeSession != null
         closingForDisplay.set(wasActive)
@@ -675,14 +699,14 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                     restartWireless(confirmedPresent = true)
                 }
             }, "display-keep-link").apply { isDaemon = true; start() }
-            return null
+            return DisplayOutcome()
         }
         activeSession?.close()
         // Wired: start the USB side over (identification, then CarPlayStartSession with the new display).
         wired?.restart()
         // The phone was just using CarPlay, so skip the ~2.4 s presence re-check before re-inviting it.
         restartWireless(confirmedPresent = wasActive)
-        return null
+        return DisplayOutcome()
     }
 
     private fun displayKeepLinkMs(): Long =

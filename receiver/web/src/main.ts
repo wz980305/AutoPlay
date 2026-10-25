@@ -6,7 +6,7 @@ import { VideoPlayer } from './video';
 import { Connection } from './ws';
 import { SystemMedia } from './media-session';
 import { LagProbe } from './lag';
-import { suggestedResolution, areaPlan, areaSize, type Area } from './display-fit';
+import { suggestedResolution, areaPlan, areaSize, areaFor, sameStream, showsShape, type Area } from './display-fit';
 import { t, language, setLanguage, type Key } from './i18n';
 import { isNight, parseNightMode } from './night';
 import { reachable, TESLA_HOPS } from './tesla-fullscreen';
@@ -37,7 +37,11 @@ let hudFrames = 0, hudBytes = 0, hudMusicBytes = 0, hudStart = performance.now()
 let state: Key = token ? 'connecting' : 'access';
 let hint: Key = token ? 'waitingHint' : 'accessHint';
 let lastAutoTarget = '', autoTimer = 0, displayBusy = false;
-interface Display { width: number; height: number; fps: number; uiScale: number; hevc: boolean; areas?: Area[]; area?: number; }
+/** A change that cannot wait for the next session (codec failed, a setting changed by hand): why, for the box's log. */
+let urgentChange = '';
+/** This page asked for a renegotiation: keep the layout of the picture on screen until the new one comes. */
+let expectRestart = false, expectTimer = 0;
+interface Display { width: number; height: number; fps: number; uiScale: number; hevc: boolean; areas?: Area[]; area?: number; pending?: boolean; }
 let display: Display | null = null;
 const autoFit = el<HTMLInputElement>('auto-fit');
 autoFit.checked = localStorage.getItem('f50-auto-fit') !== 'false';
@@ -75,6 +79,8 @@ function render() {
   el('night-status').title = t(darkQuery.matches ? 'browserDark' : 'browserLight');
 }
 function fit() {
+  // While CarPlay renegotiates, the last picture stays laid out as it was (the new areas belong to the next stream).
+  if (expectRestart || (holding && holdForDisplay)) return;
   // With view areas the stream is larger than the area in use: the area fills the view from the top left and the
   // rest of the picture lies outside it (areaSize, display-fit.ts).
   const areas = display?.areas ?? [], area = areas.length > 1 ? areas[display?.area ?? 0] : undefined;
@@ -84,7 +90,7 @@ function fit() {
 }
 function error(message: string) {
   // This browser said it decodes H.265 but cannot: auto goes back to H.264 for good (on this browser).
-  if (message.includes('H.265/HEVC')) { saveFlag('f50-hevc-failed', '1'); lastAutoTarget = ''; scheduleAuto(); }
+  if (message.includes('H.265/HEVC')) { saveFlag('f50-hevc-failed', '1'); lastAutoTarget = ''; urgentChange = 'codec'; scheduleAuto(); }
   el('error-text').textContent = message; el('error-banner').hidden = !message;
 }
 /** Auto quality (2026-10-14; a Tesla decodes a frame in ~1 ms, the XPeng in 60-100 ms): once this browser has
@@ -118,7 +124,7 @@ const video = new VideoPlayer(canvas, error, () => {
   if (!active) return;
   if (!shownOnce) { startup.mark('firstFrameMs'); connection.send({type:'stats', stats:{ev:16,...startupStats()}}); }
   frames++; reportFrames++; hudFrames++; painted = true; shownOnce = true; el('overlay').hidden = true; el('app').dataset.live = 'true';
-  if (holding) { holding = false; el('toast').hidden = true; }
+  if (holding) { holding = false; el('toast').hidden = true; fit(); }
   if (wokeAt) { lifeEvent(14, { pictureMs: Math.round(performance.now() - wokeAt) }); wokeAt = 0; }
   const now = performance.now();
   if (input.lastDownAt > handledDownAt) {
@@ -193,13 +199,16 @@ function syncNight() {
  *  awake counts towards HOLD_MS (the one-second tick adds it): a wall-clock timer ran on while a Tesla had the page
  *  frozen and cleared the picture the moment it came back, just before the new one arrived. */
 const HOLD_MS = 8000;
-let holding = false, holdAwakeMs = 0, shownOnce = false;
-function reset(hold = false) {
+/** A renegotiation for a new display (2026-10-21): the iPhone comes back in 5-6 s on Wi-Fi, ~10 s on the cable; the
+ *  last picture stays up with a notice instead of the black "waiting for iPhone" screen. */
+const DISPLAY_HOLD_MS = 20000;
+let holding = false, holdAwakeMs = 0, holdForDisplay = false, shownOnce = false;
+function reset(hold = false, forDisplay = false) {
   sentNight = null; lag.reset();
   active = painted = false; input.reset(); canvas.inert = true;
   video.close(); audio.stopAll(); media.setActive(false); void microphone.stop();
-  holding = hold; holdAwakeMs = 0;
-  if (hold) toast(t('reconnecting'));
+  holding = hold; holdAwakeMs = 0; holdForDisplay = forDisplay;
+  if (hold) toast(t(forDisplay ? 'adjusting' : 'reconnecting'));
   else clearPicture();
 }
 function clearPicture() { canvas.getContext('2d')?.clearRect(0,0,canvas.width,canvas.height); }
@@ -217,8 +226,12 @@ function server(message: ServerMessage) {
     else void microphone.stop();
   }
   if (message.type !== 'session' && message.type !== 'hello') return;
-  if (!message.sessionActive) { reset(); state = 'waiting'; }
-  else { active = true; canvas.inert = false; state = 'starting'; media.setActive(true); syncNight(); if(message.nowPlaying) media.setMetadata(message.nowPlaying); if(message.artwork) media.setArtwork(message.revision ?? 0,message.artwork); }
+  if (!message.sessionActive) {
+    // Ended to apply a new display (by this page or another): the phone comes straight back, keep the picture.
+    const forDisplay = message.restarting === true || expectRestart;
+    endExpectRestart(); reset(forDisplay && (painted || holding), forDisplay); state = 'waiting';
+  }
+  else { endExpectRestart(); void loadDisplay(); active = true; canvas.inert = false; state = 'starting'; media.setActive(true); syncNight(); if(message.nowPlaying) media.setMetadata(message.nowPlaying); if(message.artwork) media.setArtwork(message.revision ?? 0,message.artwork); }
   render();
 }
 async function unlock() {
@@ -340,28 +353,41 @@ document.querySelectorAll<HTMLButtonElement>('[data-command]').forEach(button =>
   else if (cmd === 'refresh') send({ type:'keyframe' });
   else send({ type:'media', media:cmd==='previous'?5:cmd==='next'?4:3 });
 });
+/** The box's display as it is now: another page may have changed it (it sent back that page's fps, 2026-10-16). */
+async function fetchDisplay(): Promise<Display | null> {
+  try { const r = await fetch('/api/display', { cache: 'no-store' }); return r.ok ? await r.json() as Display : null; }
+  catch { return null; }
+}
 async function loadDisplay() {
   if (displayBusy || !token) return;
   el('display-status').textContent = t('loading');
-  try {
-    const r = await fetch('/api/display'); if (!r.ok) throw new Error();
-    display = await r.json() as Display;
-    el<HTMLInputElement>('width').value = String(display.width); el<HTMLInputElement>('height').value = String(display.height);
-    el<HTMLSelectElement>('fps').value = String(display.fps); el<HTMLSelectElement>('ui-scale').value = String(display.uiScale);
-    el('display-status').dataset.codec = display.hevc ? 'H.265' : 'H.264';
-    el('display-status').textContent = `${display.width} × ${display.height} / ${display.fps} fps / ${display.hevc ? 'H.265' : 'H.264'}`;
-    scheduleAuto();
-  } catch { el('display-status').textContent = t('loadFail'); }
+  const loaded = await fetchDisplay();
+  if (!loaded) { el('display-status').textContent = t('loadFail'); return; }
+  display = loaded; showDisplay(); fit(); scheduleAuto();
 }
-async function saveDisplay(target: Display): Promise<boolean> {
+function showDisplay() {
+  if (!display) return;
+  el<HTMLInputElement>('width').value = String(display.width); el<HTMLInputElement>('height').value = String(display.height);
+  el<HTMLSelectElement>('fps').value = String(display.fps); el<HTMLSelectElement>('ui-scale').value = String(display.uiScale);
+  el('display-status').dataset.codec = display.hevc ? 'H.265' : 'H.264';
+  el('display-status').textContent = `${display.width} × ${display.height} / ${display.fps} fps / ${display.hevc ? 'H.265' : 'H.264'}${display.pending ? ` · ${t('nextSession')}` : ''}`;
+}
+function endExpectRestart() { expectRestart = false; window.clearTimeout(expectTimer); }
+/** defer: a sharper picture or another codec for shapes the phone already has; the box keeps it for the next session. */
+async function saveDisplay(target: Display, how: { defer?: boolean; reason: string }): Promise<boolean> {
   if (displayBusy || !token) return false;
   displayBusy = true; el<HTMLButtonElement>('apply').disabled = true; el<HTMLFieldSetElement>('display-fields').disabled = true;
   el('display-status').textContent = t('applying');
+  // A renegotiation is coming: hold the layout from now, the session's end may arrive before this answer.
+  const restart = active && !how.defer && (!display || !sameStream(display, target));
+  if (restart) { expectRestart = true; window.clearTimeout(expectTimer); expectTimer = window.setTimeout(() => { endExpectRestart(); fit(); }, DISPLAY_HOLD_MS); }
   try {
-    const r = await fetch(`/api/display?token=${encodeURIComponent(token)}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(target) });
-    const body = await r.json() as {ok?:boolean}; if (!r.ok || !body.ok) throw new Error();
-    display = target; el('display-status').textContent = t('applied'); return true;
-  } catch { el('display-status').textContent = t('applyFail'); return false; }
+    const r = await fetch(`/api/display?token=${encodeURIComponent(token)}`, { method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ ...target, defer: how.defer === true, reason: how.reason }) });
+    const body = await r.json() as {ok?:boolean; deferred?:boolean}; if (!r.ok || !body.ok) throw new Error();
+    if (body.deferred) { if (display) display.pending = true; el('display-status').textContent = t('deferred'); return true; }
+    display = { ...target, pending: false }; el('display-status').textContent = t('applied'); return true;
+  } catch { if (restart) { endExpectRestart(); fit(); } el('display-status').textContent = t('applyFail'); return false; }
   finally { displayBusy=false; el<HTMLButtonElement>('apply').disabled=false; el<HTMLFieldSetElement>('display-fields').disabled=false; render(); }
 }
 function scheduleAuto() {
@@ -372,14 +398,27 @@ function scheduleAuto() {
 async function adapt() {
   // Not for a hidden page (a covered page reports a small window) nor while fullscreen waits for its tap; a timer
   // set just before the car covered the page fired anyway and renegotiated to 800x400 (Chrome, 2026-10-12).
-  if (!display || !autoFit.checked || displayBusy || document.hidden || (wantFullscreen && !document.fullscreenElement)) return;
-  const plan=areaPlan(display,autoTarget(),wantHevc(),storedShapes());
+  const busy = () => !display || !autoFit.checked || displayBusy || document.hidden || (wantFullscreen && !document.fullscreenElement);
+  if (busy()) return;
+  // From the box's own, not what this page last saw: fps and size set by another page are kept, not sent back.
+  const current = await fetchDisplay();
+  if (current && !expectRestart && !holding) { display = current; showDisplay(); }
+  if (busy() || !display) return;
+  const urgent = urgentChange; urgentChange = '';
+  const target=autoTarget(), plan=areaPlan(display,target,wantHevc(),storedShapes());
   if (!plan) return;
   const next=plan.display,key=`${next.width}x${next.height}${next.hevc?'-h265':''}/${(next.areas??[]).map(a=>`${a.width}x${a.height}`).join(',')}/${next.area??0}`;
   if (key===lastAutoTarget) return;
   // Avoid a reconnect loop even when another viewer has a different screen shape.
   lastAutoTarget=key;
-  if (!(await saveDisplay(next))) { error(t('autoFail')); return; }
+  // A shape the phone has (only sharper, or another codec as this browser proved fast or slow) waits for the session to
+  // end; a new shape, the other orientation, a codec that failed or a change by hand renegotiates now.
+  const waits = !urgent && showsShape(display, target);
+  const reason = urgent || (waits ? 'quality' : 'shape');
+  // What waits is for the next session; the window's shape is shown now, by switching to its declared area.
+  const now = waits ? areaFor(display, target) : -1;
+  if (now >= 0 && now !== (display.area ?? 0) && !(await saveDisplay({ ...display, area: now }, { reason: 'area' }))) { error(t('autoFail')); return; }
+  if (!(await saveDisplay(next, { defer: waits, reason }))) { error(t('autoFail')); return; }
   saveFlag('f50-view-areas', JSON.stringify(plan.shapes));
   fit();
 }
@@ -396,13 +435,13 @@ function autoTarget() {
   return suggestedResolution(screen.clientWidth*pixels,screen.clientHeight*pixels,fastDecoder()?2560:1920);
 }
 el<HTMLSelectElement>('codec').value = readFlag('f50-codec') || 'auto';
-el<HTMLSelectElement>('codec').onchange=() => { saveFlag('f50-codec', el<HTMLSelectElement>('codec').value); lastAutoTarget=''; scheduleAuto(); };
-autoFit.onchange=() => { localStorage.setItem('f50-auto-fit',String(autoFit.checked)); lastAutoTarget=''; render(); scheduleAuto(); };
+el<HTMLSelectElement>('codec').onchange=() => { saveFlag('f50-codec', el<HTMLSelectElement>('codec').value); lastAutoTarget=''; urgentChange='manual'; scheduleAuto(); };
+autoFit.onchange=() => { localStorage.setItem('f50-auto-fit',String(autoFit.checked)); lastAutoTarget=''; urgentChange='manual'; render(); scheduleAuto(); };
 el<HTMLFormElement>('display-form').onsubmit=event => {
   event.preventDefault();
   const size=autoFit.checked?autoTarget():{width:Number(el<HTMLInputElement>('width').value),height:Number(el<HTMLInputElement>('height').value)};
   if (![size.width,size.height].every(v=>Number.isInteger(v)&&v>=480&&v<=3840&&v%2===0)) { error(t('range')); return; }
-  void saveDisplay({...size,fps:Number(el<HTMLSelectElement>('fps').value),uiScale:Number(el<HTMLSelectElement>('ui-scale').value),hevc:wantHevc()});
+  void saveDisplay({...size,fps:Number(el<HTMLSelectElement>('fps').value),uiScale:Number(el<HTMLSelectElement>('ui-scale').value),hevc:wantHevc()},{reason:'manual'});
 };
 new ResizeObserver(()=>{ fit(); scheduleAuto(); }).observe(screen);
 document.addEventListener('visibilitychange',()=>{
@@ -497,7 +536,7 @@ window.setInterval(() => {
   const now = performance.now(), gap = now - lastTick, late = gap > 2500 && !hiddenMeanwhile;
   lastTick = now; hiddenMeanwhile = document.hidden;
   if (!token) return;
-  if (holding && !late) { holdAwakeMs += Math.min(gap, 1000); if (holdAwakeMs > HOLD_MS) { holding = false; clearPicture(); render(); } }
+  if (holding && !late) { holdAwakeMs += Math.min(gap, 1000); if (holdAwakeMs > (holdForDisplay ? DISPLAY_HOLD_MS : HOLD_MS)) { holding = false; el('toast').hidden = true; clearPicture(); fit(); render(); } }
   if (late) { lifeEvent(8, { gapMs: Math.round(gap) }); wake(1); }
   else if (active && !document.hidden && now - lastHeard > 8000) revive();   // the link died while in view
   else if (!document.hidden && closedAt && now - closedAt > RELOAD_AFTER_MS) reloadWhenBoxAnswers();

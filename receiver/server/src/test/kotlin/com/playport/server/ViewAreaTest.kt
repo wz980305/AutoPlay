@@ -19,7 +19,8 @@ class ViewAreaTest {
         assertNotNull(DisplayState.validateAreas(1280, 996, listOf(full, windowed), 0))
         assertNotNull(DisplayState.validateAreas(1920, 1080, listOf(full, ViewArea(1281, 996)), 0))
         assertNotNull(DisplayState.validateAreas(1920, 1080, listOf(full, windowed), 2))
-        assertNotNull(DisplayState.validateAreas(1920, 1080, List(5) { windowed }, 0))
+        assertNull(DisplayState.validateAreas(1920, 1080, List(DisplayState.MAX_AREAS) { windowed }, 0))
+        assertNotNull(DisplayState.validateAreas(1920, 1080, List(DisplayState.MAX_AREAS + 1) { windowed }, 0))
     }
 
     @Test
@@ -54,5 +55,30 @@ class ViewAreaTest {
         assertEquals(prefs, json.decodeFromString(DisplayPrefs.serializer(), json.encodeToString(DisplayPrefs.serializer(), prefs)))
         assertTrue("an older config.json has no areas",
             json.decodeFromString(DisplayPrefs.serializer(), """{"width":1280,"height":720}""").areas.isEmpty())
+    }
+
+    @Test
+    fun aChangeThatCanWaitIsTakenUpWhenTheSessionEnds() {
+        val display = DisplayState(1280, 996, 60, 100, false)
+        val sharper = Json.decodeFromString(DisplayRequest.serializer(),
+            """{"width":1920,"height":1140,"fps":60,"hevc":true,"defer":true,"reason":"quality"}""")
+        assertTrue(sharper.defer)
+        display.defer(sharper)
+        assertEquals("the running session keeps what the phone was told", 1280, display.width)
+        assertTrue(display.applyPending())
+        assertEquals(listOf(1920, 1140, 60), listOf(display.width, display.height, display.fps))
+        assertTrue(display.hevc)
+        assertNull(display.pending)
+        assertFalse("nothing left to take up", display.applyPending())
+
+        display.defer(sharper.copy(width = 1280, height = 996))
+        display.update(1920, 1080, 30, 100, false)
+        assertNull("a change that could not wait replaces the waiting one", display.pending)
+        assertFalse(display.applyPending())
+        assertEquals(1920, display.width)
+
+        display.defer(sharper.copy(width = 7))
+        assertFalse("a bad waiting change is dropped", display.applyPending())
+        assertEquals(1920, display.width)
     }
 }

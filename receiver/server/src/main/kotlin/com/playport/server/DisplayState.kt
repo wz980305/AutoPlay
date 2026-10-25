@@ -31,6 +31,7 @@ class DisplayState(width: Int, height: Int, fps: Int, uiScale: Int, hevc: Boolea
         private set
 
     fun update(width: Int, height: Int, fps: Int, uiScale: Int, hevc: Boolean, areas: List<ViewArea> = emptyList(), area: Int = 0) {
+        pending = null
         this.width = width
         this.height = height
         this.fps = fps
@@ -46,6 +47,27 @@ class DisplayState(width: Int, height: Int, fps: Int, uiScale: Int, hevc: Boolea
             hevc == this.hevc && areas == this.areas
 
     fun useArea(index: Int) { area = index.coerceIn(0, maxOf(0, areas.lastIndex)) }
+
+    /**
+     * A change that can wait ([DisplayRequest.defer]: a sharper picture or another codec for the same window shapes),
+     * kept while a session runs: renegotiating cut the picture for 5-10 s, so it is taken up when the session ends by
+     * itself (2026-10-21; a Tesla's page asked for four such restarts within ten minutes, 2026-10-16). A change that
+     * cannot wait replaces it.
+     */
+    @Volatile var pending: DisplayRequest? = null
+        private set
+
+    fun defer(request: DisplayRequest) { pending = request }
+
+    /** Takes up the pending change, if any; true when the display changed. */
+    fun applyPending(): Boolean {
+        val next = pending ?: return false
+        pending = null
+        val areas = next.areas.takeIf { it.size > 1 } ?: emptyList()
+        if (validate(next.width, next.height, next.fps) != null || validateAreas(next.width, next.height, areas, next.area) != null) return false
+        update(next.width, next.height, next.fps, next.uiScale, next.hevc, areas, next.area)
+        return true
+    }
 
     /**
      * CarPlay sizes its icons by pixels per millimetre. With areas the stream is wider than the window shape it mostly
@@ -64,7 +86,8 @@ class DisplayState(width: Int, height: Int, fps: Int, uiScale: Int, hevc: Boolea
         const val MIN_EDGE = 480
         const val MAX_EDGE = 3840
 
-        const val MAX_AREAS = 4
+        /** As many as the page declares (display-fit.ts MAX_AREAS; 4 until 2026-10-21). */
+        const val MAX_AREAS = 8
 
         fun validateAreas(width: Int, height: Int, areas: List<ViewArea>, area: Int): String? = when {
             areas.size > MAX_AREAS -> "at most $MAX_AREAS view areas"

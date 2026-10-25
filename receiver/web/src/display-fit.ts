@@ -22,36 +22,67 @@ export function shownSize(width: number, height: number, viewWidth: number, view
 
 export interface Area { width: number; height: number }
 export interface AreaDisplay { width: number; height: number; hevc: boolean; areas?: Area[]; area?: number }
-/** Window shapes kept per browser and orientation as CarPlay view areas (protocol: at most 4). */
-export const MAX_AREAS = 4;
-/** View areas (2026-10-14): each window shape of this orientation the browser has shown (normal, fullscreen, the car's dock shown or not)
+/** Window shapes declared as CarPlay view areas, and kept per browser and orientation. 4 at first (2026-10-14, chosen,
+ *  not a protocol limit: DiPlay sets none); 8 since a car with a split screen shows more (user 2026-10-21). The
+ *  receiver's DisplayState.MAX_AREAS must allow as many. */
+export const MAX_AREAS = 8;
+/** Both orientations are declared together only while the stream grows by at most this much over one orientation's. */
+export const MIXED_GROWTH = 1.1;
+/** View areas (2026-10-14): each window shape the browser has shown (normal, fullscreen, the car's dock shown or not)
  *  becomes an area at the stream's top left, the stream as large as all of them. A shape seen before is reached by
  *  switching area, without reconnecting CarPlay; a new shape, or one that wants a clearly sharper size, declares the
- *  areas again (one reconnect). Returns what to send and the shapes to keep, or null when nothing changes. */
+ *  areas again (one reconnect). Returns what to send and the shapes to keep, or null when nothing changes.
+ *  The shapes are kept most recently used last; the areas declared are the most recent ones, ordered by size, so the
+ *  same shapes always make the same areas whichever of them the window has now (2026-10-21). */
 export function areaPlan<T extends AreaDisplay>(display: T, target: Area, hevc: boolean, known: Area[]): { display: T; shapes: Area[] } | null {
-  // Only shapes of the target's orientation are declared: a landscape and a portrait shape together make the stream
-  // as large as both, a near-square frame the iPhone has to encode (xcertplay 1836c27). Shapes of the other
-  // orientation stay remembered for when the window turns back; turning is one reconnect.
   const landscape = (s: Area) => s.width >= s.height, wide = landscape(target);
-  const valid = known.filter(s => s.width > 0 && s.height > 0).map(s => ({ width: s.width, height: s.height }));
-  const other = valid.filter(s => landscape(s) !== wide).slice(-MAX_AREAS);
-  const shapes = valid.filter(s => landscape(s) === wide).slice(-MAX_AREAS);
-  let at = shapes.findIndex(s => !aspectChanged(s, target));
-  if (at < 0) {
-    shapes.push({ ...target });
-    if (shapes.length > MAX_AREAS) shapes.shift();
-    at = shapes.length - 1;
-  } else if (target.width * target.height > shapes[at].width * shapes[at].height * 1.2) {
-    shapes[at] = { ...target };   // sharper (a fast decoder's real pixels): worth one reconnect
-  }
-  const width = Math.max(...shapes.map(s => s.width)), height = Math.max(...shapes.map(s => s.height));
-  const areas = shapes.length > 1 ? shapes : [];
+  const all = known.filter(s => s.width > 0 && s.height > 0).map(s => ({ width: s.width, height: s.height }));
+  let found = all.findIndex(s => landscape(s) === wide && !aspectChanged(s, target));
+  let entry = found >= 0 ? all.splice(found, 1)[0] : { ...target };
+  if (target.width * target.height > entry.width * entry.height * 1.2) entry = { ...target };   // sharper (a fast decoder's real pixels): worth one reconnect
+  all.push(entry);
+  // At most MAX_AREAS of each orientation are remembered.
+  const kept = all.filter((s, i) => all.slice(i + 1).filter(n => landscape(n) === landscape(s)).length < MAX_AREAS);
+  // Shapes of the window's orientation are declared: a landscape and a portrait shape together make the stream as
+  // large as both, a near-square frame the iPhone has to encode (xcertplay 1836c27; 1920x1080 with 1082x1280 would be
+  // 1920x1280). The most recent shapes of both join when the stream hardly grows: a split screen turns the car's window
+  // portrait and back (XPeng with fnOS beside CarPlay, 2026-10-19: 1372x1260 with 1162x1280 is 1372x1280, yet every
+  // open and close of the panel renegotiated). Otherwise turning is one reconnect.
+  let chosen = kept.filter(s => landscape(s) === wide).slice(-MAX_AREAS);
+  const recent = kept.slice(-MAX_AREAS);
+  const ofOrientation = (o: boolean) => recent.filter(s => landscape(s) === o);
+  if (recent.some(s => landscape(s) !== wide) &&
+      pixels(recent) <= MIXED_GROWTH * Math.max(pixels(ofOrientation(true)), pixels(ofOrientation(false)))) chosen = recent;
+  chosen = [...chosen].sort((a, b) => a.width - b.width || a.height - b.height);
+  const at = chosen.indexOf(entry);
+  const width = Math.max(...chosen.map(s => s.width)), height = Math.max(...chosen.map(s => s.height));
+  const areas = chosen.length > 1 ? chosen : [];
   const declared = display.areas ?? [];
   const same = display.width === width && display.height === height && display.hevc === hevc &&
     declared.length === areas.length && declared.every((a, i) => a.width === areas[i].width && a.height === areas[i].height);
-  const kept = [...other, ...shapes];
   if (same) return areas.length && (display.area ?? 0) !== at ? { display: { ...display, area: at }, shapes: kept } : null;
   return { display: { ...display, width, height, hevc, areas, area: areas.length ? at : 0 }, shapes: kept };
+}
+/** The declared area with `target`'s shape, or -1 (none, or no areas declared). */
+export function areaFor(display: AreaDisplay, target: Area) {
+  return display.areas && display.areas.length > 1 ? display.areas.findIndex(s => !aspectChanged(s, target)) : -1;
+}
+function pixels(shapes: Area[]) {
+  return shapes.length ? Math.max(...shapes.map(s => s.width)) * Math.max(...shapes.map(s => s.height)) : 0;
+}
+/** Whether `next` keeps the stream the phone was told, only the area in use differing: no reconnect. */
+export function sameStream(display: AreaDisplay & { fps?: number; uiScale?: number }, next: AreaDisplay & { fps?: number; uiScale?: number }) {
+  const a = display.areas ?? [], b = next.areas ?? [];
+  return display.width === next.width && display.height === next.height && display.hevc === next.hevc &&
+    display.fps === next.fps && display.uiScale === next.uiScale &&
+    a.length === b.length && a.every((s, i) => s.width === b[i].width && s.height === b[i].height);
+}
+/** Whether the display the phone was told already has `target`'s shape (one of its areas, or the whole stream). Then a
+ *  plan for it only makes the picture sharper or changes codec, and waits for the session to end (2026-10-21: each
+ *  renegotiation cut the picture 5-10 s; a Tesla's page asked for four such within ten minutes, 2026-10-16). */
+export function showsShape(display: AreaDisplay, target: Area) {
+  const declared = display.areas && display.areas.length > 1 ? display.areas : [{ width: display.width, height: display.height }];
+  return declared.some(s => s.width > 0 && s.height > 0 && !aspectChanged(s, target));
 }
 /** The picture element's size so that the area in use fills the view (the rest of the stream lies outside it, to the
  *  right and below; touches, normalized over the element, stay in stream coordinates). Without areas: shownSize. */

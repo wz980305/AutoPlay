@@ -103,6 +103,8 @@ export interface ServerMessage {
   type: string;
   deviceName?: string;
   sessionActive?: boolean;
+  /** With sessionActive false: ended to apply a new display, the iPhone comes straight back. */
+  restarting?: boolean;
   width?: number;
   height?: number;
   viewers?: number;

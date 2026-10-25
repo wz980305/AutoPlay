@@ -72,7 +72,14 @@ data class DisplayRequest(
     /** Shapes the page's window takes (each at the stream's top left), and the one in use now. */
     val areas: List<ViewArea> = emptyList(),
     val area: Int = 0,
+    /** A change that can wait for the next session (a sharper picture, another codec): never cut the one running. */
+    val defer: Boolean = false,
+    /** Who asked, for the log: "manual", "shape", "quality", "codec" ... */
+    val reason: String = "",
 )
+
+/** What became of a display request: an error, or applied now, or kept until the session ends ([DisplayRequest.defer]). */
+data class DisplayOutcome(val error: String? = null, val deferred: Boolean = false)
 
 @Serializable
 data class ServerMessage(
@@ -93,6 +100,8 @@ data class ServerMessage(
     val micCodec: String? = null,
     val micSamplesPerPacket: Int? = null,
     val micBitrate: Int? = null,
+    /** "session" ended because the receiver applies a new display: the phone comes back at once (keep the picture). */
+    val restarting: Boolean? = null,
 )
 
 private class WsClient(
@@ -150,7 +159,7 @@ class WebHub(
     val viewerCount: Int get() = clients.size
 
     /** Applies a display change; returns null on success or an error message. */
-    @Volatile var onApplyDisplay: ((DisplayRequest) -> String?)? = null
+    @Volatile var onApplyDisplay: ((DisplayRequest) -> DisplayOutcome)? = null
 
     /** Browser microphone payloads: (isOpus, payload). */
     @Volatile var onMicrophoneData: ((Boolean, ByteArray) -> Unit)? = null
@@ -205,7 +214,7 @@ class WebHub(
 
     fun videoCodec(type: Int): VideoCodec? = codecsByStream[type]
 
-    fun setSessionState(active: Boolean, name: String?) {
+    fun setSessionState(active: Boolean, name: String?, restarting: Boolean = false) {
         if (!active) { nowPlaying = NowPlaying(); artwork = null }
         sessionActive = active
         phoneName = name
@@ -216,6 +225,7 @@ class WebHub(
                 sessionActive = active,
                 viewers = clients.size,
                 message = name,
+                restarting = restarting.takeIf { it },
             ),
         )
     }
@@ -353,7 +363,8 @@ class WebHub(
                     )
                     return@post
                 }
-                val error = applier(request)
+                val outcome = applier(request)
+                val error = outcome.error
                 if (error != null) {
                     call.respondText(
                         "{\"error\":\"$error\"}",
@@ -362,7 +373,8 @@ class WebHub(
                     )
                     return@post
                 }
-                call.respondText("""{"ok":true}""", io.ktor.http.ContentType.Application.Json)
+                call.respondText(if (outcome.deferred) """{"ok":true,"deferred":true}""" else """{"ok":true}""",
+                    io.ktor.http.ContentType.Application.Json)
             }
             webSocket("/ws") {
                 val token = call.request.queryParameters["token"]
@@ -556,6 +568,8 @@ class WebHub(
             }) }
         })
         put("area", kotlinx.serialization.json.JsonPrimitive(display.area))
+        // A change waiting for the session to end (DisplayState.pending): shown as "next connection" in the settings.
+        put("pending", kotlinx.serialization.json.JsonPrimitive(display.pending != null))
         put("orientation", kotlinx.serialization.json.JsonPrimitive(display.orientation))
         put(
             "presets",

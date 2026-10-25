@@ -6,7 +6,7 @@ async function load(name, transform = s => s) {
   const {outputText}=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}});
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 }
-const {suggestedResolution,aspectChanged,shownSize,areaPlan,areaSize}=await load('display-fit');
+const {suggestedResolution,aspectChanged,shownSize,areaPlan,areaSize,areaFor,sameStream,showsShape,MAX_AREAS}=await load('display-fit');
 { // XPeng fullscreen is 876x579 or 876x641 CSS px (dock shown or not): 1280x846 or 1280x936 (F50 drive 2026-10-13).
   // With view areas the page (1280x756) and both fullscreen heights are areas: learned once, then switched.
   const s846=suggestedResolution(876,579),s936=suggestedResolution(876,641),page=suggestedResolution(876,518);
@@ -26,6 +26,20 @@ assert.deepEqual(suggestedResolution(2560,1440,2560),{width:2560,height:1440},'a
 assert.deepEqual(suggestedResolution(3840,2160,2560),{width:2560,height:1440},'never beyond 2560');
 assert.deepEqual(suggestedResolution(1254*1.53,784*1.53,2560),{width:1918,height:1200},'Tesla: same as before');
 assert.deepEqual(suggestedResolution(2560,1440),{width:1920,height:1080},'1920 unless asked for more');
+{ // A Tesla page (2026-10-16 diagnosis): 1280x996 H.264 first, then the browser proves a fast decoder. Real pixels and
+  // H.265 for the same window are sharper only: that waits for the session to end. A new shape cannot wait.
+  const live={width:1280,height:996,fps:60,uiScale:100,hevc:false};
+  const sharp=suggestedResolution(1254*1.53,976*1.53,2560);
+  const plan=areaPlan(live,sharp,true,[{width:1280,height:996}]);
+  assert.ok(plan&&!sameStream(live,plan.display),'sharper and H.265 is a new stream');
+  assert.ok(showsShape(live,sharp),'but the phone already has this shape: it waits');
+  const full=suggestedResolution(1254,744);
+  assert.ok(!showsShape(live,full),'fullscreen the first time is a new shape: now');
+  const both=areaPlan(live,full,false,[{width:1280,height:996}]).display;
+  assert.ok(showsShape(both,{width:1280,height:996})&&showsShape(both,full),'each declared area counts');
+  assert.ok(sameStream(both,{...both,area:0}),'switching area keeps the stream');
+  assert.ok(!sameStream(both,{...both,fps:30}),'another fps does not');
+  assert.ok(!showsShape(live,{width:720,height:1280}),'the other orientation renegotiates now'); }
 assert.deepEqual(shownSize(1280,846,1280,756),{width:1280,height:756},'fullscreen picture fills the normal page without bars');
 assert.deepEqual(shownSize(1280,756,1280,846),{width:1280,height:846},'and the other way round');
 assert.deepEqual(shownSize(1280,846,1082,1280),{width:1082,height:1280},'no black bars even before a portrait renegotiation');
@@ -204,8 +218,11 @@ console.log('Car checks passed: aspect fit, media keys, disconnect state, single
   const s=areaSize(1920,1080,windowed,773,601);
   assert.ok(Math.abs(s.width-773*1920/1280)<1e-6 && Math.abs(s.height-601*1080/996)<1e-6,'the area fills the view');
   assert.deepEqual(areaSize(1280,996,undefined,773,601),{width:773,height:601},'without areas as before');
-  const four=areaPlan(start,{width:1280,height:400},true,[{width:1280,height:720},{width:1280,height:996},{width:1920,height:1080},{width:1280,height:640}]);
-  assert.equal(four.display.areas.length,4,'at most four areas');
+  const many=Array.from({length:MAX_AREAS},(_,i)=>({width:1280,height:400+60*i}));
+  const capped=areaPlan(start,{width:1280,height:300},true,many);
+  assert.equal(capped.display.areas.length,MAX_AREAS,'at most MAX_AREAS areas');
+  assert.ok(!capped.display.areas.some(a=>a.height===400),'the least recently used shape gives way');
+  assert.equal(capped.shapes.length,MAX_AREAS,'and is no longer kept');
   // Turning the window (xcertplay 1836c27): only the window's orientation is declared, so the stream is never the
   // near-square envelope of a landscape and a portrait shape; the other orientation's shapes stay remembered.
   const portrait={width:1082,height:1280};
@@ -216,7 +233,31 @@ console.log('Car checks passed: aspect fit, media keys, disconnect state, single
   assert.deepEqual([again.display.width,again.display.height],[1920,1080],'turning back is landscape only');
   assert.deepEqual(again.display.areas,[windowed,full],'with the shapes learned before');
   assert.equal(again.display.area,1);
-  assert.deepEqual(again.shapes,[portrait,windowed,full],'and the portrait one is kept in turn');
+  assert.deepEqual(again.shapes,[windowed,portrait,full],'and the portrait one is kept, the most recent last');
+  // A split screen (XPeng with fnOS beside CarPlay, 2026-10-19): the window turns portrait and back as the panel opens
+  // and closes. The two orientations together hardly grow the stream: declared once, then only switched.
+  const page={width:1280,height:756},tall={width:1280,height:1260},side={width:1162,height:1280};
+  const xp={width:1372,height:1260,fps:30,uiScale:100,hevc:true,areas:[page,tall],area:0};
+  const split=areaPlan(xp,side,true,[page,tall]);
+  assert.deepEqual([split.display.width,split.display.height,split.display.areas.length],[1280,1280,3],'portrait joins: 1280x1280');
+  let d=split.display,k=split.shapes;
+  for (const shape of [page,side,tall,side,page]) {
+    const p=areaPlan(d,shape,true,k);
+    if (p) { assert.deepEqual({...p.display,area:0},{...d,area:0},'opening and closing the panel only switches area'); d=p.display; k=p.shapes; }
+    const index=d.areas.findIndex(a=>!aspectChanged(a,shape));
+    assert.equal(d.area,index,'the area in use is the window\'s'); }
+  // The F50 in the XPeng (2026-10-21) had four landscape shapes declared; the split screen's portrait joins them.
+  const narrow={width:1372,height:686},fullDock={width:1280,height:846};
+  const xp4={width:1372,height:1260,fps:30,uiScale:100,hevc:true,areas:[page,fullDock,narrow,tall],area:1};
+  const mixed=areaPlan(xp4,side,true,[narrow,fullDock,tall,page]);
+  assert.deepEqual(mixed.display.areas,[side,page,fullDock,tall,narrow],'all five, by size');
+  assert.deepEqual([mixed.display.width,mixed.display.height],[1372,1280]);
+  for (const shape of [page,side,narrow,side,fullDock]) {
+    const p=areaPlan(mixed.display,shape,true,mixed.shapes);
+    assert.ok(!p||sameStream(mixed.display,p.display),'opening and closing the panel only switches area'); }
+  assert.equal(areaFor(xp4,fullDock),1,'a declared shape is found');
+  assert.equal(areaFor(xp4,side),-1,'a new one is not');
+  assert.equal(areaFor({width:1280,height:720,hevc:false},page),-1,'nor without areas');
 }
 console.log('View areas: shapes learned once, switched without reconnecting.');
 { // Tesla fullscreen leaves the page only when its video sites answer (offline Tesla, simulated 2026-10-14).
