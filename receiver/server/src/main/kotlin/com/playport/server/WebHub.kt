@@ -126,6 +126,8 @@ class WebHub(
 
     /** Invoked (once per client) when a browser is ready to receive; used to request a keyframe. */
     @Volatile var onViewerJoined: ((Int) -> Unit)? = null
+    /** Pages connected to watch (the supervisor releases CarPlay when there are none for a while). */
+    val viewerCount: Int get() = clients.size
 
     /** Applies a display change; returns null on success or an error message. */
     @Volatile var onApplyDisplay: ((Int, Int, Int, Int, Boolean) -> String?)? = null

@@ -34,6 +34,9 @@ import org.slf4j.LoggerFactory
  * The desktop CarPlay receiver: RTSP listener, mDNS advertisement, media bridge to browsers and
  * (optionally) the wireless Bluetooth bootstrap.
  */
+/** What the supervisor does about a wireless session nobody watches (CarPlayServer.idleAction). */
+enum class IdleAction { NONE, RELEASE, WAIT, RESUME }
+
 class CarPlayServer(val config: ServerConfig, private val configStore: ConfigStore? = null) : Closeable {
     private val log = LoggerFactory.getLogger("playport")
 
@@ -499,13 +502,38 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         if (!config.wireless) return
         Thread({
             var absentChecks = 0
+            var viewerSeenAt = System.nanoTime() / 1_000_000   // the boot invitation has the full wait for a page
+            var parked = false
             while (!closed.get()) {
                 try {
                     Thread.sleep(SUPERVISOR_INTERVAL_MS)
                     if (closed.get()) return@Thread
                     val now = System.nanoTime() / 1_000_000
                     // The phone on the cable owns CarPlay; its session is no Wi-Fi presence either.
-                    if (cablePhone) continue
+                    if (cablePhone) { viewerSeenAt = now; continue }
+                    if (hub.viewerCount > 0) viewerSeenAt = now
+                    when (idleAction(now, viewerSeenAt, activeSession != null, parked)) {
+                        IdleAction.RELEASE -> {
+                            parked = true
+                            log.info("no viewer for {} s: CarPlay released until a page opens", IDLE_RELEASE_MS / 1000)
+                            synchronized(this@CarPlayServer) {
+                                ++wirelessGeneration
+                                val link = wireless
+                                wireless = null
+                                link?.close()
+                            }
+                            runCatching { activeSession?.close() }
+                            continue
+                        }
+                        IdleAction.WAIT -> continue
+                        IdleAction.RESUME -> {
+                            parked = false
+                            log.info("a viewer opened the page: inviting the iPhone again")
+                            restartWireless()
+                            continue
+                        }
+                        IdleAction.NONE -> {}
+                    }
                     if (activeSession != null) {
                         lastBootstrapAt = now
                         absentChecks = 0
@@ -720,5 +748,17 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         private const val HANDOFF_ADMIT_MS = 30_000L
         private const val HANDOFF_JOIN_MS = 25_000L
         private const val HANDOFF_RETRY_WINDOW_MS = 20_000L
+
+        /** A wireless session nobody watches ends after this; the iPhone kept encoding and sending its screen and
+         *  ran hot and slow at home with the F50 on all day (2026-10-13). A real car ends it at switch-off. */
+        const val IDLE_RELEASE_MS = 120_000L
+
+        /** [viewerSeenAt]: when a page last watched (or the box started). Parked: released, no invitations
+         *  until a page opens again. */
+        fun idleAction(now: Long, viewerSeenAt: Long, session: Boolean, parked: Boolean): IdleAction = when {
+            parked -> if (viewerSeenAt >= now) IdleAction.RESUME else IdleAction.WAIT
+            session && now - viewerSeenAt >= IDLE_RELEASE_MS -> IdleAction.RELEASE
+            else -> IdleAction.NONE
+        }
     }
 }
