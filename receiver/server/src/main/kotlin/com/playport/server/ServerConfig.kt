@@ -27,8 +27,6 @@ data class ServerConfig(
     val bindAddress: String? = null,
     val identityDir: Path,
     val stateDir: Path,
-    val mfiRemoteServer: String? = null,
-    val mfiRemoteToken: String? = null,
     val wireless: Boolean = false,
     val wifiSsid: String? = null,
     val wifiPassphrase: String? = null,
@@ -85,8 +83,6 @@ data class ServerConfig(
                     "--bind" -> config = config.copy(bindAddress = nextValue(flag))
                     "--identity-dir" -> config = config.copy(identityDir = Path.of(nextValue(flag)))
                     "--state-dir" -> config = config.copy(stateDir = Path.of(nextValue(flag)))
-                    "--mfi-server" -> config = config.copy(mfiRemoteServer = nextValue(flag))
-                    "--mfi-token" -> config = config.copy(mfiRemoteToken = nextValue(flag))
                     "--wireless" -> config = config.copy(wireless = true)
                     "--wifi-ssid" -> config = config.copy(wifiSsid = nextValue(flag))
                     "--wifi-passphrase" -> config = config.copy(wifiPassphrase = nextValue(flag))
@@ -137,8 +133,6 @@ data class ServerConfig(
                   --bind <address>          Bind address (default: auto-detect LAN address)
                   --identity-dir <path>     Directory containing offline-mfi/ (default: ./identity)
                   --state-dir <path>        AirPlay identity + pairing state (default: ~/.playport)
-                  --mfi-server <url>        Remote MFi server address (alternative to offline identity)
-                  --mfi-token <token>       Remote MFi bearer token
                   --wireless                Enable the Bluetooth wireless bootstrap
                   --wifi-ssid <ssid>        Wi-Fi network the phone should join (the box's own access point)
                   --wifi-passphrase <pass>  Wi-Fi passphrase handed to the phone

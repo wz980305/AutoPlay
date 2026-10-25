@@ -31,9 +31,7 @@ fun main(args: Array<String>) {
         server.mfi
     } catch (error: Exception) {
         System.err.println("MFi identity unavailable: ${error.message}")
-        System.err.println(
-            "Provide identity/offline-mfi/{identity.pk8,certificate.p7b} or configure --mfi-server.",
-        )
+        System.err.println("Provide identity/offline-mfi/{identity.pk8,certificate.p7b}.")
         exitProcess(1)
     }
 
