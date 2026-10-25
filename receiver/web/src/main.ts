@@ -6,7 +6,7 @@ import { VideoPlayer } from './video';
 import { Connection } from './ws';
 import { SystemMedia } from './media-session';
 import { LagProbe } from './lag';
-import { suggestedResolution, areaPlan, areaSize, areaFor, sameStream, showsShape, frameRateCheck, type Area } from './display-fit';
+import { suggestedResolution, windowShape, areaPlan, areaSize, areaFor, sameStream, showsShape, frameRateCheck, type Area } from './display-fit';
 import { t, language, setLanguage, type Key } from './i18n';
 import { isNight, parseNightMode } from './night';
 import { reachable, TESLA_HOPS } from './tesla-fullscreen';
@@ -83,8 +83,11 @@ function fit() {
   if (expectRestart || (holding && holdForDisplay)) return;
   // With view areas the stream is larger than the area in use: the area fills the view from the top left and the
   // rest of the picture lies outside it (areaSize, display-fit.ts).
+  // The area's share of the stream as declared: a stream decoded at another size than declared (a canvas scaled for
+  // the old UI size, 2026-10-22) cut the area's right and bottom off when measured against the decoded size.
   const areas = display?.areas ?? [], area = areas.length > 1 ? areas[display?.area ?? 0] : undefined;
-  const size = areaSize(canvas.width, canvas.height, area, screen.clientWidth, screen.clientHeight);
+  const size = area && display ? areaSize(display.width, display.height, area, screen.clientWidth, screen.clientHeight)
+    : areaSize(canvas.width, canvas.height, undefined, screen.clientWidth, screen.clientHeight);
   surface.style.width = `${size.width}px`; surface.style.height = `${size.height}px`;
   screen.classList.toggle('area', !!area);
 }
@@ -413,7 +416,7 @@ async function adapt() {
   if (current && !expectRestart && !holding) { display = current; showDisplay(); }
   if (busy() || !display) return;
   const urgent = urgentChange; urgentChange = '';
-  const target=autoTarget(), plan=areaPlan(display,target,wantHevc(),storedShapes());
+  const target=autoTarget(), plan=areaPlan(display,target,wantHevc(),storedShapes(),fastDecoder()?2560:1920);
   if (!plan) return;
   const next=plan.display,key=`${next.width}x${next.height}${next.hevc?'-h265':''}/${(next.areas??[]).map(a=>`${a.width}x${a.height}`).join(',')}/${next.area??0}`;
   if (key===lastAutoTarget) return;
@@ -427,27 +430,33 @@ async function adapt() {
   const now = waits ? areaFor(display, target) : -1;
   if (now >= 0 && now !== (display.area ?? 0) && !(await saveDisplay({ ...display, area: now }, { reason: 'area' }))) { error(t('autoFail')); return; }
   if (!(await saveDisplay(next, { defer: waits, reason }))) { error(t('autoFail')); return; }
-  saveFlag('f50-view-areas', JSON.stringify(plan.shapes));
+  saveFlag(SHAPES_KEY, JSON.stringify(plan.shapes));
   fit();
 }
 /** The window shapes this browser has shown, kept as CarPlay view areas (areaPlan, display-fit.ts): switching
  *  between them (fullscreen in and out, the car's dock, a Tesla's own fullscreen) moves CarPlay to another area
  *  without reconnecting; only a shape seen the first time reconnects, once (2026-10-14, replacing the earlier
  *  "renegotiate a close shape in fullscreen only, once per browser"). */
+/** Shapes as windowShape gives them since 2026-10-22; the earlier key held each shape fitted on its own, learned anew. */
+const SHAPES_KEY = 'f50-window-shapes';
 function storedShapes(): Area[] {
-  try { const value = JSON.parse(readFlag('f50-view-areas') || '[]'); return Array.isArray(value) ? value.filter(a => Number.isInteger(a?.width) && Number.isInteger(a?.height)) : []; }
+  try { const value = JSON.parse(readFlag(SHAPES_KEY) || '[]'); return Array.isArray(value) ? value.filter(a => Number.isInteger(a?.width) && Number.isInteger(a?.height)) : []; }
   catch { return []; }
 }
+/** This window's shape (windowShape, display-fit.ts): areaPlan fits it, with the others remembered, to the stream. */
 function autoTarget() {
   const pixels=fastDecoder()?Math.min(2,Math.max(1,window.devicePixelRatio||1)):1;
-  return suggestedResolution(screen.clientWidth*pixels,screen.clientHeight*pixels,fastDecoder()?2560:1920);
+  return windowShape(screen.clientWidth,screen.clientHeight,pixels);
 }
 el<HTMLSelectElement>('codec').value = readFlag('f50-codec') || 'auto';
 el<HTMLSelectElement>('codec').onchange=() => { saveFlag('f50-codec', el<HTMLSelectElement>('codec').value); lastAutoTarget=''; urgentChange='manual'; scheduleAuto(); };
 autoFit.onchange=() => { localStorage.setItem('f50-auto-fit',String(autoFit.checked)); lastAutoTarget=''; urgentChange='manual'; render(); scheduleAuto(); };
 el<HTMLFormElement>('display-form').onsubmit=event => {
   event.preventDefault();
-  const size=autoFit.checked?autoTarget():{width:Number(el<HTMLInputElement>('width').value),height:Number(el<HTMLInputElement>('height').value)};
+  // Automatic display keeps the box's stream and its areas, changing only frame rate, size or codec: sent without the
+  // areas, the largest window then showed less (2026-10-22).
+  const size:Pick<Display,'width'|'height'|'areas'|'area'>=autoFit.checked?(display?{width:display.width,height:display.height,areas:display.areas,area:display.area}:suggestedResolution(autoTarget().width,autoTarget().height,fastDecoder()?2560:1920))
+    :{width:Number(el<HTMLInputElement>('width').value),height:Number(el<HTMLInputElement>('height').value)};
   if (![size.width,size.height].every(v=>Number.isInteger(v)&&v>=480&&v<=3840&&v%2===0)) { error(t('range')); return; }
   void saveDisplay({...size,fps:Number(el<HTMLSelectElement>('fps').value),uiScale:Number(el<HTMLSelectElement>('ui-scale').value),hevc:wantHevc()},{reason:'manual'});
 };
@@ -465,7 +474,7 @@ function pageEvent(ev: number) {
   connection.send({type:'stats',stats:{ev,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,width:screen.clientWidth,height:screen.clientHeight,want:wantFullscreen?1:0,...viewport()}});
 }
 /** Which page build runs (raised with each build tried in the car). */
-const BUILD = 202610212300;
+const BUILD = 202610221200;
 /** What the browser says of the space it gives the page, to find the car's bar over a fullscreen page (2026-10-13):
  *  window, visual viewport (and its offset), screen, available screen, outer window, pixel ratio. */
 function viewport(): Record<string, number> {

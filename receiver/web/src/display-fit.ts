@@ -36,13 +36,27 @@ export function frameRateCheck(run: number, caughtUp: number, fps: number): { ru
 }
 /** Both orientations are declared together only while the stream grows by at most this much over one orientation's. */
 export const MIXED_GROWTH = 1.1;
+/** A window's shape as remembered for view areas: its CSS size times the pixels used (1, or the device pixel ratio with
+ *  a fast decoder), not yet fitted to the stream's limits: areaPlan fits the whole set at once, so the shapes keep their
+ *  true proportions (2026-10-22: each fitted on its own, a split screen's third grew to 1280 like the full screen, and
+ *  CarPlay, which lays out by physical width, showed both the same). */
+export function windowShape(cssWidth: number, cssHeight: number, pixels: number): Area {
+  return { width: Math.max(2, Math.round(cssWidth * pixels / 2) * 2), height: Math.max(2, Math.round(cssHeight * pixels / 2) * 2) };
+}
+/** The factor that brings a stream of `width` x `height` (the envelope of the shapes) within suggestedResolution's
+ *  limits: the long side 1280 to `max`, the short side at least 480. */
+function fitFactor(width: number, height: number, max: number) {
+  const long = Math.max(width, height), short = Math.min(width, height);
+  const factor = long > max ? max / long : long < 1280 ? 1280 / long : 1;
+  return Math.max(factor, 480 / Math.max(1, short));
+}
 /** View areas (2026-10-14): each window shape the browser has shown (normal, fullscreen, the car's dock shown or not)
  *  becomes an area at the stream's top left, the stream as large as all of them. A shape seen before is reached by
  *  switching area, without reconnecting CarPlay; a new shape, or one that wants a clearly sharper size, declares the
  *  areas again (one reconnect). Returns what to send and the shapes to keep, or null when nothing changes.
  *  The shapes are kept most recently used last; the areas declared are the most recent ones, ordered by size, so the
  *  same shapes always make the same areas whichever of them the window has now (2026-10-21). */
-export function areaPlan<T extends AreaDisplay>(display: T, target: Area, hevc: boolean, known: Area[]): { display: T; shapes: Area[] } | null {
+export function areaPlan<T extends AreaDisplay>(display: T, target: Area, hevc: boolean, known: Area[], max = 1920): { display: T; shapes: Area[] } | null {
   const landscape = (s: Area) => s.width >= s.height, wide = landscape(target);
   const all = known.filter(s => s.width > 0 && s.height > 0).map(s => ({ width: s.width, height: s.height }));
   let found = all.findIndex(s => landscape(s) === wide && !aspectChanged(s, target));
@@ -63,8 +77,11 @@ export function areaPlan<T extends AreaDisplay>(display: T, target: Area, hevc: 
       pixels(recent) <= MIXED_GROWTH * Math.max(pixels(ofOrientation(true)), pixels(ofOrientation(false)))) chosen = recent;
   chosen = [...chosen].sort((a, b) => a.width - b.width || a.height - b.height);
   const at = chosen.indexOf(entry);
-  const width = Math.max(...chosen.map(s => s.width)), height = Math.max(...chosen.map(s => s.height));
-  const areas = chosen.length > 1 ? chosen : [];
+  // One factor for all: the stream within its limits, every area the same share of it as its window of the screen.
+  const factor = fitFactor(Math.max(...chosen.map(s => s.width)), Math.max(...chosen.map(s => s.height)), max);
+  const fitted = chosen.map(s => ({ width: Math.round(s.width * factor / 2) * 2, height: Math.round(s.height * factor / 2) * 2 }));
+  const width = Math.max(...fitted.map(s => s.width)), height = Math.max(...fitted.map(s => s.height));
+  const areas = fitted.length > 1 ? fitted : [];
   const declared = display.areas ?? [];
   const same = display.width === width && display.height === height && display.hevc === hevc &&
     declared.length === areas.length && declared.every((a, i) => a.width === areas[i].width && a.height === areas[i].height);

@@ -6,7 +6,7 @@ async function load(name, transform = s => s) {
   const {outputText}=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}});
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 }
-const {suggestedResolution,aspectChanged,shownSize,areaPlan,areaSize,areaFor,sameStream,showsShape,MAX_AREAS,frameRateCheck}=await load('display-fit');
+const {suggestedResolution,windowShape,aspectChanged,shownSize,areaPlan,areaSize,areaFor,sameStream,showsShape,MAX_AREAS,frameRateCheck}=await load('display-fit');
 { // 60 fps the decoder cannot keep up with (Zeekr 7X): two 10 s reports in a row with two catch-ups each go to 30 fps.
   let c=frameRateCheck(0,3,60);assert.deepEqual(c,{run:1,lower:false},'one report is not enough');
   assert.deepEqual(frameRateCheck(c.run,2,60),{run:0,lower:true},'two in a row lower it');
@@ -311,6 +311,22 @@ console.log('Car checks passed: aspect fit, media keys, disconnect state, single
   assert.equal(areaFor(xp4,side),-1,'a new one is not');
   assert.equal(areaFor({width:1280,height:720,hevc:false},page),-1,'nor without areas');
 }
+{ // A screen split in thirds (2026-10-22): the areas keep the windows' proportions, the set fitted to the stream at once
+  // (each shape fitted on its own made a third as wide as the full screen, and CarPlay showed both the same).
+  const full=windowShape(1280,720,1), two=windowShape(853,720,1), third=windowShape(427,720,1);
+  assert.deepEqual([two,third],[{width:854,height:720},{width:428,height:720}]);
+  let p=areaPlan({width:1280,height:720,hevc:true},two,true,[full]);
+  assert.deepEqual(p.display.areas,[two,full],'two thirds of the screen, two thirds of the stream');
+  p=areaPlan(p.display,third,true,p.shapes);
+  assert.deepEqual([p.display.width,p.display.height,p.display.areas],[1280,720,[third,two,full]],'the third joins at its own width');
+  // A Mac at 2x with a fast decoder: 1728x1000 CSS px is 3456x2000, fitted to 2560 together with its half.
+  const big=windowShape(1728,1000,2), half=windowShape(864,1000,2);
+  const m=areaPlan({width:1280,height:720,hevc:true},big,true,[half],2560);
+  assert.deepEqual([m.display.width,m.display.height,m.display.areas],[2560,1482,[{width:1280,height:1482},{width:2560,height:1482}]]);
+  assert.equal(m.display.area,1,'the large window in use');
+  // A small car page alone still gets at least 1280 on the long side, as suggestedResolution gave it.
+  assert.deepEqual(areaPlan({width:1280,height:720,hevc:false},windowShape(876,518,1),false,[]).display,
+    {width:1280,height:756,hevc:false,areas:[],area:0}); }
 console.log('View areas: shapes learned once, switched without reconnecting.');
 { // Tesla fullscreen leaves the page only when its video sites answer (offline Tesla, simulated 2026-10-14).
   const {reachable,TESLA_HOPS}=await load('tesla-fullscreen');
