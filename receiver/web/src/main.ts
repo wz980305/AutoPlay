@@ -32,6 +32,9 @@ let reportFrames = 0, reportBytes = 0, reportStart = performance.now();
 let lastPaintAt = 0, handledDownAt = 0, touchSum = 0, touchCount = 0;
 // Music as the iPhone sends it (stream 102, AAC): its bitrate is the iPhone's choice.
 let musicBytes = 0;
+/** A stream this page plays (type 100/101/102) arrived since the page loaded: only then is a locked AudioContext worth
+ *  the "tap anywhere" bar (V7): a car that routes every sound over its Bluetooth never sees one. A reload starts over. */
+let audioSeen = false;
 // The same, per second, for the debug overlay (debug-hud.ts).
 let hudFrames = 0, hudBytes = 0, hudMusicBytes = 0, hudStart = performance.now();
 /** The page's state (viewer audit V3): the status line is t(state) and the hint under it is hintFor(), a function of
@@ -190,7 +193,7 @@ const connection = new Connection(token, {
     switch (message.kind) {
       case 'video-config': video.configure(message); break;
       case 'video-frame': video.pushFrame(message); break;
-      case 'audio-config': audio.handleConfig(message); voiceStarted(message.streamType, message.name); break;
+      case 'audio-config': audioSeen = true; audio.handleConfig(message); voiceStarted(message.streamType, message.name); break;
       case 'audio-packet': if (message.streamType === 102) { musicBytes += message.data.length; hudMusicBytes += message.data.length; } audio.handlePacket(message); break;
       case 'audio-stopped': audio.stopStream(message.streamType); voiceStopped(message.streamType); break;
     }
@@ -445,7 +448,7 @@ window.addEventListener('resize', () => { window.clearTimeout(resizeTimer); resi
 window.setInterval(()=>{
   const now=performance.now(),fps=frames*1000/Math.max(1,now-lastStats);frames=0;lastStats=now;
   el('stats').textContent=painted?`${canvas.width} × ${canvas.height} / ${fps.toFixed(0)} fps / ${t('latency')} ${video.decodeLatencyMs.toFixed(0)} ms`:t('noStream');
-  el('audio-unlock').hidden=!active||audio.isUnlocked;
+  el('audio-unlock').hidden=!active||!audioSeen||audio.isUnlocked;
   el('audio-status').textContent=t(audio.isPlaying?'playing':'paused');
 },750);
 // Which browser the car runs and the music element's own timeline, which an OS media card may show instead of the song's.

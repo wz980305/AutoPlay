@@ -11,7 +11,7 @@ const messages = {
   renegotiating: ['正在按新的窗口大小重新连接 CarPlay…', 'Reconnecting CarPlay for the new window size…'], renegotiatingHint: ['约 5 秒，画面会短暂中断。', 'About 5 seconds; the picture pauses briefly.'],
   live: ['已连接', 'Connected'],
   access: ['需要首次登录链接', 'First-time access link required'], accessHint: ['请使用私有访问资料中的完整链接打开一次，此浏览器会记住登录。', 'Open the complete link from your private access file once. This browser will remember it.'],
-  sound: ['轻点启用声音', 'Tap to enable sound'], volume: ['音量', 'Volume'],
+  sound: ['轻点屏幕任意位置开启声音（导航播报、Siri）', 'Tap anywhere on the screen to turn on sound (navigation prompts, Siri)'], volume: ['播报音量', 'Prompt volume'],
   display: ['画面', 'Display'], fullscreen: ['无边框模式', 'Borderless mode'], fullscreenRowHint: ['经视频网站跳转约 5 秒后回到本页，去掉地址栏；期间无画面', 'Hops through a video site (~5 s) and comes back without the address bar; no picture meanwhile'],
   borderlessOn: ['已是无边框模式', 'Borderless mode is on'], borderlessOnHint: ['退出：浏览器返回', 'Exit: the browser back button'],
   checkingNetwork: ['正在检查网络…', 'Checking the network…'], checkingNetworkHint: ['跳转需要车辆自己能上网', 'The hop needs the car own internet'],
