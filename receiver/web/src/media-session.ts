@@ -38,6 +38,11 @@ export class SystemMedia {
     if (this.supported) navigator.mediaSession.metadata = this.active && typeof MediaMetadata !== "undefined" ? new MediaMetadata(this.info) : null;
   }
   readonly supported = 'mediaSession' in navigator;
+  /** For the box's viewer log: can the OS media card take our song position at all, and which one we give it. */
+  report(): Record<string, number> {
+    const positionState = this.supported && typeof navigator.mediaSession.setPositionState === 'function' ? 1 : 0;
+    return this.duration > 0 ? { positionState, songPos: Math.round(this.positionNow()), songDur: Math.round(this.duration) } : { positionState };
+  }
   constructor(private readonly send: (message: ClientMessage) => void, unlock: () => void, pause: () => void = () => {}) {
     if (!this.supported) return;
     const handlers: Partial<Record<MediaSessionAction, () => void>> = {

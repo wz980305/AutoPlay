@@ -261,11 +261,19 @@ window.setInterval(()=>{
   el('audio-unlock').hidden=!active||audio.isUnlocked;
   el('audio-status').textContent=t(audio.isPlaying?'playing':'paused');media.setPlaying(audio.isPlaying);
 },750);
+// Which browser the car runs and the music element's own timeline, which an OS media card may show instead of the song's.
+const chromeMajor=Number(/Chrome\/(\d+)/.exec(navigator.userAgent)?.[1] ?? 0),webView=/; wv\)/.test(navigator.userAgent)?1:0;
+function musicTimeline(): Record<string, number> {
+  const element=document.getElementById('carplay-music') as HTMLAudioElement|null;
+  if(!element) return {};
+  return {elTime:Math.round(element.currentTime),elDur:Number.isFinite(element.duration)?Math.round(element.duration):-1};
+}
 window.setInterval(()=>{
   const now=performance.now(),seconds=Math.max(1,(now-reportStart)/1000);
   send({type:'stats',stats:{fps:reportFrames/seconds,decodeMs:video.decodeLatencyMs,queue:video.decodeQueueSize,
     kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,
-    width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),...(musicBytes?{musicKbps:musicBytes*8/1000/seconds}:{})}});
+    width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),...(musicBytes?{musicKbps:musicBytes*8/1000/seconds}:{}),
+    chrome:chromeMajor,webView,...media.report(),...musicTimeline()}});
   reportFrames=0;reportBytes=0;reportStart=now;touchSum=0;touchCount=0;musicBytes=0;
 },10000);
 render();fit();if(token) connection.connect();
