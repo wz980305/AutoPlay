@@ -363,6 +363,18 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
   globalThis.window=savedWindow;globalThis.fetch=savedFetch;globalThis.localStorage=savedStorage;
 }
 
+{ // The hint follows the state (viewer audit V3): the box is the question while the link is down, the iPhone only
+  // while the box answers; the box's own page link hides while the box is unreachable.
+  const {statusHint,SLOW_LINK_S}=await load('status');
+  assert.deepEqual(statusHint('waiting',0),{key:'waitingHint',seconds:null,boxLink:true},'the one good state as before');
+  assert.deepEqual(statusHint('starting',0),{key:'startingHint',seconds:null,boxLink:true},'iPhone connected: no first-run hint');
+  assert.deepEqual(statusHint('renegotiating',0),{key:'renegotiatingHint',seconds:null,boxLink:true},'a display change is not "waiting for iPhone"');
+  assert.deepEqual(statusHint('connecting',1),{key:null,seconds:null,boxLink:false},'the first seconds of a connect say nothing');
+  assert.deepEqual(statusHint('connecting',SLOW_LINK_S+4.7),{key:'reconnectingHint',seconds:7,boxLink:false},'then the box is not answering, with the time');
+  assert.deepEqual(statusHint('reconnecting',0.5),{key:'reconnectingHint',seconds:null,boxLink:false},'a dropped link names the box at once, the time after 3 s');
+  assert.equal(statusHint('reconnecting',12.2).seconds,12);
+  assert.equal(statusHint('access',0).key,'accessHint');
+}
 { // Debug overlay (2026-10-16): three short lines, the music bitrate on the music stream, nothing for no picture yet.
   const {hudLines}=await load('debug-hud');
   const sample={width:1280,height:846,fps:29.6,hevc:false,videoKbps:2412,decodeMs:63.4,queue:1,rttMs:41.2,

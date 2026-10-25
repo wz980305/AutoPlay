@@ -6,6 +6,7 @@ import { Connection } from './ws';
 import { LagProbe } from './lag';
 import { suggestedResolution, windowResolution, areaSize, sameStream, frameRateCheck, type Area } from './display-fit';
 import { CAR_MUSIC, TESLA, MUSIC_ELEMENT, PROMPT_BOOST } from './flags';
+import { statusHint } from './status';
 import { t, language, setLanguage, type Key } from './i18n';
 import { isNight, parseNightMode } from './night';
 import { reachable, TESLA_HOPS } from './tesla-fullscreen';
@@ -33,8 +34,16 @@ let lastPaintAt = 0, handledDownAt = 0, touchSum = 0, touchCount = 0;
 let musicBytes = 0;
 // The same, per second, for the debug overlay (debug-hud.ts).
 let hudFrames = 0, hudBytes = 0, hudMusicBytes = 0, hudStart = performance.now();
+/** The page's state (viewer audit V3): the status line is t(state) and the hint under it is hintFor(), a function of
+ *  the state (the old one was chosen once at load and said "add your iPhone" under "the box is not answering"). */
 let state: Key = token ? 'connecting' : 'access';
-let hint: Key = token ? 'waitingHint' : 'accessHint';
+/** When the link to the box went down (or the page started without one), for the elapsed time in the hint. */
+let linkDownAt = performance.now();
+function hintFor(): string {
+  const hint = statusHint(state, (performance.now() - linkDownAt) / 1000);
+  if (!hint.key) return '';
+  return t(hint.key as Key) + (hint.seconds === null ? '' : ` · ${t('waited')}${hint.seconds}${t('secondsUnit')}`);
+}
 let lastAutoTarget = '', autoTimer = 0, displayBusy = false;
 /** A change that cannot wait for the next session (codec failed, a setting changed by hand): why, for the box's log. */
 let urgentChange = '';
@@ -75,7 +84,9 @@ function render() {
   el('app').dataset.state = state;
   volume.setAttribute('aria-label', t('volume'));
   el('connection-text').textContent = t(state);
-  el('connection-hint').textContent = t(hint);
+  el('connection-hint').textContent = hintFor();
+  // The box's own page is no help while the box itself does not answer.
+  if (boxPort) el('box-link').hidden = !statusHint(state, 0).boxLink;
   el('overlay').hidden = painted || holding;
   el('app').dataset.live = String(painted || holding);
   el('capabilities').textContent = !isSecureContext ? t('insecure') : typeof VideoDecoder === 'undefined' || typeof AudioDecoder === 'undefined' ? t('unsupported') : t('compatible');
@@ -188,8 +199,8 @@ const connection = new Connection(token, {
   onBytes(count) { reportBytes += count; hudBytes += count; lastHeard = performance.now(); },
   onState(value) {
     if (value === 'open' && closedAt) { lifeEvent(11, { downMs: Math.round(performance.now() - closedAt), failures: connection.failures }); closedAt = 0; }
-    if (value === 'closed') { if (!closedAt) closedAt = performance.now(); if (!wokeAt) wokeAt = closedAt; reset(shownOnce); state = 'reconnecting'; }
-    else if (value === 'connecting') state = 'connecting';
+    if (value === 'closed') { if (!closedAt) { closedAt = performance.now(); linkDownAt = closedAt; } if (!wokeAt) wokeAt = closedAt; reset(shownOnce); state = 'reconnecting'; }
+    else if (value === 'connecting') { if (state !== 'reconnecting') state = 'connecting'; }
     else { state = 'waiting'; void loadDisplay(); void unlock(); }
     render();
   },
@@ -245,7 +256,7 @@ function server(message: ServerMessage) {
   if (!message.sessionActive) {
     // Ended to apply a new display (by this page or another): the phone comes straight back, keep the picture.
     const forDisplay = message.restarting === true || expectRestart;
-    endExpectRestart(); reset(forDisplay && (painted || holding), forDisplay); state = 'waiting';
+    endExpectRestart(); reset(forDisplay && (painted || holding), forDisplay); state = forDisplay ? 'renegotiating' : 'waiting';
   }
   else { endExpectRestart(); void loadDisplay(); active = true; canvas.inert = false; state = 'starting'; syncNight(); }
   render();
@@ -500,6 +511,7 @@ window.setInterval(() => {
   lastTick = now; hiddenMeanwhile = document.hidden;
   if (!token) return;
   if (holding && !late) { holdAwakeMs += Math.min(gap, 1000); if (holdAwakeMs > (holdForDisplay ? DISPLAY_HOLD_MS : HOLD_MS)) { holding = false; hideRecovering(); clearPicture(); fit(); render(); } }
+  if (!painted && (state === 'connecting' || state === 'reconnecting')) el('connection-hint').textContent = hintFor();   // the elapsed time
   if (late) { lifeEvent(8, { gapMs: Math.round(gap) }); wake(1); }
   else if (active && !document.hidden && now - lastHeard > 8000) revive();   // the link died while in view
   else if (!document.hidden && closedAt && now - closedAt > RELOAD_AFTER_MS) reloadWhenBoxAnswers();
