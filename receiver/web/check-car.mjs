@@ -46,6 +46,16 @@ assert.equal(positions.at(-1),undefined,'Missing duration must clear old timelin
   clock=20000;media.setPlaying(false);assert.equal(positions.at(-1).position,62,'Paused on the iPhone: the clock stands');
   Object.defineProperty(performance,'now',{value:realNow,configurable:true,writable:true}); }
 assert.deepEqual(media.report(),{positionState:1,songPos:62,songDur:200},'The viewer log tells whether the OS card can take our song position');
+{ // Hiccups for the viewer log: a gap in a flowing stream (network/box) apart from frames the car's decoder held long.
+  let clock=0;const realNow=performance.now;Object.defineProperty(performance,'now',{value:()=>clock,configurable:true,writable:true});
+  globalThis.EncodedVideoChunk=class {constructor(v){Object.assign(this,v);}};
+  const {VideoPlayer}=await load('video',s=>s.replace(/^import .*?;$/gm,''));
+  const player=new VideoPlayer({getContext(){return null;}},()=>{},()=>{},()=>{});
+  player.state={usesDescription:false,timestampUs:0,frameIntervalUs:16667,decoder:{decode(){},decodeQueueSize:0}};
+  for(const t of [0,20,40,400,420,1400,2400]){clock=t;player.pushFrame({data:new Uint8Array([1]),keyframe:false});}
+  assert.deepEqual(player.takeStalls(),{stalls:1,stallMaxMs:360,slowFrames:0,paintMaxMs:0},'Only a gap with frames flowing on both sides counts; motion ending into an idle screen (1 frame/s) does not');
+  assert.deepEqual(player.takeStalls(),{stalls:0,stallMaxMs:0,slowFrames:0,paintMaxMs:0},'Counters restart for each report');
+  Object.defineProperty(performance,'now',{value:realNow,configurable:true,writable:true}); }
 media.setActive(false);assert.equal(navigator.mediaSession.playbackState,'none');assert.equal(navigator.mediaSession.metadata,null);
 // Music must take exactly one route; voice/navigation keep the existing Web Audio path.
 const edges=[];let music;let packets=0;

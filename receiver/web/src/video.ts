@@ -52,6 +52,10 @@ export class VideoPlayer {
   /** Smoothed time from frame arrival to canvas paint (decoder delay), in ms. */
   decodeLatencyMs = 0;
   private readonly arrivals = new Map<number, number>();
+  /** For the box's viewer log: gaps in an otherwise flowing stream (network or box) and frames the decoder held long. */
+  private stall = { stalls: 0, stallMaxMs: 0, slowFrames: 0, paintMaxMs: 0 };
+  private lastGaps = [Infinity, Infinity];
+  takeStalls() { const stall = this.stall; this.stall = { stalls: 0, stallMaxMs: 0, slowFrames: 0, paintMaxMs: 0 }; return stall; }
 
   configure(message: VideoConfigMessage): void {
     void this.configureAsync(message);
@@ -151,7 +155,13 @@ export class VideoPlayer {
   pushFrame(message: VideoFrameMessage): void {
     const state = this.state;
     if (!state) return;
-    this.lastArrivalAt = performance.now();
+    const now = performance.now(), gap = this.lastArrivalAt ? now - this.lastArrivalAt : Infinity;
+    // A still screen brings about one frame a second, and motion that ends leaves such a gap too: only a gap with
+    // frames flowing before and after it is a hiccup.
+    const [before, held] = this.lastGaps;
+    if (before < 60 && held > 250 && gap < 60) { this.stall.stalls++; this.stall.stallMaxMs = Math.max(this.stall.stallMaxMs, Math.round(held)); }
+    this.lastGaps = [held, gap];
+    this.lastArrivalAt = now;
     const data = state.usesDescription ? annexBToAvcc(message.data) : message.data;
     if (data.length === 0) return;
     state.timestampUs += state.frameIntervalUs;
@@ -248,6 +258,8 @@ export class VideoPlayer {
       this.arrivals.delete(frame.timestamp);
       const latency = performance.now() - arrived;
       this.decodeLatencyMs = this.decodeLatencyMs ? this.decodeLatencyMs * 0.9 + latency * 0.1 : latency;
+      if (latency > 150) this.stall.slowFrames++;
+      this.stall.paintMaxMs = Math.max(this.stall.paintMaxMs, Math.round(latency));
     }
     this.onFrame();
   }
