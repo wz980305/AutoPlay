@@ -503,6 +503,9 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         Thread({
             var absentChecks = 0
             var viewerSeenAt = System.nanoTime() / 1_000_000   // the boot invitation has the full wait for a page
+            val releaseMs = System.getenv("CARPLAY_IDLE_RELEASE_SECONDS")?.toLongOrNull()?.coerceAtLeast(0)?.times(1000)
+                ?: IDLE_RELEASE_MS
+            if (releaseMs == 0L) log.info("idle release off: CarPlay stays connected without a viewer")
             var parked = false
             while (!closed.get()) {
                 try {
@@ -512,10 +515,10 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                     // The phone on the cable owns CarPlay; its session is no Wi-Fi presence either.
                     if (cablePhone) { viewerSeenAt = now; continue }
                     if (hub.viewerCount > 0) viewerSeenAt = now
-                    when (idleAction(now, viewerSeenAt, activeSession != null, parked)) {
+                    when (idleAction(now, viewerSeenAt, activeSession != null, parked, releaseMs)) {
                         IdleAction.RELEASE -> {
                             parked = true
-                            log.info("no viewer for {} s: CarPlay released until a page opens", IDLE_RELEASE_MS / 1000)
+                            log.info("no viewer for {} s: CarPlay released until a page opens", releaseMs / 1000)
                             synchronized(this@CarPlayServer) {
                                 ++wirelessGeneration
                                 val link = wireless
@@ -750,14 +753,16 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         private const val HANDOFF_RETRY_WINDOW_MS = 20_000L
 
         /** A wireless session nobody watches ends after this; the iPhone kept encoding and sending its screen and
-         *  ran hot and slow at home with the F50 on all day (2026-10-13). A real car ends it at switch-off. */
-        const val IDLE_RELEASE_MS = 120_000L
+         *  ran hot and slow at home with the F50 on all day (2026-10-13). A real car ends it at switch-off.
+         *  CARPLAY_IDLE_RELEASE_SECONDS sets another wait, 0 never releases (the picture at once on a reopened page). */
+        const val IDLE_RELEASE_MS = 300_000L
 
         /** [viewerSeenAt]: when a page last watched (or the box started). Parked: released, no invitations
          *  until a page opens again. */
-        fun idleAction(now: Long, viewerSeenAt: Long, session: Boolean, parked: Boolean): IdleAction = when {
+        fun idleAction(now: Long, viewerSeenAt: Long, session: Boolean, parked: Boolean,
+                       releaseMs: Long = IDLE_RELEASE_MS): IdleAction = when {
             parked -> if (viewerSeenAt >= now) IdleAction.RESUME else IdleAction.WAIT
-            session && now - viewerSeenAt >= IDLE_RELEASE_MS -> IdleAction.RELEASE
+            session && releaseMs > 0 && now - viewerSeenAt >= releaseMs -> IdleAction.RELEASE
             else -> IdleAction.NONE
         }
     }
