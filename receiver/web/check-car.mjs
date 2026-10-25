@@ -6,9 +6,16 @@ async function load(name, transform = s => s) {
   const {outputText}=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}});
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 }
-const {fittedSize,suggestedResolution,aspectChanged}=await load('display-fit');
+const {suggestedResolution,aspectChanged,shownSize,closeShape}=await load('display-fit');
+assert.equal(closeShape({width:1280,height:846},{width:1280,height:756}),true,'page vs fullscreen: no renegotiation outside fullscreen');
+assert.equal(closeShape({width:1280,height:846},{width:1082,height:1280}),false,'portrait renegotiates at once');
+assert.equal(closeShape({width:1280,height:846},{width:1372,height:686}),false,'split screen renegotiates at once');
+assert.deepEqual(shownSize(1280,846,1280,756),{width:1280,height:756},'fullscreen picture fills the normal page without bars');
+assert.deepEqual(shownSize(1280,756,1280,846),{width:1280,height:846},'and the other way round');
+assert.deepEqual(shownSize(1280,846,1082,1280),{width:1082,height:1280},'no black bars even before a portrait renegotiation');
+assert.deepEqual(shownSize(0,0,1280,756),{width:0,height:0},'no picture yet');
 for(const [w,h] of [[1920,1080],[2560,1440],[1920,720],[720,1280],[800,480],[320,700]]){
- const size=fittedSize(1280,720,w,h); assert.ok(size.width<=w+.01&&size.height<=h+.01);assert.ok(Math.abs(size.width/size.height-16/9)<.0001);
+ assert.deepEqual(shownSize(1280,720,w,h),{width:w,height:h},'always fills the view');
  const target=suggestedResolution(w,h);assert.ok(Object.values(target).every(v=>v>=480&&v<=1920&&v%2===0));
  assert.ok(!aspectChanged(target,target));
 }

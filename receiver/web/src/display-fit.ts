@@ -1,8 +1,3 @@
-/** Keep the full CarPlay picture visible. Never stretch or crop input coordinates. */
-export function fittedSize(width: number, height: number, viewWidth: number, viewHeight: number) {
-  const scale = Math.min(viewWidth / Math.max(1, width), viewHeight / Math.max(1, height));
-  return { width: Math.max(0, width * scale), height: Math.max(0, height * scale) };
-}
 /** Match aspect rather than blindly multiplying by DPR (a 4K car panel need not decode 4K). */
 export function suggestedResolution(width: number, height: number) {
   const ratio = Math.min(4, Math.max(0.25, width / Math.max(1, height)));
@@ -15,4 +10,17 @@ export function suggestedResolution(width: number, height: number) {
 }
 export function aspectChanged(a: {width: number; height: number}, b: {width: number; height: number}) {
   return Math.abs((a.width / a.height) / (b.width / b.height) - 1) > 0.025;
+}
+/** Shapes within 20% of each other (the car's page 1280x756 vs fullscreen 1280x846) are not renegotiated
+ *  outside fullscreen; clearly different ones (portrait, split screen) are, at once. */
+export function closeShape(a: {width: number; height: number}, b: {width: number; height: number}) {
+  return a.width > 0 && a.height > 0 && b.width > 0 && b.height > 0 &&
+    Math.abs((a.width / a.height) / (b.width / b.height) - 1) <= 0.2;
+}
+/** The picture always fills the view, stretched per axis: no black bars (user 2026-10-12). A close shape
+ *  stays stretched; a clearly different one is shown stretched only until CarPlay is renegotiated.
+ *  Touch input is normalized per axis, so it stays exact. */
+export function shownSize(width: number, height: number, viewWidth: number, viewHeight: number) {
+  if (width <= 0 || height <= 0) return { width: 0, height: 0 };
+  return { width: viewWidth, height: viewHeight };
 }

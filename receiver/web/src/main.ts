@@ -4,7 +4,7 @@ import { MicrophoneUplink } from './mic';
 import { VideoPlayer } from './video';
 import { Connection } from './ws';
 import { SystemMedia } from './media-session';
-import { fittedSize, suggestedResolution, aspectChanged } from './display-fit';
+import { shownSize, suggestedResolution, aspectChanged, closeShape } from './display-fit';
 import { t, language, setLanguage, type Key } from './i18n';
 import { isNight, parseNightMode } from './night';
 import type { ServerMessage, ClientMessage } from './protocol';
@@ -68,7 +68,7 @@ function render() {
   el('night-status').title = t(darkQuery.matches ? 'browserDark' : 'browserLight');
 }
 function fit() {
-  const size = fittedSize(canvas.width, canvas.height, screen.clientWidth, screen.clientHeight);
+  const size = shownSize(canvas.width, canvas.height, screen.clientWidth, screen.clientHeight);
   surface.style.width = `${size.width}px`; surface.style.height = `${size.height}px`;
 }
 function error(message: string) { el('error-text').textContent = message; el('error-banner').hidden = !message; }
@@ -232,14 +232,17 @@ function scheduleAuto() {
 async function adapt() {
   if (!display || !autoFit.checked || displayBusy) return;
   const target=autoTarget();
+  if (!document.fullscreenElement && closeShape(display,target)) return;
   const key=`${target.width}x${target.height}`;
   if (!aspectChanged(display,target) || key===lastAutoTarget) return;
   // Avoid a reconnect loop even when another viewer has a different screen shape.
   lastAutoTarget=key;
   if (!(await saveDisplay({...display,...target,hevc:false}))) error(t('autoFail'));
 }
-/** The current window sets the resolution, so neither fullscreen nor the normal window shows black bars;
- *  switching between them renegotiates CarPlay once (user's choice 2026-10-11 over bars without a reconnect). */
+/** A close shape is renegotiated only in fullscreen: opening the page or leaving fullscreen shows the
+ *  current picture stretched (shownSize, never black bars) instead of a black reconnect right after
+ *  opening. A clearly different shape (portrait, split screen) is renegotiated at once, as before
+ *  (user 2026-10-12, replacing 2026-10-11's reconnect on every window change). */
 function autoTarget() {
   return suggestedResolution(screen.clientWidth,screen.clientHeight);
 }
