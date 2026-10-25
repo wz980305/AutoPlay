@@ -21,6 +21,12 @@ const token = fromUrl || localStorage.getItem('playport-token') || '';
 let active = false, painted = false, frames = 0, lastStats = performance.now();
 // Reported to the box every 10 s for its persistent drive diagnostics (no personal data).
 let reportFrames = 0, reportBytes = 0, reportStart = performance.now();
+// Touch-to-picture: from a finger down on a still picture to the next painted frame (network both ways,
+// the iPhone's render and encode, our decode). An animating screen would answer with a frame it was
+// sending anyway, so only taps after at least 150 ms without a frame count.
+let lastPaintAt = 0, handledDownAt = 0, touchSum = 0, touchCount = 0;
+// Music as the iPhone sends it (stream 102, AAC): its bitrate is the iPhone's choice.
+let musicBytes = 0;
 let state: Key = token ? 'connecting' : 'access';
 let hint: Key = token ? 'waitingHint' : 'accessHint';
 let lastAutoTarget = '', autoTimer = 0, displayBusy = false;
@@ -70,6 +76,12 @@ function send(message: ClientMessage) { if (active) connection.send(message); }
 const video = new VideoPlayer(canvas, error, () => {
   if (!active) return;
   frames++; reportFrames++; painted = true; el('overlay').hidden = true; el('app').dataset.live = 'true';
+  const now = performance.now();
+  if (input.lastDownAt > handledDownAt) {
+    handledDownAt = input.lastDownAt;
+    if (input.lastDownAt - lastPaintAt >= 150) { touchSum += now - input.lastDownAt; touchCount++; }
+  }
+  lastPaintAt = now;
 }, () => send({ type:'keyframe' }), fit);
 const audio = new AudioEngine(error);
 const media = new SystemMedia(send, () => { void audio.unlock().catch(error); }, () => audio.pauseMusic());
@@ -82,7 +94,7 @@ const connection = new Connection(token, {
       case 'video-config': video.configure(message); break;
       case 'video-frame': video.pushFrame(message); break;
       case 'audio-config': audio.handleConfig(message); break;
-      case 'audio-packet': audio.handlePacket(message); break;
+      case 'audio-packet': if (message.streamType === 102) musicBytes += message.data.length; audio.handlePacket(message); break;
       case 'audio-stopped': audio.stopStream(message.streamType); break;
     }
   },
@@ -250,8 +262,8 @@ window.setInterval(()=>{
   const now=performance.now(),seconds=Math.max(1,(now-reportStart)/1000);
   send({type:'stats',stats:{fps:reportFrames/seconds,decodeMs:video.decodeLatencyMs,queue:video.decodeQueueSize,
     kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,fullscreen:document.fullscreenElement?1:0,
-    width:canvas.width,height:canvas.height}});
-  reportFrames=0;reportBytes=0;reportStart=now;
+    width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),...(musicBytes?{musicKbps:musicBytes*8/1000/seconds}:{})}});
+  reportFrames=0;reportBytes=0;reportStart=now;touchSum=0;touchCount=0;musicBytes=0;
 },10000);
 render();fit();if(token) connection.connect();
 

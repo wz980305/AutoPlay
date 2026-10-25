@@ -501,11 +501,31 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         )
         val wasActive = activeSession != null
         closingForDisplay.set(wasActive)
+        val keepLink = displayKeepLinkMs()
+        if (wasActive && keepLink > 0 && wireless?.running == true) {
+            // Keep the Bluetooth iAP2 link: the iPhone, still on the Wi-Fi, may reopen AirPlay by itself
+            // and learn the new display without paging, authenticating and handing off again (~4 s).
+            // If it has not come back in time, invite it the usual way.
+            val generation = wirelessGeneration
+            activeSession?.close()
+            Thread({
+                Thread.sleep(keepLink)
+                synchronized(this@CarPlayServer) {
+                    if (closed.get() || activeSession != null || generation != wirelessGeneration) return@Thread
+                    log.info("phone did not reopen CarPlay within {} ms after the display change; inviting it", keepLink)
+                    restartWireless(confirmedPresent = true)
+                }
+            }, "display-keep-link").apply { isDaemon = true; start() }
+            return null
+        }
         activeSession?.close()
         // The phone was just using CarPlay, so skip the ~2.4 s presence re-check before re-inviting it.
         restartWireless(confirmedPresent = wasActive)
         return null
     }
+
+    private fun displayKeepLinkMs(): Long =
+        System.getenv("CARPLAY_DISPLAY_KEEP_LINK_MS")?.toLongOrNull()?.coerceIn(0, 20_000) ?: 0L
 
     /** confirmedPresent: the caller has just seen the selected phone on the network (skips a ~2.4 s re-check). */
     @Synchronized

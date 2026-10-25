@@ -33,7 +33,11 @@ export class VideoPlayer {
     private readonly onFrame: () => void,
     private readonly onRequestKeyframe: () => void,
     private readonly onResolutionChange: (width: number, height: number) => void = () => {},
-  ) {}
+  ) {
+    // Low-latency canvas: frames reach the screen without waiting for the page compositor (about one
+    // frame sooner where supported). Created first, so every later getContext('2d') returns this one.
+    this.canvas.getContext('2d', { desynchronized: true });
+  }
 
   get isConfigured(): boolean {
     return this.state !== null;

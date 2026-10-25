@@ -24,6 +24,8 @@ const emptyKnob = (overrides: Partial<KnobState> = {}): KnobState => ({
 export class InputController {
   private readonly pointers = new Map<number, ActivePointer>();
   private pendingFlush = 0;
+  /** performance.now() of the latest finger down, for the touch-to-picture measurement. */
+  lastDownAt = 0;
 
   constructor(
     private readonly surface: HTMLElement,
@@ -64,6 +66,7 @@ export class InputController {
       down: true,
     });
     this.flush();
+    this.lastDownAt = performance.now();
   };
 
   private readonly onPointerMove = (event: PointerEvent): void => {
