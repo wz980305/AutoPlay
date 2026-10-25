@@ -280,7 +280,7 @@ class WebHub(
                 call.respondText(displayJson(), io.ktor.http.ContentType.Application.Json)
             }
             post("/api/display") {
-                if (call.request.queryParameters["token"] != config.accessToken) {
+                if (call.request.queryParameters["token"] != config.accessToken || !call.fromOwnPage()) {
                     call.respondText(
                         """{"error":"invalid token"}""",
                         io.ktor.http.ContentType.Application.Json,
@@ -320,7 +320,7 @@ class WebHub(
             }
             webSocket("/ws") {
                 val token = call.request.queryParameters["token"]
-                if (token != config.accessToken) {
+                if (token != config.accessToken || !call.fromOwnPage()) {
                     close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "invalid token"))
                     return@webSocket
                 }
@@ -417,6 +417,18 @@ class WebHub(
             }
             get("/{path...}") {
                 val relative = call.request.uri.substringBefore('?').trimStart('/').ifEmpty { "index.html" }
+                if (relative == ACCESS_FILE) {
+                    // The viewer token for pages on this network: only to this box's own page, never cached.
+                    val file = webRoot.resolve(ACCESS_FILE)
+                    if (!call.fromOwnPage() || !Files.isRegularFile(file)) {
+                        call.respondText("{}", io.ktor.http.ContentType.Application.Json, io.ktor.http.HttpStatusCode.Forbidden)
+                        return@get
+                    }
+                    call.response.headers.append("Cross-Origin-Resource-Policy", "same-origin")
+                    call.response.headers.append("Cache-Control", "no-store")
+                    call.respondText(Files.readString(file), io.ktor.http.ContentType.Application.Json)
+                    return@get
+                }
                 val resolved = webRoot.resolve(relative).normalize()
                 val file = if (resolved.startsWith(webRoot) && Files.isRegularFile(resolved)) resolved else webRoot.resolve("index.html")
                 if (!Files.isRegularFile(file)) {
@@ -500,9 +512,27 @@ class WebHub(
                 }
             }
 
+        /**
+         * Whether a request comes from this box's own page: [origin] (absent on a same-origin GET or outside a browser)
+         * must be the address the request went to, [host], and [fetchSite] (Sec-Fetch-Site) must not name another
+         * site. Another site could load the viewer token and open the viewer channel (audit 2026-10-13, A2).
+         */
+        internal fun ownPage(origin: String?, host: String?, fetchSite: String?): Boolean {
+            if (fetchSite != null && fetchSite != "same-origin" && fetchSite != "none") return false
+            if (origin == null) return true
+            val uri = runCatching { java.net.URI(origin) }.getOrNull() ?: return false
+            val authority = (uri.host ?: return false) + if (uri.port == -1) "" else ":${uri.port}"
+            return host != null && authority.equals(host, ignoreCase = true)
+        }
+
+        private fun io.ktor.server.application.ApplicationCall.fromOwnPage(): Boolean = ownPage(
+            request.headers["Origin"], request.headers["Host"] ?: request.headers[":authority"], request.headers["Sec-Fetch-Site"])
+
         const val MIC_FRAME_LPCM = 0x10
         const val MIC_FRAME_OPUS = 0x11
         private const val SEND_QUEUE_CAPACITY = 1024
+        /** Written by the box's startup (run-receiver.py): {"token": ..., "settingsPort": ...}. */
+        const val ACCESS_FILE = "receiver-access.json"
         private const val KEYFRAME_REQUEST_INTERVAL_NS = 1_000_000_000L
         private const val MARK_INTERVAL_MS = 200L
     }
