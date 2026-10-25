@@ -6,6 +6,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * A [BlockingDuplexByteStream] over a child process' standard input/output.
@@ -21,6 +22,7 @@ class ProcessByteStream(
     private val input: InputStream = process.inputStream
     private val output: OutputStream = process.outputStream
     private val writeLock = Any()
+    private val closing = AtomicBoolean(false)
     @Volatile private var ended = false
     private var remainder = ByteArray(0)
     private var remainderOffset = 0
@@ -92,8 +94,25 @@ class ProcessByteStream(
     }
 
     override fun close() {
+        if (!closing.compareAndSet(false, true)) return
+        // EOF lets the Linux bridge release its RFCOMM fd and unregister its BlueZ profile.
+        // Do not start a replacement while the old helper is still cleaning up.
         runCatching { output.close() }
-        runCatching { input.close() }
-        process.destroy()
+        try {
+            if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                process.destroy()
+                if (!process.waitFor(2, TimeUnit.SECONDS)) {
+                    process.destroyForcibly()
+                    process.waitFor(2, TimeUnit.SECONDS)
+                }
+            }
+        } catch (_: InterruptedException) {
+            process.destroyForcibly()
+            Thread.currentThread().interrupt()
+        } finally {
+            ended = true
+            inbound.offer(ByteArray(0))
+            runCatching { input.close() }
+        }
     }
 }

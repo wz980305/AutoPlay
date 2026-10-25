@@ -26,7 +26,10 @@ class WirelessBootstrap(private val server: CarPlayServer) : Closeable {
     @Volatile var running = false
         private set
 
+    @Synchronized
     fun start() {
+        if (stopped || running) return
+        running = true
         Thread(::run, "wireless-bootstrap").apply {
             isDaemon = true
             start()
@@ -34,7 +37,6 @@ class WirelessBootstrap(private val server: CarPlayServer) : Closeable {
     }
 
     private fun run() {
-        running = true
         try {
             val config = server.config
             val wifi = WifiInfo.detect(config)
@@ -58,8 +60,8 @@ class WirelessBootstrap(private val server: CarPlayServer) : Closeable {
                 )
                 return
             }
-            val deviceAddress = config.bluetoothDeviceAddress?.takeIf { it.isNotBlank() }
-                ?: BluetoothBridge.findPairedIphone(bridgePath)
+            val deviceAddress = server.wirelessPhone()?.takeIf { it.isNotBlank() }
+                ?: if (System.getenv("CARPLAY_PRESENCE_HELPER") == null) BluetoothBridge.findPairedIphone(bridgePath) else null
             if (deviceAddress == null) {
                 log.warn("wireless bootstrap skipped: no paired iPhone found; pass --bt-address AA:BB:CC:DD:EE:FF")
                 return
@@ -67,7 +69,10 @@ class WirelessBootstrap(private val server: CarPlayServer) : Closeable {
             val hostBluetoothMac = server.hostBluetoothMac
             log.info("wireless bootstrap: iPhone={} hostBt={} wifi={} ch={}", deviceAddress, hostBluetoothMac, wifi.ssid, wifi.channel)
 
-            val stream = BluetoothBridge.open(bridgePath, deviceAddress).also { bridgeProcess = it }
+            val stream = synchronized(this) {
+                if (stopped) return
+                BluetoothBridge.open(bridgePath, deviceAddress).also { bridgeProcess = it }
+            }
             val channel = Iap2Session.openWireless(stream, traceContext = "wireless-rfcomm", onTrace = { log.debug(it) })
             log.info("wireless iAP2 CSM channel opened over RFCOMM")
 
@@ -101,7 +106,10 @@ class WirelessBootstrap(private val server: CarPlayServer) : Closeable {
                 identification = identification,
                 endpoint = endpoint,
                 timeoutMillis = Iap2WirelessControlClient.NO_TIMEOUT_MILLIS,
-                onReady = { log.info("wireless bootstrap accepted by the iPhone; waiting for the Wi-Fi handoff") },
+                onReady = {
+                    log.info("wireless bootstrap accepted by the iPhone; waiting for the Wi-Fi handoff")
+                    server.handoffAccepted()
+                },
                 onProgress = { log.debug("wireless $it") },
             )
             if (!stopped) {
@@ -118,15 +126,15 @@ class WirelessBootstrap(private val server: CarPlayServer) : Closeable {
         } catch (error: Exception) {
             if (!stopped) log.warn("wireless bootstrap failed: {}", error.message)
         } finally {
-            running = false
+            close()
         }
     }
 
+    @Synchronized
     override fun close() {
         stopped = true
-        running = false
-        bridgeProcess?.close()
-        bridgeProcess = null
+        try { bridgeProcess?.close() }
+        finally { bridgeProcess = null; running = false }
     }
 }
 
