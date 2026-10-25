@@ -187,7 +187,7 @@ const edges=[];let music;let packets=0;
 class Node {gain={value:1};connect(to){edges.push(to);}disconnect(){}}
 globalThis.AudioContext=class {state='running';destination={speaker:true};createGain(){return new Node();}resume(){return Promise.resolve();}};
 globalThis.TestMusic=class {static supported(){return true;}static key(c){return JSON.stringify([c.sampleRate,c.channels,Array.from(c.description)]);}constructor(config){music=this;this.configKey=JSON.stringify([config.sampleRate,config.channels,Array.from(config.description)]);}unlocked=false;playing=false;configKey="";pause(){this.playing=false;this.paused=true;}volume(){}unlock(){this.unlocked=true;this.unlocks=(this.unlocks??0)+1;return Promise.resolve();}packet(){packets++;}close(){this.closed=true;}};
-const {AudioEngine}=await load('audio',s=>s.replace(/^import .*?;$/gm,'')+'\nconst MusicOutput=globalThis.TestMusic;const AudioCodec={AacLc:1,Opus:2,Lpcm:3};\nfunction audioStartTime(){return 0;}');
+const {AudioEngine}=await load('audio',s=>s.replace(/^import .*?;$/gm,'')+'\nconst MusicOutput=globalThis.TestMusic;const MUSIC_ELEMENT=true;const AudioCodec={AacLc:1,Opus:2,Lpcm:3};\nfunction audioStartTime(){return 0;}');
 const audio=new AudioEngine(()=>{});assert.equal(edges.length,1);assert.equal(edges[0].speaker,true);
 audio.handleConfig({streamType:102,codec:1,name:'media',sampleRate:48000,channels:2,description:new Uint8Array([0x11,0x90])});
 audio.handlePacket({streamType:102,timestampUs:0,data:new Uint8Array([1,2])});assert.equal(packets,1);
@@ -342,14 +342,16 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
   const copy=timing.snapshot();copy.wsOpenMs=0;assert.equal(timing.snapshot().wsOpenMs,10030);
 }
 
-{ // Tesla browser UI can keep sound in the webpage: explicit false wins over the legacy Tesla default.
+{ // Tesla-only build (flags.ts): the box's carMusic/tesla fields are constants now; boot reads the token and the
+  // settings port only, and a stale receiver-access.json with the old fields changes nothing.
+  const flags=await load('flags');
+  assert.deepEqual([flags.CAR_MUSIC,flags.TESLA,flags.MUSIC_ELEMENT,flags.PROMPT_BOOST],[true,true,true,3]);
   const savedWindow=globalThis.window, savedFetch=globalThis.fetch, savedStorage=globalThis.localStorage;
-  globalThis.window={};globalThis.localStorage={setItem(){}};
+  const stored={};globalThis.window={};globalThis.localStorage={setItem(k,v){stored[k]=v;}};
   const {access}=await load('boot',s=>s.replace(/^import .*?;$/gm,'const startup={mark(){}};').replace('async function access()', 'export async function access()'));
-  for(const [flags,want] of [[{tesla:true},true],[{tesla:true,carMusic:false},false],[{tesla:false,carMusic:true},true]]) {
-    globalThis.fetch=async()=>({ok:true,json:async()=>flags});await access();
-    assert.equal(window.playportCarMusic,want);assert.equal(window.playportTeslaMode,flags.tesla);
-  }
+  globalThis.fetch=async()=>({ok:true,json:async()=>({token:'0123456789abcdef0123456789abcdef',settingsPort:18080,tesla:false,carMusic:false})});await access();
+  assert.equal(stored['playport-token'],'0123456789abcdef0123456789abcdef');assert.equal(window.playportBoxSettingsPort,18080);
+  assert.equal(window.playportCarMusic,undefined,'no runtime car flags any more');
   globalThis.window=savedWindow;globalThis.fetch=savedFetch;globalThis.localStorage=savedStorage;
 }
 

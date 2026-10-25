@@ -1,4 +1,5 @@
 import { MusicOutput } from './music-output';
+import { MUSIC_ELEMENT } from './flags';
 import { audioStartTime } from './audio-timing';
 import { AudioCodec, type AudioConfigMessage, type AudioPacketMessage } from './protocol';
 
@@ -127,9 +128,9 @@ export class AudioEngine {
       nextPlayTime: 0,
       gain: streamGain,
     };
-    // Music through a media element: AAC (stream 102) as sent. LPCM (prompts, alerts, "media" PCM) stays on Web
-    // Audio for low latency (the wired iPhone's LPCM-as-FLAC element went with wired CarPlay).
-    const kind = message.name === 'media' && message.codec === AudioCodec.AacLc ? 'aac' : null;
+    // Music through a media element (MUSIC_ELEMENT, flags.ts): AAC (stream 102) as sent. LPCM (prompts, alerts,
+    // "media" PCM) stays on Web Audio for low latency; without the element AAC decodes into Web Audio below.
+    const kind = MUSIC_ELEMENT && message.name === 'media' && message.codec === AudioCodec.AacLc ? 'aac' : null;
     if (kind && MusicOutput.supported(kind)) {
       try {
         state.music = (this.retainedMusic && this.retainedConfig === MusicOutput.key(message, kind) ? this.retainedMusic : new MusicOutput(message, this.onError, kind));

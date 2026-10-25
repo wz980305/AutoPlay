@@ -2,7 +2,7 @@
    The player stays dark in both day and night: it sits next to CarPlay on a car screen. */
 :root { color-scheme: dark; --bg:#000; --cell:#1C1C1E; --cell-hi:#2C2C2E; --press:#3A3A3C; --sep:rgba(84,84,88,.6);
   --label:#FFF; --secondary:rgba(235,235,245,.6); --tint:#0A84FF; --green:#30D158; --red:#FF453A; --gray:#8E8E93;
-  --fill:rgba(120,120,128,.24); --glass:rgba(30,30,32,.62);
+  --fill:rgba(120,120,128,.24);
   font:17px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
   color:var(--label); background:var(--bg); -webkit-text-size-adjust:100%; }
 * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -60,12 +60,13 @@ summary { list-style:none; } summary::-webkit-details-marker { display:none; }
 .foot { color:var(--secondary); font-size:13px; line-height:1.45; margin:7px 16px 0; }
 .gap { height:26px; }
 .foot + .group { margin-top:22px; }
-/* The author's accounts at the very bottom of the panel: codes on white, to scan in either theme. */
-.follow { display:flex; justify-content:center; flex-wrap:wrap; gap:28px; padding:16px; }
-.follow figure { margin:0; text-align:center; }
-.follow img { display:block; width:112px; height:112px; background:#fff; border-radius:10px; padding:6px; }
-.follow figcaption { color:var(--secondary); font-size:13px; margin-top:8px; }
 .inner { padding:12px 16px 16px; }
+/* Advanced: the switch rows and the form inside one details, separated like the group's own cells. */
+.inner.advanced { padding:0 0 16px; }
+.inner.advanced > .cell { padding-left:16px; padding-right:16px; }
+.inner.advanced > .cell + .cell, .inner.advanced > form { border-top:.5px solid var(--sep); }
+.inner.advanced > form { padding:12px 16px 0; }
+.inner.advanced > .foot { margin-top:10px; }
 .inner.text p { color:var(--secondary); font-size:14px; line-height:1.5; margin:0 0 8px; overflow-wrap:anywhere; }
 select { background:none; border:0; color:var(--secondary); font-size:17px; text-align:right; min-width:0; max-width:55%; padding:6px 0; cursor:pointer; text-overflow:ellipsis; }
 select option { color:#000; }
@@ -98,14 +99,8 @@ fieldset { border:0; padding:0; margin:0; min-width:0; }
 #fallback-controls button { min-height:44px; padding:10px 16px; border:0; border-radius:10px; background:var(--cell-hi); }
 #fallback-controls button:active { background:var(--press); }
 
-/* Floating chrome over the live picture: translucent material, never an opaque bar. */
-.glass { background:var(--glass); -webkit-backdrop-filter:blur(20px) saturate(180%); backdrop-filter:blur(20px) saturate(180%);
-  border:.5px solid rgba(255,255,255,.18); color:#fff; }
-#btn-fullscreen { position:absolute; top:max(12px,env(safe-area-inset-top)); right:max(12px,env(safe-area-inset-right));
-  width:48px; height:48px; padding:0; border-radius:50%; display:grid; place-items:center; transition:transform .1s ease-out; }
-#btn-fullscreen:active { transform:scale(.92); }
-#app:not([data-live=true]) #btn-fullscreen, #btn-fullscreen[data-fullscreen=true], #btn-fullscreen[data-place=off] { display:none; }
-#btn-fullscreen[data-place=bottom] { top:auto; bottom:max(12px,env(safe-area-inset-bottom)); }
+/* Floating chrome over the live picture: translucent material, never an opaque bar. (The glass fullscreen button that
+   sat over CarPlay's own controls is gone: the Tesla hop lives in the welcome row and the settings sheet.) */
 .capsule { position:absolute; left:50%; transform:translateX(-50%); max-width:calc(100vw - 32px); padding:12px 20px; border-radius:22px;
   background:rgba(44,44,46,.92); -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); border:.5px solid rgba(255,255,255,.14);
   color:#fff; font-size:16px; line-height:1.45; text-align:center; box-shadow:0 8px 30px rgba(0,0,0,.4); }
@@ -122,8 +117,6 @@ fieldset { border:0; padding:0; margin:0; min-width:0; }
 #error-banner summary { color:var(--secondary); font-size:15px; padding:6px 0; cursor:pointer; }
 #error-text { overflow-wrap:anywhere; color:var(--secondary); font-size:14px; }
 #error-banner button { float:right; margin-top:-36px; }
-.ico .collapse, [data-fullscreen=true] .ico .expand { display:none; }
-[data-fullscreen=true] .ico .collapse { display:block; }
 
 /* Settings sheet: slides in from the right edge and leaves the same way. */
 dialog { margin:0 0 0 auto; height:100%; max-height:100%; width:min(480px,100vw); max-width:100%; padding:0; border:0;
@@ -146,5 +139,5 @@ h2 { font-size:28px; line-height:1.15; font-weight:700; letter-spacing:-.02em; m
   *, *::before, *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
 }
 @media (prefers-reduced-transparency:reduce) {
-  .glass, .capsule, header { -webkit-backdrop-filter:none; backdrop-filter:none; background:#2C2C2E; }
+  .capsule, header { -webkit-backdrop-filter:none; backdrop-filter:none; background:#2C2C2E; }
 }
