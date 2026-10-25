@@ -1,15 +1,14 @@
 import { aacInit, aacFragment } from './aac-mp4';
-import { FLAC_BLOCK, FLAC_MIME, flacFragment, flacFrame, flacInit } from './flac-mp4';
 import type { AudioConfigMessage } from './protocol';
-/** aac: stream 102's AAC as sent. flac: the wired iPhone's LPCM, losslessly framed (flac-mp4.ts). */
-export type MusicKind = 'aac' | 'flac';
-const MIMES: Record<MusicKind,string> = { aac: 'audio/mp4; codecs="mp4a.40.2"', flac: FLAC_MIME };
+/** aac: stream 102's AAC as sent (the wired iPhone's LPCM-as-FLAC kind went with wired CarPlay). */
+export type MusicKind = 'aac';
+const MIMES: Record<MusicKind,string> = { aac: 'audio/mp4; codecs="mp4a.40.2"' };
 /** How far behind the newest audio the element plays. Over Wi-Fi (AAC) the iPhone's packets come with gaps of
  *  about 400 ms every few seconds (F50, 2026-10-12): 0.65 s ran dry and the music stuttered. */
-const CUSHION: Record<MusicKind,number> = { aac: 1, flac: .65 };
+const CUSHION: Record<MusicKind,number> = { aac: 1 };
 /** AAC frames (1024 samples, 21 ms) per MP4 fragment: small, so audio reaches the element as it arrives. */
 const AAC_FRAGMENT = 4;
-/** Fragments (85 ms each, AAC and FLAC alike) that may wait for a busy buffer before it counts as stuck (6.8 s). */
+/** Fragments (85 ms each) that may wait for a busy buffer before it counts as stuck (6.8 s). */
 const MAX_PENDING = 80;
 /** A real HTML media timeline makes received music eligible for OS media controls. Its timeline is its own and is
  *  never moved onto the song: the song position reaches the car's media card through the Media Session position
@@ -30,9 +29,6 @@ export class MusicOutput {
   private closed=false;
   private lastPacket=-Infinity;
   private running=false;
-  private pcm:Uint8Array[]=[];
-  private pcmBytes=0;
-  private block=0;
   private started=false;
   /** For the viewer log: the element waited for audio, skipped ahead, was paused by the car, or the browser refused
    *  to play it (no user gesture). */
@@ -40,11 +36,9 @@ export class MusicOutput {
   /** For the viewer log: how far behind the newest audio the element played, most and least in this report. */
   private lead={max:0,min:Infinity};
   private pausing=false;
-  private readonly rate:number;
-  private readonly channels:number;
   readonly configKey: string;
   constructor(config:AudioConfigMessage,private readonly onError:(message:string)=>void,private readonly kind:MusicKind='aac') {
-    this.configKey=MusicOutput.key(config,kind);this.rate=config.sampleRate;this.channels=config.channels;
+    this.configKey=MusicOutput.key(config,kind);
     this.element.id='carplay-music';this.element.hidden=true;this.element.setAttribute('playsinline','');this.element.src=this.url;
     document.body.append(this.element);
     this.element.addEventListener('playing',()=>{this.running=true;});
@@ -52,7 +46,7 @@ export class MusicOutput {
     // Paused by the car (another app took the sound), not by this page.
     this.element.addEventListener('pause',()=>{this.running=false;if(!this.pausing&&!this.closed)this.counts.musicSysPauses++;this.pausing=false;});
     this.element.addEventListener('error',()=>{if(!this.closed)this.onError('Music playback: '+(this.element.error?.message||'media error'));});
-    this.pending.push(kind==='flac'?flacInit(config.sampleRate,config.channels):aacInit(config.sampleRate,config.channels,config.description));
+    this.pending.push(aacInit(config.sampleRate,config.channels,config.description));
     this.source.addEventListener('sourceopen',()=>{
       if(this.closed)return;
       try { this.buffer=this.source.addSourceBuffer(MIMES[this.kind]);this.buffer.addEventListener('updateend',()=>this.pump());this.buffer.addEventListener('error',()=>this.onError('Music buffer decode error'));this.pump(); }
@@ -63,7 +57,7 @@ export class MusicOutput {
   private holding=false;
   get unlocked(){return !this.element.paused||this.holding;}
   get playing(){return this.running&&!this.element.paused&&performance.now()-this.lastPacket<1800;}
-  pause(){this.holding=false;this.pausing=!this.element.paused;this.element.pause();this.running=false;this.frames=[];this.pcm=[];this.pcmBytes=0;}
+  pause(){this.holding=false;this.pausing=!this.element.paused;this.element.pause();this.running=false;this.frames=[];}
   unlock(){
     // Not right at the end: playing from the last sample ran dry at once, a crackle on opening the page. Never
     // backwards either: after a pause the buffer may be played out, and going back replayed what was heard
@@ -79,27 +73,9 @@ export class MusicOutput {
   volume(value:number){this.element.volume=Math.max(0,Math.min(1,value));}
   packet(data:Uint8Array){
     if(this.closed)return;
-    if(this.kind==='flac'){this.pcmPacket(data);return;}
     this.lastPacket=performance.now();this.frames.push(data.slice());
     if(this.frames.length<AAC_FRAGMENT)return;
     this.queue(aacFragment(this.sequence++,this.samples,this.frames),1024*this.frames.length);this.frames=[];
-    if(this.pending.length>MAX_PENDING){this.onError('Music buffer is not advancing');this.close();return;}
-    this.pump();
-  }
-  /** LPCM packets (352 samples each) are cut into fixed FLAC_BLOCK blocks, one MP4 fragment each. */
-  private pcmPacket(data:Uint8Array){
-    this.lastPacket=performance.now();this.pcm.push(data.slice());this.pcmBytes+=data.length;
-    const step=FLAC_BLOCK*this.channels*2;
-    while(this.pcmBytes>=step){
-      const block=new Uint8Array(step);let filled=0;
-      while(filled<step){
-        const head=this.pcm[0],take=Math.min(head.length,step-filled);
-        block.set(head.subarray(0,take),filled);filled+=take;
-        if(take===head.length)this.pcm.shift();else this.pcm[0]=head.subarray(take);
-      }
-      this.pcmBytes-=step;
-      this.queue(flacFragment(this.sequence++,this.samples,flacFrame(this.block++,this.rate,this.channels,block),FLAC_BLOCK),FLAC_BLOCK);
-    }
     if(this.pending.length>MAX_PENDING){this.onError('Music buffer is not advancing');this.close();return;}
     this.pump();
   }
@@ -129,6 +105,6 @@ export class MusicOutput {
     }catch(error){this.onError(String(error));}
   }
   close(){
-    if(this.closed)return;this.closed=true;this.element.pause();this.element.removeAttribute('src');this.element.load();this.element.remove();URL.revokeObjectURL(this.url);this.pending=[];this.frames=[];this.pcm=[];this.pcmBytes=0;
+    if(this.closed)return;this.closed=true;this.element.pause();this.element.removeAttribute('src');this.element.load();this.element.remove();URL.revokeObjectURL(this.url);this.pending=[];this.frames=[];
   }
 }

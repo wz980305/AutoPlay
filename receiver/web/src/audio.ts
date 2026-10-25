@@ -127,11 +127,9 @@ export class AudioEngine {
       nextPlayTime: 0,
       gain: streamGain,
     };
-    // Music through a media element: AAC (stream 102, wireless) as sent; the wired iPhone's LPCM
-    // (stream 100) losslessly as FLAC, since 7 ms Web Audio buffers crackled and gave the head unit no
-    // media session (2026-10-12). Other LPCM (calls, Siri, alerts) stays on Web Audio for low latency.
-    const kind = message.name !== 'media' ? null : message.codec === AudioCodec.AacLc ? 'aac'
-      : message.codec === AudioCodec.Lpcm && message.channels <= 2 && [44100, 48000].includes(message.sampleRate) ? 'flac' : null;
+    // Music through a media element: AAC (stream 102) as sent. LPCM (prompts, alerts, "media" PCM) stays on Web
+    // Audio for low latency (the wired iPhone's LPCM-as-FLAC element went with wired CarPlay).
+    const kind = message.name === 'media' && message.codec === AudioCodec.AacLc ? 'aac' : null;
     if (kind && MusicOutput.supported(kind)) {
       try {
         state.music = (this.retainedMusic && this.retainedConfig === MusicOutput.key(message, kind) ? this.retainedMusic : new MusicOutput(message, this.onError, kind));

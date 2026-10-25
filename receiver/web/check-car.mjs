@@ -186,16 +186,16 @@ assert.deepEqual(media.report(),{positionState:1,songPos:62,songDur:200,art:0},'
   globalThis.MediaSource=class {constructor(){return source;}};globalThis.URL.createObjectURL=()=>'blob:x';
   const element={currentTime:0,paused:true,plays:0,setAttribute(){},removeAttribute(){},load(){},remove(){},addEventListener(){},play(){this.plays++;this.paused=false;return Promise.resolve();},pause(){this.paused=true;}};
   globalThis.document={createElement:()=>element,body:{append(){}}};
-  const {MusicOutput}=await load('music-output',s=>'const FLAC_BLOCK=4096,FLAC_MIME="audio/mp4";function flacInit(){return new Uint8Array(1);}function aacInit(){return new Uint8Array(1);}function flacFrame(){return new Uint8Array(1);}function flacFragment(){return new Uint8Array(1);}\n'+s.replace(/^import .*?;$/gm,''));
-  const errors=[];const music=new MusicOutput({sampleRate:48000,channels:2,description:new Uint8Array()},m=>errors.push(m),'flac');
+  const {MusicOutput}=await load('music-output',s=>'function aacInit(){return new Uint8Array(1);}function aacFragment(){return new Uint8Array(1);}\n'+s.replace(/^import .*?;$/gm,''));
+  const errors=[];const music=new MusicOutput({sampleRate:48000,channels:2,description:new Uint8Array()},m=>errors.push(m),'aac');
   assert.deepEqual(log,['append'],'init segment');
   assert.equal(music.follow,undefined,'No song timeline to follow');
   element.paused=false;element.currentTime=600;buffer.ranges=[[599,600.6]];
-  for(let i=0;i<20;i++){clock+=85;music.packet(new Uint8Array(4096*4));}
+  for(let i=0;i<80;i++){clock+=21;music.packet(new Uint8Array(400));}
   assert.ok(!log.some(x=>x.startsWith('remove 0-')||x.startsWith('duration')),'Playing on moves neither the timeline nor the duration');
   assert.equal(element.currentTime,600,'and seeks nothing');assert.deepEqual(errors,[]);
   // Behind the cushion: no faster playback (it crackled at song changes), only measured for the viewer log.
-  element.playbackRate=1;music.report();buffer.ranges=[[590,601.5]];music.packet(new Uint8Array(4096*4));
+  element.playbackRate=1;music.report();buffer.ranges=[[590,601.5]];for(let i=0;i<4;i++)music.packet(new Uint8Array(400));
   assert.equal(element.playbackRate,1,'1.5 s behind: still normal speed');assert.equal(element.currentTime,600,'and no jump');
   assert.deepEqual([music.report().musicLeadMaxMs,music.report().musicLeadMaxMs],[1500,undefined],'How far behind it played, for the viewer log');
   element.plays=0;element.play=function(){this.plays++;return Promise.reject(Object.assign(new Error('blocked'),{name:'NotAllowedError'}));};
@@ -203,10 +203,10 @@ assert.deepEqual(media.report(),{positionState:1,songPos:62,songDur:200,art:0},'
   assert.equal(music.report().musicBlocked,1,'A play() the browser refused (no gesture) is counted for the viewer log');
   element.play=function(){this.plays++;this.paused=false;return Promise.resolve();};
   // A buffer busy for a few seconds is not a stuck one.
-  const stuck=[];const flac=new MusicOutput({sampleRate:48000,channels:2,description:new Uint8Array()},m=>stuck.push(m),'flac');
-  buffer.updating=true;for(let i=0;i<40;i++)flac.packet(new Uint8Array(4096*4));
+  const stuck=[];const slow=new MusicOutput({sampleRate:48000,channels:2,description:new Uint8Array()},m=>stuck.push(m),'aac');
+  buffer.updating=true;for(let i=0;i<40*4;i++)slow.packet(new Uint8Array(400));
   assert.deepEqual(stuck,[],'Forty fragments (3.4 s) waiting on a busy buffer close nothing');
-  for(let i=0;i<60;i++)flac.packet(new Uint8Array(4096*4));
+  for(let i=0;i<60*4;i++)slow.packet(new Uint8Array(400));
   assert.deepEqual(stuck,['Music buffer is not advancing'],'but a buffer stuck for good still does');buffer.updating=false;
   // Resuming after a pause whose buffer was played out: no step back (that replayed a second already heard).
   const resumed=new MusicOutput({sampleRate:48000,channels:2,description:new Uint8Array()},()=>{},'aac');

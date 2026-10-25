@@ -247,9 +247,6 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                 bridge.requestKeyFrame(streamType)
             }
         }
-        // Wired CarPlay needs no Wi-Fi: bring the cable up while the box is still joining the car hotspot
-        // (22-37 s on the Xpeng), so the picture is there when the head unit's browser connects.
-        config.usbBridge?.let { wired = WiredBootstrap(this, it).also(WiredBootstrap::start) }
         awaitBindAddress()
         selectedPhone = presenceResult("boot")?.takeIf { it.isNotBlank() }
         bootInvite = selectedPhone != null
@@ -258,55 +255,16 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         startAirPlayListener()
         // The handoff hands the iPhone this address directly, and it accepts the Bluetooth invitation
         // ~5 s later, so mDNS (5.3 s to announce on the S805) need not delay the invitation. Without
-        // wireless CarPlay nothing looks for the AirPlay service: the cable carries the address over iAP2.
+        // wireless CarPlay nothing looks for the AirPlay service.
         if (config.wireless) Thread({
             runCatching { Advertisers.create(config.mdns, airPlayConfig, identity, bindAddress).also { it.start() } }
                 .onSuccess { if (closed.get()) runCatching { it.close() } else advertiser = it }
                 .onFailure { log.warn("mDNS advertisement failed: {}", it.message) }
         }, "mdns-start").apply { isDaemon = true; start() }
-        if (config.wireless && !cablePhone && (presenceHelper == null || bootInvite || selectedPresent())) {
+        if (config.wireless && (presenceHelper == null || bootInvite || selectedPresent())) {
             wireless = WirelessBootstrap(this).also { it.start() }
         }
         startSupervisor()
-    }
-
-    @Volatile private var wired: WiredBootstrap? = null
-
-    /** An iPhone on the USB cable (WiredBootstrap): no wireless invitations until it is unplugged. */
-    @Volatile private var cablePhone = false
-    @Volatile private var wiredSession: AirPlaySession? = null
-
-    /** The iPhone on the cable has opened CarPlay (AirPlay over its NCM link) and is the active session. */
-    fun wiredSessionActive(): Boolean = wiredSession.let { it != null && it === activeSession }
-
-    fun setCablePhone(present: Boolean) {
-        if (cablePhone == present) return
-        cablePhone = present
-        if (!config.wireless) return
-        if (present) {
-            synchronized(this) {
-                ++wirelessGeneration
-                val previous = wireless
-                wireless = null
-                previous?.close()
-                // End a wireless session now: an iPhone switched from Wi-Fi straight to the cable's
-                // CarPlay start ignored the first start (2026-10-12, 28 s to picture).
-                activeSession?.takeIf { it !== wiredSession }?.let { runCatching { it.close() } }
-            }
-            log.info("iPhone on the USB cable; wireless invitations paused")
-        } else {
-            // The cable's session would only end on its 15 s keep-alive timeout and blocked the invitation
-            // below (2026-10-12): end it now, the cable is gone.
-            wiredSession?.takeIf { it === activeSession }?.let { runCatching { it.close() } }
-            wiredSession = null
-            // Whom to invite: a phone used on the cable only is not the presence helper's last phone.
-            if (presenceHelper != null && selectedPhone == null) {
-                selectedPhone = presenceResult("unplugged")?.takeIf { it.matches(Regex("(?:[0-9A-F]{2}:){5}[0-9A-F]{2}")) }
-            }
-            // Invite at once, as at boot: someone who just pulled the cable is in the car with the phone.
-            log.info("no iPhone on the USB cable; wireless invitations resume")
-            restartWireless(confirmedPresent = true)
-        }
     }
 
     /**
@@ -339,33 +297,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         log.info("AirPlay RTSP listening on {}:{}", bindAddress.hostAddress, config.airPlayPort)
     }
 
-    @Volatile private var wiredSocket: ServerSocket? = null
-
-    /**
-     * Wired CarPlay: listen on the iPhone's NCM link (see WiredBootstrap). Whoever connects there is
-     * the phone on the cable, so there is no network admission; a wired phone replaces a session.
-     */
-    @Synchronized
-    fun listenWired(address: java.net.InetAddress) {
-        val current = wiredSocket
-        // Each helper run creates the TAP again with a new interface index: InetAddress.equals ignores
-        // the scope, and a listener left on the old index never saw the iPhone (2026-10-12).
-        val scope = (address as? java.net.Inet6Address)?.scopeId
-        if (current != null && !current.isClosed && current.inetAddress == address &&
-            (current.inetAddress as? java.net.Inet6Address)?.scopeId == scope) return
-        runCatching { current?.close() }
-        val server = ServerSocket()
-        server.reuseAddress = true
-        server.bind(InetSocketAddress(address, config.airPlayPort))
-        wiredSocket = server
-        Thread({ acceptLoop(server, wired = true) }, "airplay-accept-wired").apply {
-            isDaemon = true
-            start()
-        }
-        log.info("AirPlay RTSP listening on [{}]:{} for wired CarPlay", address.hostAddress, config.airPlayPort)
-    }
-
-    private fun acceptLoop(server: ServerSocket, wired: Boolean = false) {
+    private fun acceptLoop(server: ServerSocket) {
         while (!closed.get() && !server.isClosed) {
             val socket: Socket = try {
                 server.accept()
@@ -375,12 +307,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                 continue
             }
             try {
-                if (wired) {
-                    activeSession?.let { current ->
-                        log.info("wired iPhone connected; replacing the current session")
-                        runCatching { current.close() }
-                    }
-                } else if (presenceHelper != null) {
+                if (presenceHelper != null) {
                     val incomingPhone = presenceResult("admit", socket.inetAddress.hostAddress)
                     val current = activeSession
                     if (current != null) {
@@ -421,7 +348,6 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                     media = media,
                 )
                 activeSession = session
-                if (wired) wiredSession = session
                 session.start()
             } catch (error: Exception) {
                 log.warn("AirPlay session bring-up failed: {}", error.message)
@@ -570,8 +496,6 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                     Thread.sleep(SUPERVISOR_INTERVAL_MS)
                     if (closed.get()) return@Thread
                     val now = System.nanoTime() / 1_000_000
-                    // The phone on the cable owns CarPlay; its session is no Wi-Fi presence either.
-                    if (cablePhone) { viewerSeenAt = now; continue }
                     if (hub.viewerCount > 0) viewerSeenAt = now
                     // Learn the phone's Wi-Fi identity before an idle release can end its session: a phone invited
                     // right after pairing, with no page open, was released first and then never invited again,
@@ -734,8 +658,6 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             return DisplayOutcome()
         }
         activeSession?.close()
-        // Wired: start the USB side over (identification, then CarPlayStartSession with the new display).
-        wired?.restart()
         // The phone was just using CarPlay, so skip the ~2.4 s presence re-check before re-inviting it.
         if (wasActive) armQuickRetry()
         restartWireless(confirmedPresent = wasActive)
@@ -748,7 +670,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
     /** confirmedPresent: the caller has just seen the selected phone on the network (skips a ~2.4 s re-check). */
     @Synchronized
     private fun restartWireless(confirmedPresent: Boolean = false) {
-        if (!config.wireless || closed.get() || cablePhone) return
+        if (!config.wireless || closed.get()) return
         val generation = ++wirelessGeneration
         sessionEnded = false
         lastBootstrapAt = System.nanoTime() / 1_000_000
@@ -789,8 +711,6 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         // goodbye on every stop or restart, F50 2026-10-14).
         runCatching { activeSession?.close() }
         runCatching { wireless?.close() }
-        runCatching { wired?.close() }
-        runCatching { wiredSocket?.close() }
         runCatching { advertiser?.close() }
         runCatching { serverSocket?.close() }
     }
