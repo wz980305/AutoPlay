@@ -11,12 +11,18 @@ package com.playport.server
  * this it fell 11 s behind in 20 s and stayed there (nothing was dropped, the backlog sat below the send queue);
  * pausing only once a mark came back late still let it reach 2.7 s. A page that never answers (an older one)
  * is never held back.
+ *
+ * Over that estimate, a page that answers its marks at once (within [promptNs]) still gets the picture: a still
+ * screen sends little, so the intake measured is low, and a page swipe's burst went over it. On a 2026-10-12
+ * drive 64 of 66 drops came while the page was 47 ms behind, each a frozen picture and a keyframe.
  */
-internal class LagGate(private val targetNs: Long, private val floorBytes: Long) {
+internal class LagGate(private val targetNs: Long, private val floorBytes: Long, private val promptNs: Long = targetNs / 2) {
     private class Mark(val id: Long, val atNs: Long, val queuedBytes: Long)
     private val pending = ArrayDeque<Mark>()
     private var deliveredBytes = -1L
     private var deliveredAtNs = 0L
+    /** How long the page took to answer its latest mark. */
+    private var answerNs = Long.MAX_VALUE
     /** Recent intake samples (at, bytes per ns); the best of the last two seconds, as a page that is sent
      *  little (picture paused) takes in little without being slow. */
     private val rates = ArrayDeque<Pair<Long, Double>>()
@@ -35,6 +41,7 @@ internal class LagGate(private val targetNs: Long, private val floorBytes: Long)
             }
             deliveredBytes = mark.queuedBytes
             deliveredAtNs = nowNs
+            answerNs = nowNs - mark.atNs
         }
         while (rates.isNotEmpty() && nowNs - rates.first().first > 2_000_000_000L) rates.removeFirst()
     }
@@ -44,6 +51,8 @@ internal class LagGate(private val targetNs: Long, private val floorBytes: Long)
         if (deliveredBytes < 0) return true
         val rate = rates.maxOfOrNull { it.second } ?: 0.0
         val window = maxOf(floorBytes, (rate * targetNs).toLong())
-        return queuedBytes - deliveredBytes < window
+        if (queuedBytes - deliveredBytes < window) return true
+        val outstanding = pending.firstOrNull()?.let { nowNs - it.atNs } ?: 0L
+        return answerNs < promptNs && outstanding < promptNs
     }
 }

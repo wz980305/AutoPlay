@@ -62,6 +62,9 @@ export class VideoPlayer {
   }
 
   private async configureAsync(message: VideoConfigMessage): Promise<void> {
+    // The phone repeats its codec config with every keyframe the box asks for (after frames were dropped to
+    // stay current): the running decoder takes that keyframe as it is, and a new one only blanks the picture.
+    if (this.state?.decoder.state === 'configured' && sameConfig(this.lastConfig, message)) return;
     const generation = ++this.generation;
     this.close();
     this.lastConfig = message;
@@ -265,11 +268,17 @@ export class VideoPlayer {
   }
 
   private resizeCanvas(width: number, height: number): void {
-    if (width > 0 && height > 0) {
+    // Setting a canvas size, even the same one, clears it: keep the last picture up until the next one.
+    if (width > 0 && height > 0 && (this.canvas.width !== width || this.canvas.height !== height)) {
       this.canvas.width = width;
       this.canvas.height = height;
     }
   }
+}
+
+function sameConfig(a: VideoConfigMessage | null, b: VideoConfigMessage): boolean {
+  return a !== null && a.codec === b.codec && a.width === b.width && a.height === b.height &&
+    a.codecData.length === b.codecData.length && a.codecData.every((value, i) => value === b.codecData[i]);
 }
 
 /**

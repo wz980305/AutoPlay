@@ -56,6 +56,26 @@ assert.deepEqual(media.report(),{positionState:1,songPos:62,songDur:200},'The vi
   assert.deepEqual(player.takeStalls(),{stalls:1,stallMaxMs:360,slowFrames:0,paintMaxMs:0},'Only a gap with frames flowing on both sides counts; motion ending into an idle screen (1 frame/s) does not');
   assert.deepEqual(player.takeStalls(),{stalls:0,stallMaxMs:0,slowFrames:0,paintMaxMs:0},'Counters restart for each report');
   Object.defineProperty(performance,'now',{value:realNow,configurable:true,writable:true}); }
+{ // Each keyframe the box asks for comes with the same codec config again (twice, 110 times in a 42-minute drive):
+  // tearing the decoder down and resizing the canvas blanked the picture until the car's slow decoder painted again.
+  const decoders=[];let sizeWrites=0;
+  globalThis.VideoDecoder=class {constructor(){this.state='unconfigured';this.decodeQueueSize=0;decoders.push(this);}configure(){this.state='configured';}decode(){}close(){this.state='closed';}};
+  globalThis.window=globalThis.window??{};window.setTimeout=()=>1;window.clearTimeout=()=>{};
+  const canvas={getContext(){return null;},set width(v){sizeWrites++;this.w=v;},get width(){return this.w;},set height(v){sizeWrites++;this.h=v;},get height(){return this.h;}};
+  const {VideoPlayer}=await load('video',s=>s.replace(/^import .*?;$/gm,'')+'\nconst VideoCodec={H264:1,H265:2};function avcCodecString(){return "avc1.640028";}function annexBToAvcc(d){return d;}');
+  const player=new VideoPlayer(canvas,()=>{},()=>{},()=>{});
+  const config=(w=1280,h=846,last=0x40)=>({kind:'video-config',streamType:110,codec:1,width:w,height:h,codecData:new Uint8Array([1,0x64,0,0x28,last])});
+  player.configure(config());await Promise.resolve();
+  assert.equal(decoders.length,1);const writes=sizeWrites;
+  player.configure(config());player.configure(config());await Promise.resolve();
+  assert.equal(decoders.length,1,'The same config keeps the running decoder');
+  assert.equal(decoders[0].state,'configured');
+  assert.equal(sizeWrites,writes,'and leaves the canvas (and its picture) alone');
+  player.configure(config(1280,846,0x41));await Promise.resolve();
+  assert.equal(decoders.length,2,'A different config gets a new decoder');
+  assert.equal(sizeWrites,writes,'but a canvas of the same size keeps showing the last picture');
+  player.configure(config(1082,1280,0x41));await Promise.resolve();
+  assert.equal(canvas.width,1082,'A new size resizes the canvas');assert.equal(canvas.height,1280); }
 media.setActive(false);assert.equal(navigator.mediaSession.playbackState,'none');assert.equal(navigator.mediaSession.metadata,null);
 // Music must take exactly one route; voice/navigation keep the existing Web Audio path.
 const edges=[];let music;let packets=0;
