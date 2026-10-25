@@ -141,7 +141,7 @@ const video = new VideoPlayer(canvas, error, () => {
   if (!active) return;
   if (!shownOnce) { startup.mark('firstFrameMs'); connection.send({type:'stats', stats:{ev:16,...startupStats()}}); }
   frames++; reportFrames++; hudFrames++; painted = true; shownOnce = true; el('overlay').hidden = true; el('app').dataset.live = 'true';
-  if (holding) { holding = false; el('toast').hidden = true; fit(); }
+  if (holding) { holding = false; hideRecovering(); fit(); }
   if (wokeAt) { lifeEvent(14, { pictureMs: Math.round(performance.now() - wokeAt) }); wokeAt = 0; }
   const now = performance.now();
   if (input.lastDownAt > handledDownAt) {
@@ -203,9 +203,10 @@ function syncNight() {
   sentNight = night; send({ type:'night', night });
 }
 /** hold: the link dropped after a picture was shown (the car froze the browser, 2026-10-14). The last picture stays
- *  up with a small notice while the link comes back, instead of the full "connecting" screen. Only time the page is
- *  awake counts towards HOLD_MS (the one-second tick adds it): a wall-clock timer ran on while a Tesla had the page
- *  frozen and cleared the picture the moment it came back, just before the new one arrived. */
+ *  up, veiled and with one persistent notice (#recovering: "link lost, reconnecting, touch paused"), while the link
+ *  comes back, instead of the full "connecting" screen; the notice goes with a cross-fade on the first new frame. Only
+ *  time the page is awake counts towards HOLD_MS (the one-second tick adds it): a wall-clock timer ran on while a
+ *  Tesla had the page frozen and cleared the picture the moment it came back, just before the new one arrived. */
 const HOLD_MS = 8000;
 /** A renegotiation for a new display (2026-10-21): the iPhone comes back in 5-6 s on Wi-Fi, ~10 s on the cable; the
  *  last picture stays up with a notice instead of the black "waiting for iPhone" screen. */
@@ -216,10 +217,23 @@ function reset(hold = false, forDisplay = false) {
   active = painted = false; input.reset(); canvas.inert = true;
   video.close(); audio.stopAll();
   holding = hold; holdAwakeMs = 0; holdForDisplay = forDisplay;
-  if (hold) toast(t(forDisplay ? 'adjusting' : 'reconnecting'));
-  else clearPicture();
+  if (hold) showRecovering(t(forDisplay ? 'adjusting' : 'recoveringNotice'));
+  else { clearPicture(); hideRecovering(); }
 }
 function clearPicture() { canvas.getContext('2d')?.clearRect(0,0,canvas.width,canvas.height); }
+/** The veil and notice over a held picture (recovering, V1): shown at once, faded out over 250 ms. */
+const recovering = el('recovering');
+let recoverFade = 0;
+function showRecovering(text: string) {
+  window.clearTimeout(recoverFade);
+  el('recovering-text').textContent = text; recovering.hidden = false;
+  requestAnimationFrame(() => { if (!recovering.hidden) recovering.classList.add('on'); });
+}
+function hideRecovering() {
+  if (recovering.hidden) return;
+  recovering.classList.remove('on');
+  window.clearTimeout(recoverFade); recoverFade = window.setTimeout(() => { recovering.hidden = true; }, 300);
+}
 function server(message: ServerMessage) {
   if (message.type === 'pong') { lag.pong(performance.now()); return; }
   // Straight back, also before CarPlay starts: the box pauses the picture while this page lags behind.
@@ -485,7 +499,7 @@ window.setInterval(() => {
   const now = performance.now(), gap = now - lastTick, late = gap > 2500 && !hiddenMeanwhile;
   lastTick = now; hiddenMeanwhile = document.hidden;
   if (!token) return;
-  if (holding && !late) { holdAwakeMs += Math.min(gap, 1000); if (holdAwakeMs > (holdForDisplay ? DISPLAY_HOLD_MS : HOLD_MS)) { holding = false; el('toast').hidden = true; clearPicture(); fit(); render(); } }
+  if (holding && !late) { holdAwakeMs += Math.min(gap, 1000); if (holdAwakeMs > (holdForDisplay ? DISPLAY_HOLD_MS : HOLD_MS)) { holding = false; hideRecovering(); clearPicture(); fit(); render(); } }
   if (late) { lifeEvent(8, { gapMs: Math.round(gap) }); wake(1); }
   else if (active && !document.hidden && now - lastHeard > 8000) revive();   // the link died while in view
   else if (!document.hidden && closedAt && now - closedAt > RELOAD_AFTER_MS) reloadWhenBoxAnswers();

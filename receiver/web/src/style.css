@@ -25,6 +25,17 @@ button:disabled { opacity:.4; cursor:default; }
 #surface { flex:none; }
 #screen { display:block; width:100%; height:100%; touch-action:none; user-select:none; -webkit-user-select:none; }
 
+/* Recovering (viewer audit V1): the link dropped after a picture was shown. The last frame stays up under a 40 % veil
+   with one centred notice, until the first new frame (cross-fade) or the hold runs out; touches are paused meanwhile
+   (the canvas is inert). Never a timed toast: a dead picture must not look live. */
+#recovering { position:absolute; top:0; right:0; bottom:0; left:0; display:grid; place-items:center; padding:24px;
+  background:rgba(0,0,0,.4); pointer-events:none; opacity:0; transition:opacity .25s ease-out; }
+#recovering.on { opacity:1; }
+#recovering .notice { display:flex; align-items:center; gap:14px; max-width:calc(100vw - 48px); padding:18px 28px; border-radius:18px;
+  background:rgba(20,20,22,.88); border:1px solid rgba(255,255,255,.28); color:#fff; font-size:26px; line-height:1.3; font-weight:600;
+  text-align:center; box-shadow:0 8px 30px rgba(0,0,0,.4); }
+#recovering .spinner { width:26px; height:26px; border-width:3px; }
+
 /* Waiting screen: what is happening, then the three things a driver can do here. */
 #overlay { position:absolute; top:0; right:0; bottom:0; left:0; inset:0; display:flex; align-items:center; justify-content:center;
   padding:max(24px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom)); background:#000; overflow:auto; pointer-events:none; }
