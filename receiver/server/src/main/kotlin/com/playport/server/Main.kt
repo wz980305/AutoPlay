@@ -40,7 +40,7 @@ fun main(args: Array<String>) {
     val webRoot = Path.of("web/dist").toAbsolutePath().normalize()
     val tls = TlsCertificate.loadOrCreate(config.stateDir, listOf(server.bindAddress))
     val http = if (config.insecureHttp) {
-        embeddedServer(Netty, port = config.httpPort, host = "0.0.0.0") {
+        embeddedServer(Netty, port = config.httpPort, host = server.bindAddress.hostAddress) {
             server.hub.install(this, webRoot)
         }
     } else {
@@ -49,7 +49,7 @@ fun main(args: Array<String>) {
             environment = applicationEnvironment { },
             configure = {
                 sslConnector(tls.keyStore, tls.alias, { tls.password }, { tls.password }) {
-                    host = "0.0.0.0"
+                    host = server.bindAddress.hostAddress
                     port = config.httpPort
                 }
             },
