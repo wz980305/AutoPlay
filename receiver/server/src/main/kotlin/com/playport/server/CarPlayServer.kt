@@ -536,6 +536,14 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                     // The phone on the cable owns CarPlay; its session is no Wi-Fi presence either.
                     if (cablePhone) { viewerSeenAt = now; continue }
                     if (hub.viewerCount > 0) viewerSeenAt = now
+                    // Learn the phone's Wi-Fi identity before an idle release can end its session: a phone invited
+                    // right after pairing, with no page open, was released first and then never invited again,
+                    // being unknown on this Wi-Fi (F50, 2026-10-19).
+                    if (activeSession != null && !presenceLearned) lastPeer?.let { peer ->
+                        selectedPhone?.let { phone ->
+                            presenceLearned = presence("remember", peer, phone, activeSession?.controllerId.orEmpty())
+                        }
+                    }
                     when (idleAction(now, viewerSeenAt, activeSession != null, parked, releaseMs)) {
                         IdleAction.RELEASE -> {
                             parked = true
@@ -561,11 +569,6 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                     if (activeSession != null) {
                         lastBootstrapAt = now
                         absentChecks = 0
-                        if (!presenceLearned) lastPeer?.let { peer ->
-                            selectedPhone?.let { phone ->
-                                presenceLearned = presence("remember", peer, phone, activeSession?.controllerId.orEmpty())
-                            }
-                        }
                         continue
                     }
                     if (presenceHelper == null) {
