@@ -5,10 +5,10 @@ and run a private D-Bus and BlueZ, as DashPlay's earlier F50-only service did (2
 The F50 runs a vendor 5.4 kernel; OpenWrt's bluez-daemon pulls in kmod-bluetooth for 6.12 (checked
 2026-10-12), so BlueZ lives in its own root (--setup makes it with apk, scripts off, from the
 official feeds) and is never installed into the system.
-uci dashplay.main (supervisor_openwrt.py):
-  option bluetooth_service '/usr/bin/python3 /opt/dashplay/board_zte_f50.py'
-  option dbus_address 'unix:path=/var/run/dashplay/bluetooth/system_bus_socket'
-It runs until a part exits; the supervisor then restarts everything.
+The supervisor (supervisor_openwrt.BluetoothManager) always starts this helper and talks to BlueZ at
+unix:path=/var/run/autoplay/bluetooth/system_bus_socket (BLUETOOTH_BUS); there is no uci option for it
+any more (the DashPlay options bluetooth_service/dbus_address are removed by the uci-defaults script).
+It runs until a part exits; the supervisor then restarts it with back-off and a reason word.
 """
 import argparse
 import os
@@ -20,8 +20,8 @@ import subprocess
 import sys
 import time
 
-RUNTIME = Path("/opt/dashplay-bluez")
-RUN = Path("/var/run/dashplay")
+RUNTIME = Path("/opt/autoplay-bluez")
+RUN = Path("/var/run/autoplay")
 BUS = RUN / "bluetooth"
 TTY = Path("/dev/ttyBT0")
 
@@ -102,7 +102,7 @@ def setup(runtime):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--runtime", type=Path, default=RUNTIME)
-    parser.add_argument("--state", type=Path, default=Path("/opt/dashplay/state"))
+    parser.add_argument("--state", type=Path, default=Path("/opt/autoplay/state"))
     parser.add_argument("--setup", action="store_true", help="create the private BlueZ root, then exit")
     args = parser.parse_args()
     if args.setup:
@@ -149,8 +149,17 @@ def main():
             time.sleep(0.2)
         raise SystemExit("Bluetooth controller did not come up")
 
+    def protect():
+        # The OOM killer should take the JVM (run-receiver.py sets it +500) long before the Bluetooth daemons
+        # (reliability_audit, security one-liners): -500 for every child of this helper.
+        try:
+            Path("/proc/self/oom_score_adj").write_text("-500\n")
+        except OSError:
+            pass
+
     def start(name, argv):
-        children.append((name, subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL, start_new_session=True)))
+        children.append((name, subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL, start_new_session=True,
+                                                preexec_fn=protect)))
 
     try:
         subprocess.run(["modprobe", "sprdbt_tty"], check=True)
@@ -172,7 +181,7 @@ def main():
         (BUS / "dbus.conf").write_text(
             f'<busconfig><type>system</type><listen>unix:path={BUS}/system_bus_socket</listen><auth>EXTERNAL</auth>'
             '<policy user="root"><allow own="*"/><allow send_destination="*"/><allow receive_sender="*"/></policy></busconfig>\n')
-        (BUS / "bluez.conf").write_text("[General]\nName=DashPlay\nControllerMode=dual\nDiscoverableTimeout=180\n"
+        (BUS / "bluez.conf").write_text("[General]\nName=AutoPlay\nControllerMode=dual\nDiscoverableTimeout=180\n"
                                         "PairableTimeout=180\n[Policy]\nAutoEnable=false\n")
         start("dbus", [str(runtime / "usr/bin/dbus-daemon"), "--nofork", f"--config-file={BUS / 'dbus.conf'}"])
         wait_for((BUS / "system_bus_socket").exists, 10)

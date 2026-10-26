@@ -9,15 +9,12 @@ from settings_page import SettingsPage
 
 class PairingTests(unittest.TestCase):
     def setUp(self):
-        boot = patch('platform_debian.DebianPlatform.boot_id', return_value='synthetic-boot')
+        boot = patch('platform_openwrt.OpenWrtPlatform.boot_id', return_value='synthetic-boot')
         boot.start(); self.addCleanup(boot.stop)
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.root=Path(self.tmp.name)
         self.page=SettingsPage(self.root/'state',lambda:{},lambda _:None,lambda:[])
         self.window=self.page.pairing
-        # Bluetooth pairing is offered where wireless CarPlay is (mifi, box_hotspot; not car_hotspot).
-        save_json(self.root/'state/setup.json',{'done':True,'mode':'mifi'})
-        save_json(self.root/'state/car-hotspot.json',{'ssid':'Car','passphrase':'synthetic1'})
     def test_start_rejected_while_someone_is_using_carplay(self):
         save_json(self.root/'state/receiver/phone-presence.json',{'active':'synthetic-A'})
         with patch('pairing_window.subprocess.Popen') as launch:

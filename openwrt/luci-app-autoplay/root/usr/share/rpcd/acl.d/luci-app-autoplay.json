@@ -1,0 +1,47 @@
+{
+  "luci-app-autoplay": {
+    "description": "Grant access to AutoPlay settings",
+    "read": {
+      "ubus": {
+        "service": [
+          "list"
+        ],
+        "file": [
+          "read"
+        ]
+      },
+      "uci": [
+        "autoplay"
+      ],
+      "file": {
+        "/var/run/autoplay/network-status.json": [
+          "read"
+        ],
+        "/opt/autoplay/state/update-check.json": [
+          "read"
+        ],
+        "/opt/autoplay/state/update-status.json": [
+          "read"
+        ],
+        "/opt/autoplay/state/own-domain.json": [
+          "read"
+        ]
+      }
+    },
+    "write": {
+      "uci": [
+        "autoplay"
+      ],
+      "ubus": {
+        "file": [
+          "exec"
+        ]
+      },
+      "file": {
+        "/usr/libexec/autoplay-update": [
+          "exec"
+        ]
+      }
+    }
+  }
+}

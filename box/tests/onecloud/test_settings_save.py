@@ -7,7 +7,7 @@ import unittest
 import unittest.mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/onecloud"))
-import settings_page
+import state
 
 
 class ConcurrentSaveTests(unittest.TestCase):
@@ -15,17 +15,17 @@ class ConcurrentSaveTests(unittest.TestCase):
         # The page serves each request in a thread and every save used the same .tmp: a double-click on save
         # could mix both writes or fail the second rename (review 2026-10-12).
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "car-hotspot.json"
+            path = Path(directory) / "network-status.json"
             errors = []
 
             def save(n):
                 try:
                     for i in range(150):
-                        settings_page._save(path, {"ssid": f"car-{n}-{i}", "passphrase": "x" * (8 + n * 40)})
+                        state.save_json(path, {"ssid": f"car-{n}-{i}", "passphrase": "x" * (8 + n * 40)})
                 except Exception as error:   # noqa: BLE001 - any failure is the finding
                     errors.append(repr(error))
 
-            with unittest.mock.patch.object(settings_page.os, "sync"), unittest.mock.patch.object(settings_page.os, "fsync"):
+            with unittest.mock.patch.object(state.os, "sync"), unittest.mock.patch.object(state.os, "fsync"):
                 threads = [threading.Thread(target=save, args=(n,)) for n in range(2)]
                 for thread in threads:
                     thread.start()
@@ -34,7 +34,7 @@ class ConcurrentSaveTests(unittest.TestCase):
             self.assertEqual(errors, [])
             value = json.loads(path.read_text())
             self.assertIn(value["ssid"].split("-")[1], ("0", "1"))
-            self.assertEqual(sorted(p.name for p in Path(directory).iterdir()), ["car-hotspot.json"])
+            self.assertEqual(sorted(p.name for p in Path(directory).iterdir()), ["network-status.json"])
 
 
 if __name__ == "__main__":

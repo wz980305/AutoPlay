@@ -1,0 +1,13 @@
+{
+	"admin/services/autoplay": {
+		"title": "AutoPlay",
+		"action": {
+			"type": "view",
+			"path": "autoplay"
+		},
+		"depends": {
+			"acl": [ "luci-app-autoplay" ],
+			"uci": { "autoplay": true }
+		}
+	}
+}

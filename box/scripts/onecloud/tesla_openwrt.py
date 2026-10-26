@@ -1,8 +1,10 @@
-"""F50 offline Tesla checks. Own only selected DNS/DHCP fields and one nft table.
+"""F50 Tesla connectivity checks, answered for as long as the box runs. Own only selected DNS/DHCP fields and
+one nft table.
 
-A separate LAN address routes port 80 to SettingsPage without changing uhttpd.
-The original UCI values are journalled before changes, restored on exit/restart
-or WAN recovery. No Wi-Fi concurrency on the F50's current driver.
+A separate LAN address routes port 80 to SettingsPage without changing uhttpd. The original UCI values are
+journalled before changes and restored on exit/restart. Since 2026-10-25 the LAN never flips with the SIM's
+signal (tesla_only_box_delta.md D4, R3): only the upstream probe's status text changes. The own name
+(DuckDNS or autoplay.lan) is answered here too, by one address= record (D2).
 """
 import ipaddress
 import json
@@ -10,9 +12,11 @@ from pathlib import Path
 import socket
 import subprocess
 import threading
-import setup_wizard
 
-TABLE = 'dashplay_tesla_checks'
+import state as state_files
+import tesla_checks
+
+TABLE = 'autoplay_tesla_checks'
 # Any one answering means the upstream works. A Chinese SIM may drop 1.1.1.1:443 and 8.8.8.8:443 while the
 # rest of the internet works (F50, 2026-10-15), so domestic resolvers come first.
 PROBES = (('223.5.5.5', 443), ('1.12.12.12', 443), ('1.1.1.1', 443))
@@ -31,7 +35,7 @@ def offline_fields(sections, network, host, own_name):
     alias = str(address.network.network_address + 2)
     if alias == str(address.ip):
         raise ValueError('联网检查别名地址已被 LAN 使用')
-    entries = [f'/{name}/{alias}' for name in setup_wizard.TESLA_CHECK_NAMES]
+    entries = [f'/{name}/{alias}' for name in tesla_checks.TESLA_CHECK_NAMES]
     if own_name:
         entries.append(f'/{own_name}/{address.ip}')
     # Preserve unrelated DHCP options, replacing only router and DNS. The box is the router: Teslas left a network
@@ -150,7 +154,7 @@ class OfflineChecks:
         sections = self.sections()
         alias, fields = offline_fields(sections, network['network'], str(network['address']), own_name)
         before = {key: sections[key.split('.')[0]].get(key.split('.')[1]) for key in fields}
-        setup_wizard.save_json(self.path, {'before': before, 'alias': alias, 'device': network['device']})
+        state_files.save_json(self.path, {'before': before, 'alias': alias, 'device': network['device']})
         try:
             self.command(['ip', 'addr', 'add', alias + '/32', 'dev', network['device']])
             self.command(['nft', '-f', '-'], input=redirect_rules(network['device'], alias, port))
@@ -180,24 +184,22 @@ class OfflineChecks:
         self.probe_thread = None
         self.upstream = None
 
-    def update(self, config, network, status, online=None):
-        choice = config.get('answer_tesla_checks', 'auto')
-        eligible = config.get('tesla_mode') == '1' and network['mode'] in ('ap', 'external')
-        # The LAN (check answers, DHCP gateway/DNS, 80 redirect, 100.96) stays for the whole Tesla mode;
-        # only the upstream comes and goes. The Tesla's page, lease and CarPlay never change (2026-10-25).
-        wanted = eligible and choice != '0'
-        self.wanted = wanted
+    def start(self, network, own_name, port, status):
+        """Answer the checks from now on (always wanted: D4). CarPlay must keep running even if the Tesla
+        plumbing cannot be built, so a failure only becomes a status reason (reliability work 6c)."""
+        self.wanted = True
         try:
-            if self.active != wanted:
-                if wanted:
-                    self.enable(network, config['name'], int(config['settings_port']))
-                else:
-                    self.restore()
-        except Exception as error:   # CarPlay must keep running even if the Tesla plumbing cannot be built
+            if not self.active:
+                self.enable(network, own_name, int(port))
+        except Exception as error:
             self.active = False
             status['tesla_error'] = type(error).__name__ + ': ' + str(error)
         else:
             status.pop('tesla_error', None)
+        self.refresh(status)
+
+    def refresh(self, status, online=None):
+        """The status fields: whether the checks are answered, the query log, and the upstream probe's verdict."""
         status['tesla_offline'] = self.active
         if self.active:
             self.start_query_log()  # a failed logger retries without interrupting CarPlay

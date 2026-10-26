@@ -99,7 +99,7 @@ class DurableStateTests(unittest.TestCase):
             path.with_name('phone-presence.known.json').write_text(
                 json.dumps({'phones': state.get('phones'), 'last_phone': state.get('last_phone')}))
         env = {'CARPLAY_PRESENCE_INTERFACE': 'test0', 'CARPLAY_PRESENCE_STATE': str(path), 'CARPLAY_DEFAULT_PHONE': A}
-        with mock.patch('platform_debian.DebianPlatform.boot_id', return_value='synthetic-boot'), mock.patch.dict(os.environ, env), mock.patch.object(p.sys, 'argv', ['phone-presence.py', command]), \
+        with mock.patch('platform_openwrt.OpenWrtPlatform.boot_id', return_value='synthetic-boot'), mock.patch.dict(os.environ, env), mock.patch.object(p.sys, 'argv', ['phone-presence.py', command]), \
              mock.patch.object(p.os, 'fsync', wraps=os.fsync) as fsync:
             p.main()
         return json.loads(path.read_text()), fsync.call_count

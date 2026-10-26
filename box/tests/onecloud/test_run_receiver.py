@@ -25,7 +25,7 @@ class BrowserAccessTest(unittest.TestCase):
             dist = root / "playport/web/dist"
             dist.mkdir(parents=True)
             (dist / "receiver-access.js").write_text("localStorage.setItem('playport-token','old');\n")
-            run_receiver.write_browser_access(root, "0123456789abcdef0123456789abcdef", 18080)
+            run_receiver.write_browser_access(root, "0123456789abcdef0123456789abcdef", 18080, tesla=False)
             self.assertFalse((dist / "receiver-access.js").exists())
             access = dist / "receiver-access.json"
             self.assertEqual(json.loads(access.read_text()),
@@ -41,19 +41,33 @@ class BrowserAccessTest(unittest.TestCase):
             access = json.loads((root / "playport/web/dist/receiver-access.json").read_text())
             return {key: value for key, value in access.items() if key not in ("token", "settingsPort")}
 
-    def test_music_over_the_car_bluetooth_reaches_the_page_alone(self):
-        self.assertEqual(self.page_flags(car_music=True), {"carMusic": True})
-
-    def test_tesla_mode_brings_the_car_music_with_it(self):
-        self.assertEqual(self.page_flags(tesla=True), {"carMusic": True, "tesla": True})
-
-    def test_tesla_browser_can_leave_audio_in_the_webpage(self):
-        self.assertEqual(self.page_flags(tesla_browser=True), {"tesla": True, "carMusic": False})
+    def test_tesla_mode_is_the_default_and_brings_the_car_music_with_it(self):
+        # D8: the box is Tesla-only; the page reads both flags from receiver-access.json until its own trim.
+        self.assertEqual(self.page_flags(), {"carMusic": True, "tesla": True})
+        self.assertEqual(self.page_flags(tesla=False), {}, "a lab receiver without the flag")
 
     def test_rejects_an_unexpected_token(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(ValueError):
                 run_receiver.write_browser_access(Path(directory), "not-a-token")
+
+
+class AccessFileTests(unittest.TestCase):
+    def test_the_access_file_is_written_only_when_it_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "playport/web/dist").mkdir(parents=True)
+            self.assertTrue(run_receiver.write_browser_access(root, "0123456789abcdef0123456789abcdef", 18080))
+            self.assertFalse(run_receiver.write_browser_access(root, "0123456789abcdef0123456789abcdef", 18080),
+                             "the same token and port: no write on the SD card at every start")
+            self.assertTrue(run_receiver.write_browser_access(root, "f" * 32, 18080))
+
+    def test_jvm_options_exit_on_oom_and_write_crash_files_to_state(self):
+        source = HERE.read_text()
+        self.assertIn("-XX:+ExitOnOutOfMemoryError", source)
+        self.assertIn('"-XX:ErrorFile=" + str(crash / "hs_err_%p.log")', source)
+        self.assertIn("oom_score_adj", source)
+        self.assertIn("--prime-cds", source)
 
 
 class RedactionTest(unittest.TestCase):

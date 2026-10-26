@@ -1,5 +1,5 @@
-"""Own DuckDNS name with a Let's Encrypt certificate (own_domain.py): for car browsers that refuse the box's local
-CA with no "continue" (2026-10-13). acme.sh is replaced by a script that hands out a synthetic certificate."""
+"""Own DuckDNS name with a Let's Encrypt certificate (own_domain.py): the one route a Tesla's browser is known to open
+without a warning. acme.sh is replaced by a script that hands out a synthetic certificate."""
 import json
 import os
 from pathlib import Path
@@ -16,7 +16,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/onecloud")
 import boxnet
 import own_domain
 from settings_page import SettingsPage
-import setup_wizard
 import supervisor_openwrt
 
 TOKEN = "0a1b2c3d-1111-2222-3333-444455556666"
@@ -55,11 +54,11 @@ class ConfigTests(unittest.TestCase):
             own_domain.check_token("short")
 
     def test_openwrt_reads_it_from_uci_and_ignores_a_bad_one(self):
-        base = supervisor_openwrt.read_config("dashplay.main.duckdns_domain='MyCar'\n"
-                                              f"dashplay.main.duckdns_token='{TOKEN}'\n")
+        base = supervisor_openwrt.read_config("autoplay.main.duckdns_domain='MyCar'\n"
+                                              f"autoplay.main.duckdns_token='{TOKEN}'\n")
         self.assertEqual(supervisor_openwrt.own_config(base), {"domain": "mycar", "token": TOKEN})
         self.assertIsNone(supervisor_openwrt.own_config(supervisor_openwrt.read_config("")))
-        bad = supervisor_openwrt.read_config("dashplay.main.duckdns_domain='mycar'\ndashplay.main.duckdns_token='x'\n")
+        bad = supervisor_openwrt.read_config("autoplay.main.duckdns_domain='mycar'\nautoplay.main.duckdns_token='x'\n")
         self.assertIsNone(supervisor_openwrt.own_config(bad), "a wrong token turns it off, CarPlay still starts")
 
 
@@ -76,9 +75,7 @@ class MaintainerTests(unittest.TestCase):
         self.name = "mycar.duckdns.org"
         env = patch.dict(os.environ, FAKE_DIR=str(self.fake)); env.start(); self.addCleanup(env.stop)
         self.records = []
-        self.sent = []   # (address, ipv6, clear) as DuckDNS was asked
-        record = patch.object(own_domain, "update_record", lambda config, address, ipv6=None, clear=False: (
-            self.records.append(address), self.sent.append((address, ipv6, clear)))[0] or True)
+        record = patch.object(own_domain, "update_record", lambda config, address: self.records.append(address) or True)
         record.start(); self.addCleanup(record.stop)
         self.stopped = threading.Event()
 
@@ -99,7 +96,7 @@ class MaintainerTests(unittest.TestCase):
         self.assertIn("token in environment", self.calls())
         self.assertNotIn(TOKEN, self.calls(), "the token stays off acme.sh's command line")
         self.assertIn("下次开机时启用", own_domain.message(self.state, self.name))
-        boxnet.ensure_leaf(self.state, [self.name], ["192.168.5.80"])   # the next start
+        boxnet.ensure_keystore(self.state)   # the next start
         self.assertTrue(own_domain.serving(self.state))
         self.assertNotIn("下次开机", own_domain.message(self.state, self.name))
 
@@ -112,14 +109,46 @@ class MaintainerTests(unittest.TestCase):
 
     def test_a_certificate_for_another_name_is_refused(self):
         make_certificate(self.fake, "someone-else.duckdns.org")
-        self.assertEqual(self.maintainer().check_certificate(), own_domain.CERT_RETRY)
+        self.assertEqual(self.maintainer().check_certificate(), own_domain.CERT_RETRIES[0])
         self.assertFalse((self.state / "tls" / "own" / "fullchain.pem").exists())
         self.assertEqual(own_domain.read_status(self.state)["phase"], "retry")
         self.assertIn("每小时重试", own_domain.message(self.state, self.name))
 
-    def test_failure_is_retried_within_the_hour(self):
+    def test_failure_is_retried_with_back_off_then_hourly(self):
+        # reliability_audit #6: one try at start, then hourly, never renewed on drives shorter than an hour.
+        worker = self.maintainer()
         with patch.dict(os.environ, FAKE_ISSUE="1"):
-            self.assertEqual(self.maintainer().check_certificate(), own_domain.CERT_RETRY)
+            delays = [worker.check_certificate() for _ in range(6)]
+        self.assertEqual(delays, [60, 120, 300, 900, 3600, 3600])
+        status = own_domain.read_status(self.state)
+        self.assertEqual((status["phase"], status["failures"]), ("retry", 6))
+        self.assertEqual(own_domain.certificate_state(self.state, self.name)["state"], "failed")
+        make_certificate(self.fake, self.name)
+        self.assertEqual(worker.check_certificate(), own_domain.CERT_CHECK)
+        self.assertEqual(worker.cert_failures, 0)
+
+    def test_a_network_event_wakes_the_maintainer(self):
+        wake = self.root / "wan-up"
+        worker = own_domain.Maintainer(self.root, self.config, None, self.stopped, say=lambda _: None, wake_file=wake)
+        self.assertFalse(worker.woken())
+        wake.write_text("")
+        self.assertTrue(worker.woken())
+        self.assertFalse(wake.exists(), "consumed")
+
+    def test_certificate_state_for_the_status_model(self):
+        self.assertEqual(own_domain.certificate_state(self.state, None)["state"], "self_signed")
+        self.assertEqual(own_domain.certificate_state(self.state, self.name)["state"], "issuing")
+        make_certificate(self.fake, self.name, days=10)
+        own = self.state / "tls" / "own"; own.mkdir(parents=True)
+        shutil.copy(self.fake / "fullchain.pem", own); shutil.copy(self.fake / "key.pem", own)
+        own_domain.write_status(self.state, name=self.name, phase="ready")
+        info = own_domain.certificate_state(self.state, self.name)
+        self.assertEqual(info["state"], "expiring_soon")
+        self.assertRegex(info["not_after"], r"\d{4}-\d{2}-\d{2}")
+        self.assertEqual(own_domain.certificate_state(self.state, self.name, now=time.time() - 60 * 86400)["state"], "ok")
+        self.assertEqual(own_domain.certificate_state(self.state, self.name, now=time.time() + 20 * 86400)["state"], "expired")
+        own_domain.write_status(self.state, name=self.name, phase="renewing")
+        self.assertEqual(own_domain.certificate_state(self.state, self.name)["state"], "renewing")
 
     def test_stopping_the_service_stops_acme(self):
         make_certificate(self.fake, self.name)
@@ -146,76 +175,13 @@ class MaintainerTests(unittest.TestCase):
         self.assertEqual(self.records[:1], ["192.168.78.1"])
         self.assertEqual(own_domain.read_status(self.state)["record"], "ok")
 
-    def run_record(self, config, interface="wlan0", until=lambda sent: sent):
-        worker = own_domain.Maintainer(self.root, config, "192.168.5.80", self.stopped, say=lambda _: None,
-                                       interface=interface)
-        with patch.object(own_domain.Maintainer, "check_certificate", lambda _: own_domain.CERT_CHECK):
-            worker.start()
-            for _ in range(50):
-                if until(self.sent):
-                    break
-                time.sleep(0.1)
-            self.stopped.set(); worker.join(10)
-        self.stopped.clear()
-        return own_domain.read_status(self.state)
-
-    def test_public_ipv6_is_published_only_behind_the_firewall(self):
-        v6 = dict(self.config, ipv6=True)
-        with patch.object(own_domain, "public_ipv6", lambda _: ("2408:8409:8450:1d91::5", 64)), \
-                patch.object(own_domain, "guard", lambda *a: True):
-            status = self.run_record(v6)
-        self.assertEqual(self.sent[0], ("192.168.5.80", "2408:8409:8450:1d91::5", False))
-        self.assertEqual((status["ipv6"], status["ipv6_state"]), ("2408:8409:8450:1d91::5", "ok"))
-        self.assertIn("防火墙只让同一个 WiFi", own_domain.message(self.state, self.name))
-        self.sent.clear()
-        with patch.object(own_domain, "public_ipv6", lambda _: ("2408:8409:8450:1d91::5", 64)), \
-                patch.object(own_domain, "guard", lambda *a: False):
-            status = self.run_record(v6)
-        self.assertEqual(self.sent[0], ("192.168.5.80", None, True), "no firewall: the old AAAA is cleared, none sent")
-        self.assertEqual(status["ipv6_state"], "firewall")
-        self.assertIn("没有登记公网 IPv6", own_domain.message(self.state, self.name))
-
-    def test_no_public_ipv6_or_option_off(self):
-        with patch.object(own_domain, "public_ipv6", lambda _: None):
-            status = self.run_record(dict(self.config, ipv6=True))
-        self.assertEqual((self.sent[0][1], status["ipv6_state"]), (None, "none"))
-        self.assertIn("没有给盒子分配公网 IPv6", own_domain.message(self.state, self.name))
-        self.sent.clear()
-        with patch.object(own_domain, "public_ipv6", lambda _: self.fail("not looked up when off")):
-            status = self.run_record(self.config)
-        self.assertEqual(self.sent[0], ("192.168.5.80", None, False))
-        self.assertEqual(status["ipv6_state"], "off")
-
-    def test_box_hotspot_is_told_to_renew_at_home(self):
-        make_certificate(self.fake, self.name, days=10)
-        own = self.state / "tls" / "own"; own.mkdir(parents=True)
-        shutil.copy(self.fake / "fullchain.pem", own); shutil.copy(self.fake / "key.pem", own)
-        self.assertIn("回家插上网线", own_domain.message(self.state, self.name, box_hotspot=True))
-        self.assertNotIn("回家", own_domain.message(self.state, self.name))
 
 
-class Ipv6Tests(unittest.TestCase):
-    def test_finds_the_stable_public_address(self):
-        out = json.dumps([{"ifname": "wlan0", "addr_info": [
-            {"family": "inet6", "local": "fd9e:30a4:d99::5", "prefixlen": 64},                       # ULA
-            {"family": "inet6", "local": "2408:8409:1::99", "prefixlen": 64, "temporary": True},
-            {"family": "inet6", "local": "2408:8409:1::7", "prefixlen": 64, "deprecated": True},
-            {"family": "inet6", "local": "2408:8409:1::5", "prefixlen": 64}]}])
-        run = lambda *a, **k: subprocess.CompletedProcess(a, 0, out, "")
-        self.assertEqual(own_domain.public_ipv6("wlan0", run), ("2408:8409:1::5", 64))
-        only_temporary = json.dumps([{"addr_info": [{"family": "inet6", "local": "2408:8409:1::99", "prefixlen": 64,
-                                                     "temporary": True}]}])
-        self.assertEqual(own_domain.public_ipv6("wlan0", lambda *a, **k: subprocess.CompletedProcess(a, 0, only_temporary, "")),
-                         ("2408:8409:1::99", 64))
-        self.assertIsNone(own_domain.public_ipv6("wlan0", lambda *a, **k: subprocess.CompletedProcess(a, 0, "[]", "")))
 
-    def test_firewall_lets_in_only_the_wifi(self):
-        rules = own_domain.guard_rules("2408:8409:8450:1d91:200:ff:fe00:5", 64)
-        self.assertIn("ip6 saddr 2408:8409:8450:1d91::/64 accept", rules)
-        self.assertIn("ip6 saddr fe80::/10 accept", rules)
-        self.assertIn("meta nfproto ipv4 accept", rules)
-        self.assertTrue(rules.rstrip().endswith("}"))
-        self.assertIn("counter drop", rules)
+
+
+class RecordTests(unittest.TestCase):
+
 
     def test_record_query(self):
         urls = []
@@ -225,75 +191,37 @@ class Ipv6Tests(unittest.TestCase):
             def __exit__(self, *a): return False
             def read(self, n): return b"OK"
         with patch.object(own_domain.urllib.request, "urlopen", lambda url, timeout: Answer(url)):
-            self.assertTrue(own_domain.update_record({"domain": "mycar", "token": TOKEN}, "192.168.5.80", ipv6="2408::5"))
-            self.assertTrue(own_domain.update_record({"domain": "mycar", "token": TOKEN}, "192.168.5.80", clear=True))
-        self.assertIn("ip=192.168.5.80", urls[0]); self.assertIn("ipv6=2408%3A%3A5", urls[0])
-        self.assertIn("clear=true", urls[1]); self.assertNotIn("ipv6", urls[2])
+            self.assertTrue(own_domain.update_record({"domain": "mycar", "token": TOKEN}, "100.96.0.1"))
+        self.assertIn("ip=100.96.0.1", urls[0]); self.assertIn("domains=mycar", urls[0]); self.assertIn(f"token={TOKEN}", urls[0])
+        self.assertEqual(len(urls), 1)
+
+    def test_tesla_guard_keeps_the_record_for_an_unreachable_address(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); (root / "state").mkdir()
+            worker = own_domain.Maintainer(root, {"domain": "mycar", "token": TOKEN}, "192.168.1.1", threading.Event(),
+                                           say=lambda _: None, tesla=True)
+            self.assertIsNone(worker.address)
+            self.assertEqual(own_domain.read_status(root / "state")["record"], "blocked")
+            self.assertIn("已保留原域名记录", own_domain.message(root / "state", "mycar.duckdns.org"))
+            worker = own_domain.Maintainer(root, {"domain": "mycar", "token": TOKEN}, "100.96.0.1", threading.Event(),
+                                           say=lambda _: None, tesla=True)
+            self.assertEqual(worker.address, "100.96.0.1")
 
 
 class SettingsPageTests(unittest.TestCase):
-    def setUp(self):
-        tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
-        self.state = Path(tmp.name) / "state"; self.state.mkdir()
-        (self.state / "hotspot.json").write_text('{"ssid": "DashPlay", "passphrase": "installed1"}')
-        setup_wizard.save(self.state, {"done": True, "mode": "box_hotspot"})
-        self.status = {"mode": "ap", "box_ssid": "DashPlay", "entries": [], "home": "http://192.168.78.1/"}
-        self.changes = []
-        self.page = SettingsPage(self.state, lambda: self.status, self.changes.append, lambda: [])
-        self.page.apply_later = self.changes.append
-        self.nonce = self.page.pairing.nonce
-
-    def save(self, **form):
-        return self.page.apply("/ddns", dict(form, nonce=self.nonce))
-
-    def test_save_keep_token_change_name_and_turn_off(self):
-        self.assertIn("未设置", self.page.render(""))
-        self.assertIn("mycar.duckdns.org", self.save(action="save", domain="MyCar", token=TOKEN))
-        ddns = self.state / "ddns.json"
-        self.assertEqual(ddns.stat().st_mode & 0o777, 0o600)
-        self.assertEqual(own_domain.load(self.state), {"domain": "mycar", "token": TOKEN})
-        self.assertEqual(self.changes, ["own domain saved"])
-        self.assertNotIn(TOKEN, self.page.render(""), "the token is never sent back")
-        own = self.state / "tls" / "own"; own.mkdir(parents=True); (own / "fullchain.pem").write_text("x")
-        self.save(action="save", domain="mycar", token="")   # empty: keep it, and the certificate
-        self.assertEqual(own_domain.load(self.state)["token"], TOKEN)
-        self.assertTrue(own.exists())
-        with self.assertRaises(ValueError):
-            self.save(action="save", domain="other", token="")   # a new name needs its token
-        self.save(action="save", domain="other", token=TOKEN)
-        self.assertFalse(own.exists(), "the old name's certificate goes")
-        self.save(action="clear")
-        self.assertFalse(ddns.exists())
-        with self.assertRaises(ValueError):
-            self.page.apply("/ddns", {"action": "clear", "nonce": "stale"})
-
-    def test_public_ipv6_only_where_the_box_joins_a_hotspot(self):
-        self.assertNotIn("name=ipv6", self.page.render(""), "box hotspot: no public address")
-        self.save(action="save", domain="mycar", token=TOKEN, ipv6="on")
-        self.assertNotIn("ipv6", own_domain.load(self.state))
-        setup_wizard.save(self.state, {"done": True, "mode": "mifi"})
-        (self.state / "car-hotspot.json").write_text('{"ssid": "MiFi", "passphrase": "12345678"}')
-        self.assertIn("name=ipv6", self.page.render(""))
-        self.save(action="save", domain="mycar", token="", ipv6="on")
-        self.assertEqual(own_domain.load(self.state), {"domain": "mycar", "token": TOKEN, "ipv6": True})
-        self.assertIn("checked", self.page.render("").split("name=ipv6")[1][:40])
-        self.save(action="save", domain="mycar", token="")
-        self.assertNotIn("ipv6", own_domain.load(self.state), "unticked: off")
-
-    def test_reset_keeps_the_name(self):
-        self.save(action="save", domain="mycar", token=TOKEN)
-        (self.state / "receiver").mkdir()
-        self.page.apply("/reset", {"nonce": self.nonce})
-        self.assertIsNotNone(own_domain.load(self.state))
-
-    def test_openwrt_only_shows_it(self):
-        page = SettingsPage(self.state, lambda: dict(self.status, own_name="mycar.duckdns.org"), self.changes.append,
-                            lambda: [], managed={"by": "OpenWrt", "admin": "/cgi-bin/luci"})
-        with self.assertRaises(ValueError):
-            page.apply("/ddns", {"action": "save", "domain": "x", "token": TOKEN, "nonce": page.pairing.nonce})
-        html = page.render("")
-        self.assertIn("mycar.duckdns.org", html)
-        self.assertNotIn("name=token", html)
+    def test_the_page_shows_the_name_and_takes_no_form(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp) / "state"; state.mkdir()
+            status = {"mode": "openwrt", "entries": [], "home": "http://100.96.0.1:18080/", "own_name": "mycar.duckdns.org"}
+            page = SettingsPage(state, lambda: status, lambda _: None, lambda: [])
+            with self.assertRaises(ValueError):
+                page.apply("/ddns", {"action": "save", "domain": "x", "token": TOKEN, "nonce": page.pairing.nonce})
+            html = page.render("")
+            self.assertIn("mycar.duckdns.org", html)
+            self.assertIn("等待申请正式证书", html)
+            self.assertNotIn("name=token", html)
+            self.assertNotIn("自己的域名", SettingsPage(state, lambda: dict(status, own_name=None), lambda _: None,
+                                                lambda: []).render(""))
 
 
 if __name__ == "__main__":

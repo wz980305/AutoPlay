@@ -248,15 +248,22 @@ def load_state(path):
 
 
 def save_state(path, state, lasting_before):
-    """Probes are rewritten cheaply; who is known and who used the box last also go to a flushed copy."""
+    """Who is known and who used the box last go to a flushed copy when they change; the probe file is rewritten
+    only when its content changed (every 2 s otherwise, on the SD card; reliability_audit #11)."""
     lasting = json.dumps([state.get(key) for key in LASTING], sort_keys=True)
     known = path.with_name(path.stem + '.known.json')
     if lasting != lasting_before or not known.exists():
         temporary = known.with_suffix('.tmp')
         temporary.write_text(json.dumps({key: state.get(key) for key in LASTING}) + '\n')
         durable_replace(temporary, known)
+    text = json.dumps(state) + '\n'
+    try:
+        if path.read_text() == text:
+            return
+    except OSError:
+        pass
     temporary = path.with_suffix('.tmp')
-    temporary.write_text(json.dumps(state) + '\n')
+    temporary.write_text(text)
     temporary.replace(path)
 
 
@@ -288,9 +295,6 @@ def main():
                 output = state.get('last_phone') or invite_phone(state, paired_cached(
                     state, now, lambda: asyncio.run(paired_phones())))
                 ok = bool(output)
-        elif command == 'unplugged':
-            output = invite_phone(state, paired_cached(state, now, lambda: asyncio.run(paired_phones())))
-            ok = bool(output)
         elif command == 'idle':
             state.pop('active', None)
             ok = True

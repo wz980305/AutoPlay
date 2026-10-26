@@ -1,0 +1,44 @@
+[
+ {
+  "group": "f50",
+  "file": "magisk.img",
+  "url": "https://github.com/Xio-Shark/f50-b16/releases/download/v1.0.0/magisk.img",
+  "sha256": "5a5fd9d2563a45ad830e58e2c27cfbb284f0a04fa52b5e59e5ff7886ff8dc43b"
+ },
+ {
+  "group": "f50",
+  "file": "Magisk_28103.apk",
+  "url": "https://github.com/Xio-Shark/f50-b16/releases/download/v1.0.0/Magisk_28103.apk",
+  "sha256": "fa7e64af14e57194e2463d959e809812e9bdd48f4cc996565706f658e78694de"
+ },
+ {
+  "group": "f50",
+  "file": "openwrt-k5.4.zip",
+  "url": "https://github.com/dikeckaan/mu300-linux/releases/download/v2026.10.15/mu300-magisk-v2026.10.15-openwrt-k5.4.zip",
+  "sha256": "5b033b8bb9034ff53445189ea6f9fa7d5494697a91073ec6a249b5b1f2e8327c"
+ },
+ {
+  "group": "f50",
+  "file": "openwrt-luci-rootfs.tar.gz",
+  "url": "https://github.com/dikeckaan/mu300-linux/releases/download/v2026.10.15/mu300-openwrt-luci-rootfs.tar.gz",
+  "sha256": "8ff2008f00b891c021b139e5f2cd225f54718957176a827c677c055560229eff"
+ },
+ {
+  "group": "adb-mac",
+  "file": "platform-tools-darwin.zip",
+  "url": "https://dl.google.com/android/repository/platform-tools-latest-darwin.zip",
+  "sha256": "ee39ad5967e95c2a07f04dbcbde96b1a0c916ba376096db5d2f498b7727a5d1d"
+ },
+ {
+  "group": "adb-windows",
+  "file": "platform-tools-windows.zip",
+  "url": "https://dl.google.com/android/repository/platform-tools_r37.0.1-win.zip",
+  "sha256": "45f4d63113e895ebde0c90f194099a4676b6ac653bd28d54314a9e022bbc1a99"
+ },
+ {
+  "group": "zadig",
+  "file": "zadig-2.9.exe",
+  "url": "https://github.com/pbatard/libwdi/releases/download/v1.5.1/zadig-2.9.exe",
+  "sha256": "4ecaa95df3da3621486a043aef8b3050b8bafe7c901402871e816229ef82039b"
+ }
+]

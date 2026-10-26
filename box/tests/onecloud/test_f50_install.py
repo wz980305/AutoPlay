@@ -176,7 +176,7 @@ class InstallerTests(unittest.TestCase):
             s = json.loads((Path(d) / 'progress' / 'f50-flash.json').read_text(encoding='utf-8'))
         self.assertEqual((s['state'], s['title'], s['expected_s'], s['safe_to_unplug']), ('failed', 'F50 备份并 Root', 480, False))
         self.assertIn('run "check" first', s['note'])
-        self.assertEqual(set(install.STAGES), {'check', 'flash', 'openwrt', 'dashplay', 'identity', 'tesla'})
+        self.assertEqual(set(install.STAGES), {'check', 'flash', 'openwrt', 'autoplay', 'identity', 'tesla'})
 
 if __name__ == '__main__':
     unittest.main()

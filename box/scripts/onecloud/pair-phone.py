@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Pair the iPhone with the OneCloud BlueZ adapter after a human checks the passkey.
 
-The passkey is printed and written to /run/dashplay/pair-passkey. Pairing proceeds only
-after someone compares it with the iPhone and writes "yes" to /run/dashplay/pair-confirm.
-Nothing is auto-accepted. Usage: pair-phone.py --root /opt/dashplay [--timeout 300] [--confirm-timeout 300]
+The passkey is printed and written to /run/autoplay/pair-passkey. Pairing proceeds only
+after someone compares it with the iPhone and writes "yes" to /run/autoplay/pair-confirm.
+Nothing is auto-accepted. Usage: pair-phone.py --root /opt/autoplay [--timeout 300] [--confirm-timeout 300]
 """
 import argparse
 import asyncio
@@ -12,7 +12,7 @@ from pathlib import Path
 import re
 import sys
 
-RUN = Path("/run/dashplay")
+RUN = Path("/run/autoplay")
 IAP2_UUID = "00000000-deca-fade-deca-deafdecacafe"
 
 

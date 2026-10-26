@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ZTE F50 (MU300 OpenWrt): three changes to the system's own boot scripts, measured on an F50 (2026-10-16).
 The OpenWrt package runs `mu300_boot.py apply` when it is installed or upgraded on an MU300 system; it changes a
-file only where the text is exactly the system's original, keeps that original in /opt/dashplay/state/mu300-originals/
+file only where the text is exactly the system's original, keeps that original in /opt/autoplay/state/mu300-originals/
 (kept across upgrades and removal) and leaves a file it does not recognise alone. `mu300_boot.py revert` puts the originals back.
 
 1. preinit waits 4 s for a key press to enter failsafe mode, on a device nobody types into: 1 s.
@@ -20,7 +20,7 @@ import sys
 PREINIT = Path("/lib/preinit/00_preinit.conf")
 HW = Path("/etc/init.d/mu300-hw")
 MARK = "DashPlay (2026-10-16)"
-ORIGINALS = Path("/opt/dashplay/state/mu300-originals")
+ORIGINALS = Path("/opt/autoplay/state/mu300-originals")
 
 MODULES = """\t/opt/mu300/bin/extra-modules >/tmp/mu300-extra-modules.log 2>&1
 \t/opt/mu300/bin/zram-start >/dev/null 2>&1
@@ -76,7 +76,7 @@ def apply(path, change, say=print, originals=ORIGINALS):
     keep = originals / path.name
     if not keep.exists():
         keep.write_text(text)
-    tmp = path.with_name(path.name + ".dashplay-new")
+    tmp = path.with_name(path.name + ".autoplay-new")
     tmp.write_text(new)
     tmp.chmod(path.stat().st_mode & 0o7777)
     tmp.replace(path)

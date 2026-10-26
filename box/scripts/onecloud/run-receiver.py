@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Run the DashPlay receiver (OneCloud, N1, OpenWrt); keep Wi-Fi credentials and tokens out of logs.
+"""Run the AutoPlay receiver (OpenWrt); keep Wi-Fi credentials and tokens out of logs.
 
-Reads the Wi-Fi handed to the iPhone from a JSON file (state/hotspot.json, or --hotspot: the car
-hotspot, or on OpenWrt the network read from ubus) and uses the system Python and BlueZ/D-Bus.
+Reads the Wi-Fi handed to the iPhone from the JSON file the supervisor wrote (--hotspot: the network read
+from ubus) and uses the system Python and the board's BlueZ/D-Bus.
 """
 import argparse
 import json
@@ -36,10 +36,10 @@ def durable_write(path, text):
         os.close(directory)
 
 
-def write_browser_access(root, token, settings_port=80, car_music=False, tesla=False, tesla_browser=False):
-    """Authorize viewers on the receiver LAN; admin login remains separate. car_music: the music goes over the car's
-    own Bluetooth (the page leaves the media card and keys to the car, prompts louder); tesla: also the Tesla
-    browser's ways (fullscreen through a listed video site)."""
+def write_browser_access(root, token, settings_port=18080, tesla=True):
+    """Authorize viewers on the receiver LAN; admin login remains separate. tesla (constant on this box, D8): the
+    music goes over the car's own Bluetooth (the page leaves the media card and keys to the car, prompts louder)
+    and the Tesla browser's ways (fullscreen through a listed video site) are on."""
     if not re.fullmatch(r"[0-9a-f]{32}", token):
         raise ValueError("Unexpected browser token format")
     dist = root / "playport/web/dist"
@@ -48,13 +48,22 @@ def write_browser_access(root, token, settings_port=80, car_music=False, tesla=F
     # settings page (settings_page.py; port 80, or another one on OpenWrt, where LuCI has 80).
     (dist / "receiver-access.js").unlink(missing_ok=True)
     path = dist / "receiver-access.json"
-    flags = {**({"carMusic": bool(car_music or tesla)} if car_music or tesla or tesla_browser else {}), **({"tesla": True} if tesla or tesla_browser else {})}
+    flags = {"carMusic": True, "tesla": True} if tesla else {}
     content = json.dumps({"token": token, "settingsPort": int(settings_port), **flags}) + "\n"
+    # Written only when it changes (the token is stable across starts): the file sits in the program directory on
+    # the SD card, where the receiver serves it from; a symlink into tmpfs is not known to be followed by the
+    # receiver's own-page check, so the write is avoided instead of moved (reliability_audit #11).
+    try:
+        if path.read_text() == content and path.stat().st_mode & 0o777 == 0o644:
+            return False
+    except OSError:
+        pass
     temporary = path.with_suffix('.json.tmp')
     temporary.write_text(content)
     temporary.chmod(0o644)
     temporary.replace(path)
     assert path.read_text() == content
+    return True
 
 
 # The iAP2 trace's Wi-Fi configuration field, a quoted string with " and \ escaped.
@@ -85,11 +94,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--bind", required=True)
-    parser.add_argument("--phone", default="", help="legacy single phone; migrated into the phone list")
     parser.add_argument("--interface", required=True)
     parser.add_argument("--channel", type=int, required=True, help="AP channel; may not be up yet")
-    parser.add_argument("--hotspot", type=Path, help="Wi-Fi handed to the iPhone (default state/hotspot.json); "
-                        "e.g. the car's own hotspot when the box joins it as a client")
+    parser.add_argument("--hotspot", type=Path, required=True, help="JSON {ssid, passphrase} of the Wi-Fi handed to the iPhone")
     parser.add_argument("--bind-wait", type=int, default=0,
                         help="seconds the server may wait for --bind to be configured (started before the network)")
     parser.add_argument("--security", default="wpa2", choices=["open", "wpa2", "wpa3-transition", "wpa3"],
@@ -97,28 +104,22 @@ def main():
     parser.add_argument("--web-host", default="",
                         help="address the viewer listens on, e.g. 0.0.0.0 when the head unit reaches the box "
                              "through the car hotspot while AirPlay stays on --bind")
-    parser.add_argument("--wired", action="store_true",
-                        help="offer wired CarPlay: an iPhone on the USB cable (iphone-usb-bridge.py)")
-    parser.add_argument("--wired-status", type=Path, help="where the receiver writes the wired CarPlay phase")
-    parser.add_argument("--java", default="/usr/bin/java", help="Java 21 (OpenWrt: the dashplay-jre package)")
-    parser.add_argument("--settings-port", type=int, default=80, help="port of the box settings page")
+    parser.add_argument("--java", default="/usr/bin/java", help="Java 21 (OpenWrt: the autoplay-jre package)")
+    parser.add_argument("--settings-port", type=int, default=18080, help="port of the box settings page")
     parser.add_argument("--viewer-port", type=int, default=0,
                         help="port of the viewer page (default: the saved config's, else 18443)")
-    # Any car whose own Bluetooth is paired with the iPhone (found in a Tesla, 2026-10-14); --tesla is all of it.
-    parser.add_argument("--car-music", action="store_true",
-                        help="music over the car's own Bluetooth: the page leaves the media card and keys to the car")
-    parser.add_argument("--car-voice", action="store_true",
-                        help="calls and Siri over the car's own Bluetooth: the receiver offers no microphone")
-    parser.add_argument("--tesla-browser", action="store_true", help="Tesla fullscreen without changing audio preferences")
-    parser.add_argument("--tesla", action="store_true",
-                        help="Tesla mode: --car-music, --car-voice and the Tesla browser's fullscreen")
+    # Tesla mode (constant on this box; the flag stays so that a lab receiver can run without it, D8): music, calls
+    # and Siri over the car's own Bluetooth (the receiver offers no microphone) and the Tesla browser's fullscreen.
+    parser.add_argument("--tesla", action="store_true", help="Tesla mode: car Bluetooth audio and the Tesla browser's fullscreen")
     parser.add_argument("--idle-release", type=int, default=300,
                         help="end wireless CarPlay after this many seconds without a viewer page (0: never)")
     parser.add_argument("--no-wireless", action="store_true",
-                        help="no Bluetooth/Wi-Fi handoff (car_hotspot mode: the iPhone uses the cable only)")
+                        help="no Bluetooth/Wi-Fi handoff yet (Bluetooth still coming up; the supervisor relaunches)")
+    parser.add_argument("--prime-cds", action="store_true",
+                        help="package postinst: start the JVM once on the loopback and stop it cleanly, so the AppCDS "
+                             "archive exists before the first drive (it is otherwise written only at a clean exit)")
     args = parser.parse_args()
     root = args.root.resolve()
-    wired = args.wired
     os.umask(0o077)
     state = root / "state" / "receiver"
     state.mkdir(parents=True, exist_ok=True)
@@ -129,18 +130,17 @@ def main():
         # Missing, or cut to 0 bytes by a power loss while it was being saved (2026-10-11: the
         # receiver then failed every start); fall back to the default display.
         saved = {}
-    hotspot = json.loads((args.hotspot or root / "state/hotspot.json").read_text())
+    hotspot = json.loads(args.hotspot.read_text())
     ssid = hotspot["ssid"]
     password = "" if args.security == "open" else hotspot["passphrase"]
     viewer = args.viewer_port if 1024 <= args.viewer_port <= 65535 else 0
     config = {
-        "deviceName": "DashPlay", "model": "DashPlay", "manufacturer": "DashPlay",
+        "deviceName": "AutoPlay", "model": "AutoPlay", "manufacturer": "AutoPlay",
         "airPlayPort": 7000, "httpPort": viewer or saved.get("httpPort", 18443),
         "display": saved.get("display", {"width": 1280, "height": 720, "fps": 30, "uiScale": 100, "hevc": False}),
-        # While an iPhone is on the cable the receiver pauses wireless invitations (WiredBootstrap).
         "wireless": not args.no_wireless, "wifiSsid": ssid, "wifiPassphrase": password,
         "wifiChannel": args.channel, "wifiSecurity": args.security,
-        "bluetoothDeviceAddress": args.phone or None, "mdns": "jmdns",
+        "bluetoothDeviceAddress": None, "mdns": "jmdns",
     }
     durable_write(config_path, json.dumps(config, indent=2) + "\n")
     assert json.loads(config_path.read_text()) == config
@@ -152,16 +152,14 @@ def main():
     if not re.fullmatch(r"[0-9a-f]{32}", token):   # missing, or emptied by a power cut
         token = secrets.token_hex(16)
         durable_write(token_path, token + "\n")
-    write_browser_access(root, token, args.settings_port, args.car_music, args.tesla, args.tesla_browser)
+    write_browser_access(root, token, args.settings_port, args.tesla)
     env = dict(os.environ, BT_BRIDGE_PYTHON="/usr/bin/python3", BT_BRIDGE_READY_WAIT="15", BT_BRIDGE_CONNECT_TIMEOUT="8",
                BT_BRIDGE_RECOVERY_STATE=str(state / "bluetooth-recovery.stamp"),
                CARPLAY_PRESENCE_HELPER=str(root / "phone-presence.py"),
-               CARPLAY_PRESENCE_INTERFACE=args.interface, CARPLAY_DEFAULT_PHONE=args.phone,
+               CARPLAY_PRESENCE_INTERFACE=args.interface, CARPLAY_DEFAULT_PHONE="",
                CARPLAY_PRESENCE_STATE=str(state / "phone-presence.json"))
     if args.web_host:
         env["CARPLAY_WEB_HOST"] = args.web_host
-    if args.wired_status:
-        env["CARPLAY_WIRED_STATUS"] = str(args.wired_status)
     if args.bind_wait:
         env["CARPLAY_BIND_WAIT_MS"] = str(args.bind_wait * 1000)
     env["CARPLAY_IDLE_RELEASE_SECONDS"] = str(max(0, args.idle_release))
@@ -178,8 +176,14 @@ def main():
     if not stamp.exists() or stamp.read_text() != fingerprint:
         (state / "app-cds.jsa").unlink(missing_ok=True)
         stamp.write_text(fingerprint)
+    crash = state / "crash"
+    crash.mkdir(exist_ok=True)
     options = [
         "-Xms64m", heap_limit(Path("/proc/meminfo").read_text()),
+        # An OutOfMemoryError in the accept or supervisor thread left a JVM that never invited the iPhone again;
+        # exit instead, the supervisor restarts the receiver (reliability_audit #5). The crash report goes to the
+        # SD card, where diagnostics can find it, not the program directory.
+        "-XX:+ExitOnOutOfMemoryError", "-XX:ErrorFile=" + str(crash / "hs_err_%p.log"),
         # iAP2 bootstrap steps (message ids only, no credentials) for diagnosing a stalled Wi-Fi handoff.
         "-Dorg.slf4j.simpleLogger.log.wireless=debug",
         # Milliseconds since JVM start on every line, for boot-time profiling.
@@ -192,12 +196,23 @@ def main():
         "-XX:+AutoCreateSharedArchive", "-XX:SharedArchiveFile=" + str(state / "app-cds.jsa"), "-cp",
         # launcher/onecloud-launcher.jar (source in launcher/) warms the handshake crypto in parallel.
         str(root / "launcher/onecloud-launcher.jar") + ":" + str(root / "playport/server/build/install/server/lib/*"),
-        "onecloud.Launcher", "--bind", args.bind, *(["--car-voice"] if args.car_voice or args.tesla else []),
+        "onecloud.Launcher", "--bind", args.bind, *(["--car-voice"] if args.tesla else []),
         "--identity-dir", str(root / "identity"), "--state-dir", str(state),
         "--bt-bridge", str(root / "linux-bt-bridge/bt-bridge"), "--token", token,
-    ] + (["--usb-bridge", str(root / "iphone-usb-bridge.py")] if wired else [])
+    ]
     argfile = state / "java.args"
     argfile.write_text("\n".join(json.dumps(value) for value in options) + "\n")
+
+    def expendable():
+        # Under memory pressure the OOM killer should take the JVM first, never bluetoothd (board_zte_f50.py -500)
+        # or the supervisor: +500 for the JVM.
+        try:
+            Path("/proc/self/oom_score_adj").write_text("500\n")
+        except OSError:
+            pass
+
+    if args.prime_cds:
+        return prime_cds(args.java, argfile, root, state, env)
     # The supervisor signals the whole process group; outlive the JVM so it can finish writing the
     # AppCDS archive on exit (exiting first let systemd SIGKILL it mid-dump). A Python function
     # handler, unlike SIG_IGN, is reset to default in the exec'd JVM, which keeps its own handling.
@@ -205,7 +220,7 @@ def main():
     with subprocess.Popen(
         [args.java, "@" + str(argfile)], cwd=root / "playport", env=env,
         stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, errors="replace",
+        text=True, errors="replace", preexec_fn=expendable,
     ) as process:
         (state / "java.pid").write_text(str(process.pid) + "\n")
         for line in process.stdout:
@@ -217,6 +232,42 @@ def main():
             if milestone:
                 print(f"boot {time.monotonic():.2f}s {milestone}", flush=True)
         raise SystemExit(process.wait())
+
+
+def prime_cds(java, argfile, root, state, env, listen_timeout=60, exit_timeout=45):
+    """Run the JVM once until it listens, then stop it cleanly so that -XX:+AutoCreateSharedArchive writes the
+    AppCDS archive (reliability_audit #19: a box that is only ever power-cut never exits cleanly, and every
+    update drops the archive). The archive is skipped when it is already current for this classpath."""
+    if (state / "app-cds.jsa").exists():
+        print("AppCDS archive present", flush=True)
+        return 0
+    print("priming the AppCDS archive", flush=True)
+    with subprocess.Popen([java, "@" + str(argfile)], cwd=root / "playport", env=env, stdin=subprocess.DEVNULL,
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace") as process:
+        deadline = time.monotonic() + listen_timeout
+        listening = False
+        import selectors
+        selector = selectors.DefaultSelector()
+        selector.register(process.stdout, selectors.EVENT_READ)
+        while time.monotonic() < deadline and process.poll() is None:
+            if selector.select(timeout=1):
+                line = process.stdout.readline()
+                if not line:
+                    break
+                if "RTSP listening" in line or "listening" in line.lower():
+                    listening = True
+                    break
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=exit_timeout)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+        ok = (state / "app-cds.jsa").exists()
+        print(f"AppCDS archive {'written' if ok else 'not written'} (receiver {'listened' if listening else 'did not listen'})",
+              flush=True)
+        return 0 if ok else 1
 
 
 if __name__ == "__main__":

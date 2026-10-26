@@ -11,12 +11,12 @@ import tesla_openwrt as tesla
 SECTIONS = {'dns': {'.type': 'dnsmasq', 'server': ['192.0.2.53'], 'address': ['/old.example/192.0.2.1']},
             'lan': {'.type': 'dhcp', 'interface': 'lan', 'dhcp_option': ['3,192.0.2.1', '42,192.0.2.5']}}
 NETWORK = {'network': 'lan', 'device': 'br-lan', 'address': ipaddress.ip_interface('100.96.0.1/24'), 'mode': 'ap'}
-CONFIG = {'name': 'example.duckdns.org', 'settings_port': '18080', 'tesla_mode': '1'}
+NAME, PORT = 'example.duckdns.org', 18080
 
 
 class OpenWrtOfflineTests(unittest.TestCase):
     def test_dns_and_dhcp_plan(self):
-        alias, fields = tesla.offline_fields(SECTIONS, 'lan', '100.96.0.1/24', CONFIG['name'])
+        alias, fields = tesla.offline_fields(SECTIONS, 'lan', '100.96.0.1/24', NAME)
         self.assertEqual(alias, '100.96.0.2')
         # The box is the router: Teslas left a network without a default route ~30 s after joining (2026-10-16).
         self.assertEqual(fields['lan.dhcp_option'], ['42,192.0.2.5', '3,100.96.0.1', '6,100.96.0.1'])
@@ -39,7 +39,8 @@ class OpenWrtOfflineTests(unittest.TestCase):
             run = Mock(return_value=Mock(stdout=json.dumps({'values': SECTIONS}), returncode=0))
             controller = tesla.OfflineChecks(directory, run)
             status = {}
-            controller.update(CONFIG, NETWORK, status, online=False)
+            controller.start(NETWORK, NAME, PORT, status)
+            controller.refresh(status, online=False)
             self.assertTrue(controller.active)
             self.assertTrue(status['tesla_offline'])
             self.assertEqual(status['tesla_upstream'], 'offline')
@@ -48,23 +49,23 @@ class OpenWrtOfflineTests(unittest.TestCase):
             self.assertNotIn('dns.server', saved['before'])
             self.assertEqual(controller.path.stat().st_mode & 0o777, 0o600)
             built = len(run.call_args_list)
-            controller.update(CONFIG, NETWORK, status, online=True)
-            # Upstream changes only update the status: the LAN, DNS and DHCP stay as they are.
+            controller.refresh(status, online=True)
+            controller.start(NETWORK, NAME, PORT, status)   # a second start changes nothing
+            # Upstream changes only update the status: the LAN, DNS and DHCP stay as they are (D4: no
+            # answer_tesla_checks choice any more; the checks are answered for as long as the service runs).
             self.assertTrue(controller.active)
             self.assertTrue(status['tesla_offline'])
             self.assertEqual(status['tesla_upstream'], 'online')
             self.assertTrue(controller.path.exists())
             self.assertEqual([c.args[0] for c in run.call_args_list[built:]
                               if c.args[0][0] in ('uci', '/etc/init.d/dnsmasq', 'ip', 'nft')], [])
-            # Real network only: no LAN baseline at all.
-            controller.update(dict(CONFIG, answer_tesla_checks='0'), NETWORK, status)
+            controller.restore()   # the service stops
             self.assertFalse(controller.active)
-            self.assertFalse(status['tesla_offline'])
             self.assertFalse(controller.path.exists())
             commands = [c.args[0] for c in run.call_args_list]
             self.assertIn(['uci', 'add_list', 'dhcp.dns.address=/old.example/192.0.2.1'], commands)
             self.assertIn(['nft', 'delete', 'table', 'ip', tesla.TABLE], commands)
-            controller.enable(NETWORK, CONFIG['name'], 18080)
+            controller.enable(NETWORK, NAME, 18080)
             tesla.OfflineChecks(directory, run).restore()
             self.assertFalse(controller.path.exists(), 'recovery after a supervisor crash')
 
@@ -73,10 +74,11 @@ class OpenWrtOfflineTests(unittest.TestCase):
             run = Mock(return_value=Mock(stdout=json.dumps({'values': SECTIONS}), returncode=0))
             controller = tesla.OfflineChecks(root, run)
             status = {}
-            controller.update(CONFIG, NETWORK, status, online=False)
+            controller.start(NETWORK, NAME, PORT, status)
+            controller.refresh(status, online=False)
             self.assertNotIn('tesla_network_change', status)
             self.assertIn('局域网 CarPlay', status['tesla_internet'])
-            controller.update(CONFIG, NETWORK, status, online=True)
+            controller.refresh(status, online=True)
             self.assertEqual(status['tesla_upstream'], 'online')
             self.assertIn('上游在线', status['tesla_internet'])
 
@@ -86,7 +88,7 @@ class OpenWrtOfflineTests(unittest.TestCase):
             controller = tesla.OfflineChecks(root, run)
             with patch.object(controller, 'enable', side_effect=OSError('synthetic failure')):
                 status = {}
-                controller.update(CONFIG, NETWORK, status)   # must not raise: CarPlay keeps running
+                controller.start(NETWORK, NAME, PORT, status)   # must not raise: CarPlay keeps running
             self.assertFalse(controller.active)
             self.assertIn('tesla_error', status)
 
@@ -100,7 +102,7 @@ class OpenWrtOfflineTests(unittest.TestCase):
                     raise OSError('synthetic failure')
                 return original(argv, **kw)
             with patch.object(controller, 'command', side_effect=command), self.assertRaises(OSError):
-                controller.enable(NETWORK, CONFIG['name'], 18080)
+                controller.enable(NETWORK, NAME, 18080)
             self.assertFalse(controller.path.exists())
             self.assertFalse(controller.active)
 
@@ -131,22 +133,6 @@ class OpenWrtOfflineTests(unittest.TestCase):
             return conn
         self.assertTrue(tesla.wan_available(run, connect))
 
-    def test_auto_and_always_build_the_lan_even_with_upstream(self):
-        with tempfile.TemporaryDirectory() as root:
-            controller = tesla.OfflineChecks(Path(root), Mock())
-            with patch.object(controller, 'enable',
-                              side_effect=lambda *a, **k: setattr(controller, 'active', True)) as enable:
-                for choice in ('auto', '1'):
-                    controller.active = False   # a fresh controller for each choice
-                    status = {}
-                    controller.update(dict(CONFIG, answer_tesla_checks=choice), NETWORK, status, online=True)
-                    self.assertTrue(status['tesla_offline'])
-                    self.assertTrue(enable.called)
-                    enable.reset_mock()
-                controller.update(dict(CONFIG, answer_tesla_checks='0'), NETWORK, {}, online=True)
-                controller.update(dict(CONFIG, tesla_mode='0'), NETWORK, {}, online=False)
-                controller.update(CONFIG, dict(NETWORK, mode='sta'), {}, online=False)
-                enable.assert_not_called()
 
     def test_dns_logging_is_bounded_and_restores_user_options(self):
         with tempfile.TemporaryDirectory() as root:
@@ -156,12 +142,13 @@ class OpenWrtOfflineTests(unittest.TestCase):
             platform.start.return_value.poll.return_value = None
             controller = tesla.OfflineChecks(root, run, platform)
             status = {}
-            controller.update(CONFIG, NETWORK, status, online=True)
+            controller.start(NETWORK, NAME, PORT, status)
+            controller.refresh(status, online=True)
             self.assertEqual(status['tesla_dns_log'], 'recording')
             name, argv = platform.start.call_args.args
             self.assertEqual(name, 'tesla-dns-log')
             self.assertEqual(argv, ['logread','-f','-e','dnsmasq','-F',str(Path(root)/'diag/tesla-dns.log'),'-S','1024'])
-            controller.update(CONFIG, NETWORK, status, online=False)
+            controller.refresh(status, online=False)
             self.assertEqual(platform.start.call_count, 1)
             controller.restore()
             self.assertEqual(platform.stop_child.call_args.args, ('tesla-dns-log',))
@@ -175,16 +162,16 @@ class OpenWrtOfflineTests(unittest.TestCase):
             platform = Mock(); platform.start.side_effect = FileNotFoundError('synthetic missing logger')
             controller = tesla.OfflineChecks(root, run, platform)
             status = {}
-            controller.update(CONFIG, NETWORK, status, online=False)
+            controller.start(NETWORK, NAME, PORT, status)
             self.assertTrue(controller.active)
             self.assertEqual(status['tesla_dns_log'], 'error: FileNotFoundError')
             platform.start.side_effect = None
             platform.start.return_value.poll.return_value = None
-            controller.update(CONFIG, NETWORK, status, online=False)
+            controller.refresh(status, online=False)
             self.assertEqual(status['tesla_dns_log'], 'recording')
             calls = platform.start.call_count
             platform.start.return_value.poll.return_value = 1
-            controller.update(CONFIG, NETWORK, status, online=False)
+            controller.refresh(status, online=False)
             self.assertEqual(platform.start.call_count, calls + 1)
             self.assertTrue(controller.active)
             controller.restore()

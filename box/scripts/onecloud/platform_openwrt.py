@@ -1,21 +1,45 @@
-"""OpenWrt adapter: the router owns the network (netifd, uci); DashPlay only reads it.
+"""OpenWrt adapter: the router owns the network (netifd, uci); AutoPlay only reads it.
 
-The person sets up Wi-Fi in LuCI as usual. DashPlay hands the iPhone one of the router's Wi-Fi
-networks over Bluetooth (an access point by default, or the network the router joined as a client, or
-another router's Wi-Fi bridged into its LAN, as entered) and serves the viewer on that network's address.
-Nothing here creates hotspots or joins networks.
+The person sets up Wi-Fi in LuCI as usual. AutoPlay hands the iPhone one of the router's own access points
+over Bluetooth (5 GHz first) and serves the viewer on that network's address. Nothing here creates hotspots
+or joins networks.
 
 No operations run at import time; the parsers take command output so they are testable anywhere.
 """
 import ipaddress
 import json
+import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 
-from platform_debian import DebianPlatform, parse_stations
+RUN = Path("/var/run/autoplay")
+BLUETOOTH_NAME = "AutoPlay"   # what iPhones list under Bluetooth (bluetoothctl system-alias)
 
-RUN = Path("/var/run/dashplay")
+
+def boot_id():
+    return Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+
+
+def _number(pattern, text, cast=float):
+    match = re.search(pattern, text, re.M)
+    return cast(match.group(1)) if match else None
+
+
+def parse_stations(text):
+    """`iw dev X station dump`: per peer signal, bit rates and cumulative retries/failures."""
+    peers = []
+    for block in re.split(r"^Station ", text, flags=re.M)[1:]:
+        peers.append({"peer": block.split()[0][-5:],
+                      "signal": _number(r"^\s*signal:\s*(-?\d+)", block, int),
+                      "rx_mbps": _number(r"rx bitrate:\s*([\d.]+)", block),
+                      "tx_mbps": _number(r"tx bitrate:\s*([\d.]+)", block),
+                      "tx_packets": _number(r"tx packets:\s*(\d+)", block, int),
+                      "tx_retries": _number(r"tx retries:\s*(\d+)", block, int),
+                      "tx_failed": _number(r"tx failed:\s*(\d+)", block, int),
+                      "inactive_ms": _number(r"inactive time:\s*(\d+)", block, int)})
+    return peers
 
 
 def _ubus(path, method="status"):
@@ -70,16 +94,13 @@ def wifi_networks(status):
     return sorted(found, key=lambda n: (not n["up"], n["mode"] != "ap", rank.get(n["band"], 3)))
 
 
-def pick_network(networks, wanted="auto", live=True):
-    """The network to hand the iPhone: the named uci section, or the first usable access point (5 GHz
-    preferred), else a client network. Returns (network, reason when none fits)."""
-    candidates = [n for n in networks if n["mode"] in ("ap", "sta")]
-    if wanted and wanted != "auto":
-        candidates = [n for n in candidates if n["section"] == wanted]
-        if not candidates:   # ubus leaves a disabled wifi-iface out altogether
-            return None, f"Wi-Fi section {wanted} not found or switched off"
+def pick_network(networks, live=True):
+    """The network to hand the iPhone: the first usable access point (5 GHz preferred). The F50 cannot be a
+    client and an access point at once, so client networks are never candidates (tesla_only_box_delta.md D10).
+    Returns (network, reason when none fits)."""
+    candidates = [n for n in networks if n["mode"] == "ap"]
     if not candidates:
-        return None, "no Wi-Fi network is switched on (access point or client)"
+        return None, "no Wi-Fi network is switched on (access point)"
     usable = [n for n in candidates if handoff_security(n["encryption"]) and n["ssid"]]
     if not usable:
         return None, "no Wi-Fi network with a password type the iPhone accepts (open, WPA2 or WPA3 personal)"
@@ -87,32 +108,6 @@ def pick_network(networks, wanted="auto", live=True):
     if not up:
         return None, f"Wi-Fi {usable[0]['ssid']} is not up yet"
     return up[0], ""
-
-
-EXTERNAL_ENCRYPTION = {"open": "none", "wpa2": "psk2", "wpa3": "sae"}
-
-
-def external_network(config):
-    """uci dashplay.main.external_* -> (network, reason when unusable): the Wi-Fi of another router (a travel
-    router given the uplink over USB or a cable and bridged into this router's LAN), handed to the iPhone as
-    entered. Its radio is not ours, so the channel comes from the configuration: set a fixed one there."""
-    ssid, key = config.get("external_ssid", ""), config.get("external_key", "")
-    security = config.get("external_security", "wpa2")
-    channel = config.get("external_channel", "")
-    lan = config.get("external_network", "lan")
-    if not 1 <= len(ssid.encode()) <= 32:
-        return None, "the other router's Wi-Fi name is missing or longer than 32 bytes"
-    if security not in EXTERNAL_ENCRYPTION:
-        return None, "the other router's password type must be open, wpa2 or wpa3"
-    if security != "open" and not (8 <= len(key) <= 63 or re.fullmatch(r"[0-9A-Fa-f]{64}", key)):
-        return None, "the other router's Wi-Fi password must be 8 to 63 characters"
-    if not channel.isdigit() or not 1 <= int(channel) <= 196:
-        return None, "the other router's Wi-Fi channel is missing: set a fixed channel there and enter it"
-    if not re.fullmatch(r"[A-Za-z0-9_]+", lan):
-        return None, f"network {lan} for the other router's Wi-Fi is not an OpenWrt interface name"
-    return {"section": "external", "ifname": "", "radio": "", "up": True, "band": "5g" if int(channel) > 14 else "2g",
-            "mode": "external", "ssid": ssid, "key": "" if security == "open" else key,
-            "encryption": EXTERNAL_ENCRYPTION[security], "network": lan, "channel": int(channel)}, ""
 
 
 def parse_channel(iw_info):
@@ -130,46 +125,6 @@ def interface_address(status):
         f"{first['address']}/{first.get('mask', 32)}")
 
 
-def zone_input(uci_firewall, network):
-    """`uci show firewall` -> the input policy of the zone that holds `network` (None when no zone does)."""
-    zones, kinds = {}, {}
-    for line in (uci_firewall or "").splitlines():
-        match = re.match(r"^firewall\.([^.=]+)=(\w+)$", line)
-        if match:
-            kinds[match.group(1)] = match.group(2)
-        match = re.match(r"^firewall\.([^.=]+)\.(\w+)='?(.*?)'?$", line)
-        if match:
-            zones.setdefault(match.group(1), {})[match.group(2)] = match.group(3)
-    for name, zone in zones.items():
-        if kinds.get(name) == "zone" and network in re.split(r"'?\s+'?", zone.get("network", "")):
-            return zone.get("input", "").upper() or None
-    return None
-
-
-def public_ipv6(addresses, routes, lan_device):
-    """`ip -6 -o addr show scope global` and `ip -6 -o route show default` -> the router's own public IPv6
-    address, or None. One on the LAN device first (a delegated prefix), else one on the device of an IPv6
-    default route (a mobile modem: the F50's sipa_eth0 holds 2408:…, its LAN only a unique local prefix).
-    The router answers its own address itself, so a head unit on its Wi-Fi opening the page there stays
-    on the Wi-Fi, while a car browser that refuses private addresses sees a public one (F50, 2026-10-13).
-    Temporary, deprecated or tentative addresses change or may not answer yet: skipped."""
-    found = {}
-    for line in (addresses or "").splitlines():
-        match = re.match(r"^\d+:\s+([^\s@]+)\S*\s+inet6\s+([0-9a-fA-F:]+)/\d+\s+(.*)$", line)
-        if not match or re.search(r"\b(temporary|deprecated|tentative|dadfailed)\b", match.group(3)):
-            continue
-        try:
-            address = ipaddress.IPv6Address(match.group(2))
-        except ValueError:
-            continue
-        if address.is_global:   # not unique local (fc00::/7), link-local or documentation
-            found.setdefault(match.group(1), []).append(str(address))
-    for device in [lan_device] + re.findall(r"\bdev (\S+)", routes or ""):
-        if found.get(device):
-            return found[device][0]
-    return None
-
-
 def hottest(zones=Path("/sys/class/thermal")):
     """The hottest readable thermal zone in degrees C, for the drive log (the F50 has some 25, a few unreadable)."""
     temps = []
@@ -181,21 +136,92 @@ def hottest(zones=Path("/sys/class/thermal")):
     return round(max(temps) / 1000, 1) if temps else None
 
 
-class OpenWrtPlatform(DebianPlatform):
-    """Process handling, Bluetooth and addresses as on Debian; Wi-Fi is read from OpenWrt."""
+class OpenWrtPlatform:
+    """Child processes, the Bluetooth adapter and the Wi-Fi read from OpenWrt. Standalone: the process and
+    Bluetooth handling used to be inherited from DebianPlatform (code_inventory_trimming.md 2.1)."""
 
     def __init__(self, interface="", run=RUN):
-        super().__init__(interface, run=run)
+        self.interface, self.run = interface, Path(run)
+        self.ap_interface = interface   # the access point handed to the iPhone, once known
+        self.children = []
+        self.bluetooth_state = None     # state/ directory, set by the supervisor
 
-    def handoff(self, wanted="auto", live=True, external=None):
+    boot_id = staticmethod(boot_id)
+
+    def start(self, name, argv):
+        """Start a child in its own session with its stdout/stderr in RUN/<name>.log."""
+        with (self.run / (name + ".log")).open("w") as log:
+            child = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log,
+                                     stderr=subprocess.STDOUT, start_new_session=True)
+        self.children.append((name, child))
+        return child
+
+    def child(self, name):
+        return next((child for child_name, child in self.children if child_name == name), None)
+
+    def stop_child(self, name, timeout=8):
+        for entry in list(self.children):
+            if entry[0] == name:
+                self.children.remove(entry)
+                if entry[1].poll() is None:
+                    os.killpg(entry[1].pid, signal.SIGTERM)
+                    try:
+                        entry[1].wait(timeout=timeout)
+                    except subprocess.TimeoutExpired:
+                        os.killpg(entry[1].pid, signal.SIGKILL)
+                        entry[1].wait()
+
+    def forget_child(self, name):
+        """Drop an exited child from the list (its restart is the supervisor's business)."""
+        self.children = [entry for entry in self.children if entry[0] != name]
+
+    def stop_all(self):
+        for name, child in reversed(self.children):
+            if child.poll() is None:
+                os.killpg(child.pid, signal.SIGTERM)
+                try:
+                    # The JVM writes its AppCDS archive while exiting; that took longer than 8 s here. The F50's
+                    # Bluetooth helper stops its own children within 6 s (board_zte_f50.py).
+                    child.wait(timeout={"receiver": 40, "bluetooth": 15}.get(name, 8))
+                except subprocess.TimeoutExpired:
+                    os.killpg(child.pid, signal.SIGKILL)
+                    child.wait()
+        self.children = []
+
+    @staticmethod
+    def bluetooth_bus_ready():
+        """The board helper's own D-Bus socket (DBUS_SYSTEM_BUS_ADDRESS) appears a few seconds into the boot;
+        bluetoothctl segfaults until it is there (2026-10-16), so callers wait for the socket instead of running it."""
+        bus = os.environ.get("DBUS_SYSTEM_BUS_ADDRESS", "")
+        if bus.startswith("unix:path="):
+            return os.path.exists(bus[len("unix:path="):].split(",", 1)[0])
+        return True
+
+    def power_bluetooth(self):
+        """Power the adapter on and name it; False while bluetoothd is not ready. The address is the board
+        helper's business (mu300-bt-init at btattach), so there is no btmgmt identity step here."""
+        if not self.bluetooth_bus_ready():
+            return False
+        if subprocess.run(["bluetoothctl", "power", "on"], capture_output=True, timeout=10).returncode != 0:
+            return False
+        # A phone link left over from the previous run (service restart, network rebuild) fails every
+        # invitation with br-connection-already-connected until the bridge's rate-limited recovery
+        # power-cycles the adapter (2026-10-11: 69 s). Nothing uses Bluetooth yet, so clear it now.
+        connected = subprocess.run(["bluetoothctl", "devices", "Connected"], capture_output=True, text=True, timeout=10)
+        if connected.stdout.lstrip().startswith("Device "):
+            subprocess.run(["bluetoothctl", "power", "off"], capture_output=True, timeout=10)
+            if subprocess.run(["bluetoothctl", "power", "on"], capture_output=True, timeout=10).returncode != 0:
+                return False
+        # BlueZ names the adapter after the host, which is what iPhones list under Bluetooth. Set on every
+        # start: a reset or a fresh image clears BlueZ's stored alias.
+        subprocess.run(["bluetoothctl", "system-alias", BLUETOOTH_NAME], capture_output=True, timeout=10)
+        return True
+
+    def handoff(self, live=True):
         """(network dict with channel, address and device, reason when not ready).
         live=False: what the configuration says before the radio is up (the access point's configured
-        channel, the LAN address), so that the receiver can start while the Wi-Fi comes up.
-        wanted "external": another router's Wi-Fi from the dashplay options in `external` (external_network)."""
-        if wanted == "external":
-            network, reason = external_network(external or {})
-        else:
-            network, reason = pick_network(wifi_networks(_ubus("network.wireless")), wanted, live)
+        channel, the LAN address), so that the receiver can start while the Wi-Fi comes up."""
+        network, reason = pick_network(wifi_networks(_ubus("network.wireless")), live)
         if not network:
             return None, reason
         device, address = interface_address(_ubus(f"network.interface.{network['network']}"))
@@ -213,17 +239,6 @@ class OpenWrtPlatform(DebianPlatform):
     def interface_network(name):
         """The IPv4 address of netifd interface `name` (e.g. the LAN), or None."""
         return interface_address(_ubus(f"network.interface.{name}"))[1]
-
-    @staticmethod
-    def zone_input(network):
-        out = subprocess.run(["uci", "-q", "show", "firewall"], capture_output=True, text=True, timeout=5).stdout
-        return zone_input(out, network)
-
-    @staticmethod
-    def public_ipv6(lan_device):
-        def ip(*args):
-            return subprocess.run(["ip", "-6", "-o", *args], capture_output=True, text=True, timeout=5).stdout
-        return public_ipv6(ip("addr", "show", "scope", "global"), ip("route", "show", "default"), lan_device)
 
     def diagnostics(self):
         data = {}

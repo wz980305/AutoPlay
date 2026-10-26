@@ -1,0 +1,172 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: zh_Hans\n"
+
+msgid "AutoPlay"
+msgstr "AutoPlay"
+
+msgid "CarPlay in the Tesla's web browser. The box's Wi-Fi (Network → Wireless) is handed to the iPhone over Bluetooth; the Tesla joins the same Wi-Fi and opens the CarPlay page."
+msgstr "在特斯拉的浏览器里用 CarPlay。盒子的 Wi-Fi（「网络 → 无线」）经蓝牙交给 iPhone；特斯拉连同一个 Wi-Fi 打开 CarPlay 画面。"
+
+msgid "Overview"
+msgstr "概览"
+
+msgid "Status"
+msgstr "状态"
+
+msgid "Running"
+msgstr "运行中"
+
+msgid "Not running"
+msgstr "未运行"
+
+msgid "Network warning"
+msgstr "网络提示"
+
+msgid "Open"
+msgstr "打开"
+
+msgid "Add iPhone"
+msgstr "添加 iPhone"
+
+msgid "CarPlay screen"
+msgstr "CarPlay 画面"
+
+msgid "Network"
+msgstr "网络"
+
+msgid "iPhone"
+msgstr "iPhone"
+
+msgid "Own address"
+msgstr "自己的网址"
+
+msgid "Program update"
+msgstr "程序更新"
+
+msgid "Enable"
+msgstr "启用"
+
+msgid "Addresses"
+msgstr "地址"
+
+msgid "The box's LAN is %s (set at install: a Tesla's browser opens no private address). The first access point under Network → Wireless is handed to the iPhone, 5 GHz first; the Tesla sees 5 GHz channels 36–48 and 149–165 only (CN: 149). In the Tesla's Wi-Fi settings turn on \"Remain connected in Drive\", else the picture stops out of Park. Settings page: %s"
+msgstr "盒子的局域网是 %s（安装时设定：特斯拉的浏览器打不开私有地址）。「网络 → 无线」里的第一个热点交给 iPhone，优先 5 GHz；特斯拉只认 5 GHz 的 36–48 和 149–165 信道（国内用 149）。在特斯拉的 Wi-Fi 设置里打开「行驶中保持连接」，否则出 P 挡画面会停。设置页：%s"
+
+msgid "CarPlay screen port"
+msgstr "CarPlay 画面端口"
+
+msgid "The HTTPS port of the CarPlay page. Empty is 18443, or the port an older install saved; a change takes about a minute and interrupts CarPlay briefly. It must differ from 18080, 80, 443 and 7000."
+msgstr "CarPlay 画面的 HTTPS 端口。留空为 18443，或旧版保存过的端口；修改约 1 分钟生效，CarPlay 会短暂中断。不能与 18080、80、443、7000 相同。"
+
+msgid "Diagnostics"
+msgstr "诊断"
+
+msgid "Download diagnostics from the AutoPlay settings page. Saving changes here restarts the service and interrupts CarPlay briefly."
+msgstr "诊断记录在 AutoPlay 设置页下载。在这里保存修改会重启服务，CarPlay 会短暂中断。"
+
+msgid "Adding an iPhone"
+msgstr "添加 iPhone"
+
+msgid "Open the settings page on the Tesla or another device (not on the iPhone being added: it must stay in Settings → Bluetooth) and tap \"Add iPhone\". Pair the iPhone with the Tesla over Bluetooth as well and pick it as the media source: music, calls and Siri go over the car's own Bluetooth; the CarPlay page shows the screen and plays navigation prompts."
+msgstr "在特斯拉或另一台设备上打开设置页（不要在要添加的那部 iPhone 上：它要停在「设置 → 蓝牙」），点「添加 iPhone」。iPhone 也要用蓝牙连上特斯拉并选为媒体来源：音乐、通话和 Siri 走车机蓝牙；CarPlay 画面显示屏幕并播放导航提示。"
+
+msgid "Release the iPhone after (seconds)"
+msgstr "无人观看多久后释放 iPhone（秒）"
+
+msgid "Without any page showing the picture for this long, wireless CarPlay ends and the iPhone stops sending its screen; opening the page invites it again (about 7 s). 0: never end it."
+msgstr "没有任何网页在看画面超过这个时间，就结束无线 CarPlay，iPhone 不再持续发送画面、不会发热；之后打开网页会重新邀请（约 7 秒出画面）。填 0 表示永不结束。"
+
+msgid "Own name (DuckDNS sub-domain)"
+msgstr "自己的域名（DuckDNS 子域名）"
+
+msgid "The address the Tesla opens. Sign up for free at duckdns.org, add a sub-domain and enter it with the token shown there. The name becomes that name (e.g. mycar.duckdns.org): AutoPlay points it at this box and obtains a free Let's Encrypt certificate, renewed automatically over the SIM, so the Tesla opens https://mycar.duckdns.org:18443/ without a warning. Without a name the Tesla opens https://autoplay.lan:18443/ with the box's own certificate; whether its warning page offers \"continue\" is not verified."
+msgstr "特斯拉打开的地址。在 duckdns.org 免费注册，添加一个子域名，把它和页面上显示的 token 填在这里。地址就变成这个名字（如 mycar.duckdns.org）：AutoPlay 把它指向这台盒子，并经 SIM 卡自动申请、续签免费的 Let's Encrypt 证书，特斯拉打开 https://mycar.duckdns.org:18443/ 不会有警告。不填时特斯拉打开 https://autoplay.lan:18443/，用盒子自带证书；它的警告页有没有「继续」尚未验证。"
+
+msgid "DuckDNS token"
+msgstr "DuckDNS token"
+
+msgid "Certificate"
+msgstr "证书"
+
+msgid "Loading…"
+msgstr "正在读取…"
+
+msgid "Check for a new version daily"
+msgstr "每天检查新版本"
+
+msgid "Only shows that there is one; nothing is installed until you click \"Update now\". Before updating, the iPhones, certificates and settings are backed up; a version that does not start is replaced by the previous one."
+msgstr "只提示有新版本，点「立即升级」才会安装。升级前会备份 iPhone、证书和设置；新版本起不来会自动退回原来的版本。"
+
+msgid "Download mirror"
+msgstr "下载镜像"
+
+msgid "Tried when GitHub cannot be reached. Releases are signed, so a mirror cannot change what is installed. Empty: the built-in mirror; \"none\": GitHub only."
+msgstr "连不上 GitHub 时改用这个地址前缀下载。发布带签名，镜像改不了装进来的内容。留空用内置的镜像；填 none 只用 GitHub。"
+
+msgid "Network check unavailable (service starting or stopped)."
+msgstr "网络检查暂不可用（服务启动中或已停止）。"
+
+msgid "No own name set."
+msgstr "没有设置自己的网址。"
+
+msgid "certificate installed"
+msgstr "证书已装好"
+
+msgid "obtaining the certificate (a few minutes online)"
+msgstr "正在申请证书（联网后几分钟）"
+
+msgid "renewing the certificate"
+msgstr "正在续签证书"
+
+msgid "not obtained yet: check the SIM, the sub-domain and the token; retried every hour"
+msgstr "还没申请到：检查 SIM 卡、子域名和 token；每小时重试"
+
+msgid "waiting for the internet"
+msgstr "等待联网"
+
+msgid "DuckDNS record update failed, retrying"
+msgstr "更新 DuckDNS 解析失败，继续重试"
+
+msgid "Updating:"
+msgstr "正在升级："
+
+msgid "About 2–5 minutes; CarPlay is interrupted meanwhile."
+msgstr "约 2–5 分钟，期间 CarPlay 会断开。"
+
+msgid "Last update:"
+msgstr "上次升级："
+
+msgid "Last update did not finish:"
+msgstr "上次升级没有完成："
+
+msgid "Checking for updates failed:"
+msgstr "检查更新没有成功："
+
+msgid "New version %s"
+msgstr "有新版本 %s"
+
+msgid "(installed: %s)"
+msgstr "（当前 %s）"
+
+msgid "an older version"
+msgstr "较旧版本"
+
+msgid "This version changes the system: reinstall as the installation guide describes."
+msgstr "这一版改了系统：请按装机说明重新安装。"
+
+msgid "Up to date:"
+msgstr "已是最新："
+
+msgid "Check now"
+msgstr "立即检查"
+
+msgid "Update AutoPlay now? CarPlay is interrupted for a few minutes."
+msgstr "现在升级 AutoPlay？CarPlay 会断开几分钟。"
+
+msgid "Update now"
+msgstr "立即升级"
+
+msgid "Last checked: %s"
+msgstr "上次检查：%s"
