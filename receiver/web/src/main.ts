@@ -82,6 +82,7 @@ if (boxPort) for (const id of ['box-link', 'box-link-panel']) {
 }
 function render() {
   setLanguage(language);
+  showVoice();
   updateFullscreen();
   el<HTMLSelectElement>('language').value = language;
   el('app').dataset.state = state;
@@ -173,11 +174,11 @@ const promptGain = Math.min(8, Math.max(1, Number(new URLSearchParams(location.s
 const audio = new AudioEngine(error, { promptBoost: promptGain, idleClose: carMusic });
 /** Music over the car's Bluetooth: the car's media card shows the page's title and address whenever the page sounds
  *  (Siri, prompts; a Tesla, 2026-10-14); name it instead. The last voice stream to start wins; the title goes back when none is left. */
-const voiceLabels: Record<string, string> = { speechrecognition: 'Siri', telephony: '通话', default: '导航播报' };
-const voices = new Map<number, string>();
+const voiceLabels: Record<string, Key> = { speechrecognition: 'voiceSiri', telephony: 'voiceCall', default: 'voicePrompt' };
+const voices = new Map<number, Key>();
 function showVoice() {
   const label = Array.from(voices.values()).pop() ?? null;
-  document.title = label ? `${label} · DashPlay` : 'DashPlay';
+  document.title = label ? `${t(label)} · ${t('brand')}` : t('brand');
 }
 function voiceStarted(streamType: number, name: string) {
   if (!carMusic) return;
