@@ -42,7 +42,7 @@ javac --release 21 -cp "$lib/*" -d "$work/launcher" "$repo/scripts/onecloud/laun
 jar --create --file "$stage/launcher/onecloud-launcher.jar" -C "$work/launcher" .
 
 # Bluetooth bridge with its private dbus-next (never installed into the system Python).
-for file in bt-bridge bridge.py relay.py; do cp "$repo/linux/bt-bridge/$file" "$stage/linux-bt-bridge/"; done
+for file in bt-bridge bridge.py bridge_reasons.py relay.py; do cp "$repo/linux/bt-bridge/$file" "$stage/linux-bt-bridge/"; done
 chmod 755 "$stage/linux-bt-bridge/bt-bridge"
 python3 -m pip download --quiet --no-deps --only-binary=:all: --require-hashes \
     -r "$repo/linux/bt-bridge/requirements.txt" -d "$work/wheels"

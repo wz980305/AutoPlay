@@ -14,6 +14,7 @@ import threading
 from dbus_next import BusType, DBusError, Message, MessageType, Variant
 from dbus_next.aio import MessageBus
 from dbus_next.service import ServiceInterface, method
+from bridge_reasons import report
 from relay import relay
 
 UUID = '00000000-deca-fade-deca-deafdecacafe'
@@ -43,6 +44,23 @@ class ManagedBus(MessageBus):
 
 class BridgeError(Exception):
     pass
+
+
+class Cancelled(BridgeError):
+    """The receiver closed our stdin while we were still paging the iPhone: it no longer wants this invitation."""
+
+
+def stdin_hangup(fd=0):
+    """Whether the receiver has hung up on us (the pipe's write end closed) without any data pending. Only valid
+    before the RFCOMM link is up: afterwards stdin is the data plane and the relay owns it."""
+    try:
+        import select
+        poller = select.poll()
+        poller.register(fd, select.POLLHUP | select.POLLERR | getattr(select, 'POLLRDHUP', 0))
+        events = poller.poll(0)
+    except (OSError, ValueError):
+        return False
+    return any(flag & (select.POLLHUP | select.POLLERR) for _, flag in events)
 
 
 def address(value):
@@ -272,10 +290,20 @@ async def connect(bus, objects, adapter, args, stopped, owner):
         async def watch_disconnect():
             await asyncio.shield(bus.wait_for_disconnect())
         disconnected = asyncio.create_task(watch_disconnect())
-        tasks = [opening, closed, signaled, disconnected]
+        async def watch_stdin():
+            # The receiver cancels a paging invitation by closing our stdin (another phone was picked, the page
+            # went away): stop paging at once instead of holding the controller for the whole timeout.
+            while not stdin_hangup():
+                await asyncio.sleep(0.25)
+        hung_up = asyncio.create_task(watch_stdin())
+        tasks = [opening, closed, signaled, disconnected, hung_up]
         done, _ = await asyncio.wait(tasks, timeout=args.timeout, return_when=asyncio.FIRST_COMPLETED)
         if signaled in done:
             return
+        if hung_up in done:
+            opening.cancel()
+            await asyncio.gather(opening, return_exceptions=True)
+            raise Cancelled('stdin closed: invitation cancelled by the receiver')
         if closed in done or disconnected in done:
             raise BridgeError(profile.reason or 'D-Bus disconnected')
         if opening not in done:
@@ -283,6 +311,7 @@ async def connect(bus, objects, adapter, args, stopped, owner):
             await asyncio.gather(opening, return_exceptions=True)
             await recover_stale_link(bus, adapter, target)
             raise BridgeError('RFCOMM connection timed out')
+        hung_up.cancel()   # from here on stdin is the data plane
         fd = opening.result()
         print('bt-bridge: RFCOMM connected', file=sys.stderr)
         worker = profile.worker = asyncio.create_task(asyncio.to_thread(relay, fd, 0, 1, profile.stop_thread))
@@ -391,6 +420,8 @@ def main():
         return asyncio.run(run(args))
     except (BridgeError, OSError, asyncio.TimeoutError, DBusError) as error:
         print(f'bt-bridge: {error or "D-Bus operation timed out"}', file=sys.stderr)
+        # One word for the supervisor and the settings page (bridge_reasons.py).
+        print(report(error if str(error) else 'timeout'), file=sys.stderr)
         return 1
 
 
