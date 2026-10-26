@@ -38,6 +38,12 @@ copy with a symlink (node_modules/ is gitignored):
 mkdir -p node_modules && ln -sfn /opt/npm-tools/node_modules/typescript node_modules/typescript
 ```
 
+## State at the end of the trim (2026-10-26, branch `receiver-trim`)
+
+- `tsc --noEmit -p tsconfig.offline.json`: clean (the `ws.ts` error went with `sendBinary` and the microphone).
+- `check.mjs`, `check-audio.mjs`, `check-car.mjs`, `check-browser.mjs`: all pass (`check-flac.mjs` went with wired CarPlay).
+- esbuild build: `index.html` 9.4 KB, `main` chunk ≈ 92 KB, `style.css` ≈ 15 KB.
+
 ## Baseline before the Tesla-only trim (2026-10-26, DashPlay `e3beae4` state of the tree)
 
 - `tsc -p tsconfig.json`: 2 errors, both environmental — `vite.config.ts` cannot resolve `vite` without

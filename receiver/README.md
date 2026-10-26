@@ -14,6 +14,14 @@ A server-side CarPlay receiver that turns any screen on your network into a head
 
 ![PlayPort live CarPlay viewer](docs/screenshots/dashboard.jpg)
 
+> **AutoPlay fork notice (2026-10-26).** This directory is AutoPlay's receiver: a hard fork of PlayPort plus
+> DashPlay's patch series, trimmed to one target, a ZTE F50 (OpenWrt) showing wireless CarPlay in a Tesla's built-in
+> browser with music, calls and Siri on the car's own Bluetooth. The README below is upstream PlayPort's: its macOS
+> set-up, `macos/bt-bridge`, wired USB, `--mfi-server`, microphone and Media Session sections describe code that is
+> **no longer in this tree**. What changed and why: [docs/TRIM-LOG.md](docs/TRIM-LOG.md); Kotlin changed without a
+> compile: [docs/UNVERIFIED-KOTLIN.md](docs/UNVERIFIED-KOTLIN.md); building the viewer offline:
+> [web/README-build.md](web/README-build.md); attribution: [NOTICE.md](NOTICE.md).
+
 PlayPort runs the **car** side of CarPlay on a Mac. Your iPhone connects wirelessly (Bluetooth
 bootstrap, then Wi-Fi), and every browser on the network can watch and control CarPlay — touch,
 rotary knob, media keys, Siri and phone calls. No dongle, no head unit, no app install: open a
