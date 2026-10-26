@@ -48,6 +48,9 @@ OPENWRT_PACKAGES = ("dashplay", "luci-app-dashplay", "luci-i18n-dashplay-zh-cn")
 FORBIDDEN = re.compile(r"^(kernel|kmod-|bluez)")   # never through an online update (ZTE F50: 5.4 kernel)
 CHECK_EVERY = 24 * 3600
 BACKUP = "dashplay-update-backup.tar.gz"   # beside the program directory: the owner's data before the last update
+CACHE = "dashplay-update-cache"            # beside the program directory: the previous packages, until the next boot proves the new ones
+JOURNAL = "state/update-journal.json"      # what an install is doing, for recovery at the next supervisor start (reliability_audit #8)
+STATUS_FILE = Path("/var/run/dashplay/status.json")   # the supervisor's status (status_model.py): the health check reads it
 
 
 class UpdateError(Exception):
@@ -239,7 +242,8 @@ def forbidden_in_plan(simulation):
 
 
 def previous_packages(version, prefixes, work):
-    """The installed release's three packages (to go back to), checked against that release's SHA256SUMS."""
+    """The installed release's three packages (to go back to), checked against that release's SHA256SUMS. `work` is
+    the persistent cache (CACHE), so a power cut mid-install still finds them at the next start (recover)."""
     base = PREVIOUS_FEED.format(version=version)
     try:
         sums = fetch(base + "SHA256SUMS", prefixes, limit=1 << 16).decode()
@@ -266,9 +270,22 @@ def settings_port():
     return int(port) if port.isdigit() else 18080
 
 
-def service_up(port, seconds=150, steady=15):
-    """The dashplay service runs and its settings page answers (it opens even while the Wi-Fi is not up), and still
-    does `steady` seconds later: on the F50 it answered 2 s after apk returned, before a crash could show."""
+def healthy(snapshot, port_answers):
+    """The service is up: the settings page answers, the receiver (JVM) serves and Bluetooth is powered
+    (reliability_audit #8: "the port answers" alone let a version whose JVM or Bluetooth failed pass)."""
+    if not port_answers:
+        return False
+    if not snapshot:
+        return False
+    system = snapshot.get("system", {})
+    bluetooth = snapshot.get("bluetooth", {})
+    return system.get("state") == "ok" and bluetooth.get("state") == "on"
+
+
+def service_up(port, seconds=240, steady=15, status_file=STATUS_FILE, clock=time.monotonic, sleep=time.sleep):
+    """The dashplay service runs: its settings page answers, its status says the receiver serves and Bluetooth is
+    powered, and that still holds `steady` seconds later (on the F50 the page answered 2 s after apk returned,
+    before a crash could show). Waits up to `seconds`: the JVM takes ~40 s, Bluetooth up to a minute."""
     def answers():
         try:
             socket.create_connection(("127.0.0.1", port), 3).close()
@@ -276,13 +293,19 @@ def service_up(port, seconds=150, steady=15):
         except OSError:
             return False
 
-    until = time.monotonic() + seconds
-    while time.monotonic() < until:
-        if answers():
-            time.sleep(steady)
-            if answers():
+    def snapshot():
+        try:
+            return json.loads(Path(status_file).read_text())
+        except (OSError, ValueError):
+            return {}
+
+    until = clock() + seconds
+    while clock() < until:
+        if healthy(snapshot(), answers()):
+            sleep(steady)
+            if healthy(snapshot(), answers()):
                 return True
-        time.sleep(3)
+        sleep(3)
     return False
 
 
@@ -303,6 +326,14 @@ def backup(root, openwrt):
     return target
 
 
+def journal_path(root):
+    return Path(root) / JOURNAL
+
+
+def write_journal(root, **fields):
+    save(journal_path(root), {**fields, "at": int(time.time())})
+
+
 def install_openwrt(root, manifest, status, work):
     current = current_version(root, True)
     if not current:
@@ -315,13 +346,17 @@ def install_openwrt(root, manifest, status, work):
         if arch not in feed["jre"]["files"]:
             raise UpdateError(f"这一版没有 {arch} 的 Java 运行环境")
         wanted["dashplay-jre"] = feed["jre"]["files"][arch]
-    # The way back first: without it nothing is installed, so the new release is not fetched for nothing.
+    # The way back first: without it nothing is installed, so the new release is not fetched for nothing. Both
+    # package sets go to the persistent cache, so a power cut leaves recover() something to work with.
+    cache = Path(root).parent / CACHE
+    shutil.rmtree(cache, ignore_errors=True)
+    cache.mkdir(mode=0o700, parents=True, exist_ok=True)
     status("downloading", f"正在下载当前版本 {current} 的安装包（升级失败时用来退回）")
-    previous = previous_packages(current, prefixes, work)
+    previous = previous_packages(current, prefixes, cache)
     status("downloading", f"正在下载 {manifest['version']}（{sum(f['size'] for f in wanted.values()) // 1048576} MB）")
     files = []
     for entry in wanted.values():
-        files.append(fetch(feed["base"] + entry["file"], prefixes, target=Path(work) / entry["file"],
+        files.append(fetch(feed["base"] + entry["file"], prefixes, target=cache / entry["file"],
                            sha256=entry["sha256"], size=entry["size"]))
     status("checking", "正在核对升级计划")
     run("apk", "update", timeout=300)   # without the index the simulation misses dependencies (F50, 2026-10-19)
@@ -333,14 +368,52 @@ def install_openwrt(root, manifest, status, work):
         raise UpdateError("升级会改动内核、内核模块或系统蓝牙（" + "、".join(blocked) + "），已停止，请按说明手动升级")
     status("installing", "正在安装，CarPlay 会断开约 1 分钟")
     port = settings_port()
+    write_journal(root, phase="installing", target=manifest["version"], previous=current,
+                  new_files=[str(f) for f in files], previous_files=[str(f) for f in previous])
     result = run("apk", "add", "--upgrade", "--allow-untrusted", *map(str, files), timeout=600)
     if result.returncode == 0 and service_up(port):
+        write_journal(root, phase="done", target=manifest["version"], previous=current)
         return
     status("restoring", "新版本没有正常启动，正在退回原来的版本")
+    write_journal(root, phase="restoring", target=manifest["version"], previous=current,
+                  previous_files=[str(f) for f in previous])
     back = run("apk", "add", "--allow-untrusted", *map(str, previous), timeout=600)
     up = back.returncode == 0 and service_up(port)
+    write_journal(root, phase="rolled-back" if up else "failed", target=manifest["version"], previous=current)
     raise UpdateError(f"新版本没有正常启动，已退回 {current}" if up else
                       "新版本没有正常启动，退回也没有成功：请按说明用电脑恢复（数据备份在 /opt/" + BACKUP + "）")
+
+
+def recover(root, say=print, version=None, run_apk=None):
+    """At supervisor start: finish or roll back an update the power cut (reliability_audit #8). Returns a short
+    text when something was done, None when the journal is clean. version/run_apk are for tests."""
+    root = Path(root)
+    journal = read(journal_path(root))
+    phase = journal.get("phase")
+    if phase not in ("installing", "restoring"):
+        if phase in ("done", "rolled-back", "failed") and time.time() - journal.get("at", 0) > 2 * 86400:
+            journal_path(root).unlink(missing_ok=True)   # old news
+            shutil.rmtree(root.parent / CACHE, ignore_errors=True)
+        return None
+    current = version if version is not None else current_version(root, True)
+    apk = run_apk or (lambda files: run("apk", "add", "--allow-untrusted", *files, timeout=600).returncode == 0)
+    if phase == "installing" and current == journal.get("target"):
+        # apk finished, the health check never ran: let this boot be the check (the supervisor's status says).
+        write_journal(root, phase="done", target=journal.get("target"), previous=journal.get("previous"), recovered=True)
+        return f"install of {current} completed before the power cut; running it now"
+    previous = [path for path in journal.get("previous_files", []) if Path(path).is_file()]
+    if not previous:
+        write_journal(root, phase="failed", target=journal.get("target"), previous=journal.get("previous"),
+                      recovered=True, note="previous packages missing")
+        say("update journal: the interrupted update left no packages to go back to")
+        return "interrupted update: nothing to roll back with"
+    if apk(previous):
+        write_journal(root, phase="rolled-back", target=journal.get("target"), previous=journal.get("previous"), recovered=True)
+        save(root / "state/update-status.json", {"phase": "failed", "at": int(time.time()),
+                                                 "message": f"上次升级到 {journal.get('target')} 时断电，已退回 {journal.get('previous')}"})
+        return f"rolled back the interrupted update to {journal.get('previous')}"
+    write_journal(root, phase="failed", target=journal.get("target"), previous=journal.get("previous"), recovered=True)
+    return "interrupted update: rollback failed"
 
 
 def install(root, openwrt=None, key=KEY):

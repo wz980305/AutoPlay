@@ -346,17 +346,85 @@ class SignedReleaseTests(unittest.TestCase):
 
 
 class ServiceUpTests(unittest.TestCase):
-    def test_the_page_must_still_answer_a_while_later(self):
-        answers = iter([True, False, False, False])   # up at once, then gone: a crash after the start
+    HEALTHY = {"system": {"state": "ok"}, "bluetooth": {"state": "on"}}
+
+    def service_up(self, answers, statuses, seconds=5):
+        answers, statuses = iter(answers), iter(statuses)
+        last = {}
         def connect(*_):
             if not next(answers, False):
                 raise OSError('refused')
             return io.BytesIO()
-        with patch.object(update.socket, 'create_connection', connect), patch.object(update.time, 'sleep'):
-            self.assertFalse(update.service_up(18080, seconds=0.05, steady=0))
-        answers = iter([False, True, True])
-        with patch.object(update.socket, 'create_connection', connect), patch.object(update.time, 'sleep'):
-            self.assertTrue(update.service_up(18080, seconds=5, steady=0))
+        with tempfile.TemporaryDirectory() as tmp:
+            status = Path(tmp) / 'status.json'
+            def sleep(_):
+                nonlocal last
+                last = next(statuses, last)
+                status.write_text(json.dumps(last))
+            sleep(0)
+            with patch.object(update.socket, 'create_connection', connect):
+                return update.service_up(18080, seconds=seconds, steady=0, status_file=status, sleep=sleep)
+
+    def test_the_page_must_still_answer_a_while_later(self):
+        # Up at once, then gone: a crash after the start.
+        self.assertFalse(self.service_up([True, False, False, False], [self.HEALTHY], seconds=0.05))
+        self.assertTrue(self.service_up([False, True, True], [self.HEALTHY]))
+
+    def test_health_means_receiver_up_and_bluetooth_powered(self):
+        # reliability_audit #8: a version whose JVM or Bluetooth fails must not pass as "up".
+        self.assertFalse(update.healthy({"system": {"state": "restarting"}, "bluetooth": {"state": "on"}}, True))
+        self.assertFalse(update.healthy({"system": {"state": "ok"}, "bluetooth": {"state": "failed"}}, True))
+        self.assertFalse(update.healthy(self.HEALTHY, False))
+        self.assertFalse(update.healthy({}, True), "no status file: the supervisor never got that far")
+        self.assertTrue(update.healthy(self.HEALTHY, True))
+        self.assertFalse(self.service_up([True, True, True], [{"system": {"state": "starting"}, "bluetooth": {"state": "starting"}}],
+                                         seconds=0.05))
+        self.assertTrue(self.service_up([True, True, True, True],
+                                        [{"system": {"state": "starting"}, "bluetooth": {"state": "on"}}, self.HEALTHY]))
+
+
+class RecoveryTests(unittest.TestCase):
+    """An update cut by a power loss is finished or rolled back at the next start (reliability_audit #8)."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name) / 'dashplay'; (self.root / 'state').mkdir(parents=True)
+        self.cache = Path(tmp.name) / update.CACHE; self.cache.mkdir()
+        self.previous = self.cache / 'previous' / 'dashplay-2026.10.25-r1.apk'
+        self.previous.parent.mkdir(); self.previous.write_bytes(b'old')
+
+    def journal(self, **fields):
+        update.write_journal(self.root, **fields)
+
+    def test_clean_journal_does_nothing(self):
+        self.assertIsNone(update.recover(self.root, say=lambda _: None, version='2026.10.25'))
+        self.journal(phase='done', target='2026.11.1', previous='2026.10.25')
+        self.assertIsNone(update.recover(self.root, say=lambda _: None, version='2026.11.1'))
+
+    def test_an_install_that_finished_before_the_cut_is_marked_done(self):
+        self.journal(phase='installing', target='2026.11.1', previous='2026.10.25', previous_files=[str(self.previous)])
+        text = update.recover(self.root, say=lambda _: None, version='2026.11.1', run_apk=lambda files: self.fail('no rollback'))
+        self.assertIn('completed', text)
+        self.assertEqual(update.read(update.journal_path(self.root))['phase'], 'done')
+
+    def test_a_half_installed_update_is_rolled_back_from_the_cache(self):
+        self.journal(phase='installing', target='2026.11.1', previous='2026.10.25', previous_files=[str(self.previous)])
+        calls = []
+        text = update.recover(self.root, say=lambda _: None, version='2026.10.25',
+                              run_apk=lambda files: calls.append(files) or True)
+        self.assertIn('rolled back', text)
+        self.assertEqual(calls, [[str(self.previous)]])
+        self.assertEqual(update.read(update.journal_path(self.root))['phase'], 'rolled-back')
+        self.assertIn('断电', update.read(self.root / 'state/update-status.json')['message'])
+
+    def test_missing_cache_is_reported_not_crashed(self):
+        self.previous.unlink()
+        self.journal(phase='restoring', target='2026.11.1', previous='2026.10.25', previous_files=[str(self.previous)])
+        said = []
+        text = update.recover(self.root, say=said.append, version='2026.10.25', run_apk=lambda files: self.fail('nothing to add'))
+        self.assertIn('nothing to roll back', text)
+        self.assertEqual(update.read(update.journal_path(self.root))['phase'], 'failed')
+        self.assertTrue(said)
 
 
 class LaunchTests(unittest.TestCase):
