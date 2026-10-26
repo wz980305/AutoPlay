@@ -109,14 +109,46 @@ class MaintainerTests(unittest.TestCase):
 
     def test_a_certificate_for_another_name_is_refused(self):
         make_certificate(self.fake, "someone-else.duckdns.org")
-        self.assertEqual(self.maintainer().check_certificate(), own_domain.CERT_RETRY)
+        self.assertEqual(self.maintainer().check_certificate(), own_domain.CERT_RETRIES[0])
         self.assertFalse((self.state / "tls" / "own" / "fullchain.pem").exists())
         self.assertEqual(own_domain.read_status(self.state)["phase"], "retry")
         self.assertIn("每小时重试", own_domain.message(self.state, self.name))
 
-    def test_failure_is_retried_within_the_hour(self):
+    def test_failure_is_retried_with_back_off_then_hourly(self):
+        # reliability_audit #6: one try at start, then hourly, never renewed on drives shorter than an hour.
+        worker = self.maintainer()
         with patch.dict(os.environ, FAKE_ISSUE="1"):
-            self.assertEqual(self.maintainer().check_certificate(), own_domain.CERT_RETRY)
+            delays = [worker.check_certificate() for _ in range(6)]
+        self.assertEqual(delays, [60, 120, 300, 900, 3600, 3600])
+        status = own_domain.read_status(self.state)
+        self.assertEqual((status["phase"], status["failures"]), ("retry", 6))
+        self.assertEqual(own_domain.certificate_state(self.state, self.name)["state"], "failed")
+        make_certificate(self.fake, self.name)
+        self.assertEqual(worker.check_certificate(), own_domain.CERT_CHECK)
+        self.assertEqual(worker.cert_failures, 0)
+
+    def test_a_network_event_wakes_the_maintainer(self):
+        wake = self.root / "wan-up"
+        worker = own_domain.Maintainer(self.root, self.config, None, self.stopped, say=lambda _: None, wake_file=wake)
+        self.assertFalse(worker.woken())
+        wake.write_text("")
+        self.assertTrue(worker.woken())
+        self.assertFalse(wake.exists(), "consumed")
+
+    def test_certificate_state_for_the_status_model(self):
+        self.assertEqual(own_domain.certificate_state(self.state, None)["state"], "self_signed")
+        self.assertEqual(own_domain.certificate_state(self.state, self.name)["state"], "issuing")
+        make_certificate(self.fake, self.name, days=10)
+        own = self.state / "tls" / "own"; own.mkdir(parents=True)
+        shutil.copy(self.fake / "fullchain.pem", own); shutil.copy(self.fake / "key.pem", own)
+        own_domain.write_status(self.state, name=self.name, phase="ready")
+        info = own_domain.certificate_state(self.state, self.name)
+        self.assertEqual(info["state"], "expiring_soon")
+        self.assertRegex(info["not_after"], r"\d{4}-\d{2}-\d{2}")
+        self.assertEqual(own_domain.certificate_state(self.state, self.name, now=time.time() - 60 * 86400)["state"], "ok")
+        self.assertEqual(own_domain.certificate_state(self.state, self.name, now=time.time() + 20 * 86400)["state"], "expired")
+        own_domain.write_status(self.state, name=self.name, phase="renewing")
+        self.assertEqual(own_domain.certificate_state(self.state, self.name)["state"], "renewing")
 
     def test_stopping_the_service_stops_acme(self):
         make_certificate(self.fake, self.name)

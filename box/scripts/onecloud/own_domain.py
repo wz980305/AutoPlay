@@ -34,6 +34,10 @@ RENEW_DAYS = 30            # Let's Encrypt certificates last 90 days
 RECORD_REFRESH = 1800      # seconds between DuckDNS updates once one succeeded
 RECORD_RETRY = 60
 CERT_CHECK = 12 * 3600
+# Retries after a failed issue/renewal: 60 s, 2 min, 5 min, 15 min, then hourly; a WAN-up or NTP hotplug event
+# (the supervisor's wake file) tries at once. Daily drives shorter than an hour never renewed before
+# (reliability_audit #6).
+CERT_RETRIES = (60, 120, 300, 900)
 CERT_RETRY = 3600
 ACME_TIMEOUT = 600
 DNS_SLEEP = 60             # wait for the TXT record instead of acme.sh's DoH check (blocked on some networks)
@@ -122,10 +126,12 @@ def read_status(state):
 class Maintainer(threading.Thread):
     """Keeps the DuckDNS record on `address` (None: leave it) and the certificate current, until stopped."""
 
-    def __init__(self, root, config, address, stopped, say=print, tesla=False):
+    def __init__(self, root, config, address, stopped, say=print, tesla=False, wake_file=None):
         super().__init__(name="own-domain", daemon=True)
         self.root, self.state = Path(root), Path(root) / "state"
         self.config, self.name, self.address = config, name_of(config), address
+        self.wake_file = Path(wake_file) if wake_file else None
+        self.cert_failures = 0
         if tesla and address and not tesla_reaches(address):
             # Cannot happen once the LAN is the install-time constant (D1); kept as a guard for a hand-edited LAN.
             self.address = None
@@ -134,10 +140,23 @@ class Maintainer(threading.Thread):
         self.stopped, self.say = stopped, say
         self.sent, self.sent_at = None, 0.0   # address last accepted by DuckDNS, and when
 
+    def woken(self):
+        """A hotplug event (WAN up, NTP synced) since the last look: the supervisor's wake file, consumed here."""
+        if self.wake_file is None:
+            return False
+        try:
+            self.wake_file.unlink()
+            return True
+        except OSError:
+            return False
+
     def run(self):
         next_record = next_cert = time.monotonic()
         while not self.stopped.is_set():
             now = time.monotonic()
+            if self.woken():
+                self.say("own name: network event, retrying now")
+                next_record = next_cert = now
             if self.address and now >= next_record:
                 if self.address == self.sent and now < self.sent_at + RECORD_REFRESH:
                     ok = True   # nothing changed since DuckDNS took it
@@ -155,11 +174,18 @@ class Maintainer(threading.Thread):
                 next_cert = now + self.check_certificate()
             if not self.address:
                 next_record = float("inf")
-            self.stopped.wait(max(1.0, min(next_record, next_cert) - time.monotonic()))
+            # Wake up every few seconds to see the wake file; the real work waits for its own deadline.
+            self.stopped.wait(max(1.0, min(next_record, next_cert, time.monotonic() + 5) - time.monotonic()))
+
+    def retry_delay(self):
+        """Back-off of the certificate retries: CERT_RETRIES, then CERT_RETRY."""
+        index = self.cert_failures - 1
+        return CERT_RETRIES[index] if 0 <= index < len(CERT_RETRIES) else CERT_RETRY
 
     def check_certificate(self):
         """Seconds until the next look."""
         if certificate_for(self.state, self.name, RENEW_DAYS):
+            self.cert_failures = 0
             write_status(self.state, name=self.name, phase="ready")
             return CERT_CHECK
         renewing = certificate_for(self.state, self.name)
@@ -169,9 +195,13 @@ class Maintainer(threading.Thread):
         except InterruptedError:
             return CERT_CHECK
         except Exception as error:   # no internet, DuckDNS or Let's Encrypt refused; texts may carry the token
-            write_status(self.state, name=self.name, phase="retry")
-            self.say(f"certificate for {self.name} deferred: {type(error).__name__}")
-            return CERT_RETRY
+            self.cert_failures += 1
+            delay = self.retry_delay()
+            write_status(self.state, name=self.name, phase="retry", failures=self.cert_failures,
+                         reason=type(error).__name__)
+            self.say(f"certificate for {self.name} deferred: {type(error).__name__}; next try in {delay} s")
+            return delay
+        self.cert_failures = 0
         write_status(self.state, name=self.name, phase="ready")
         self.say(f"certificate for {self.name} installed until {end_date(self.state)}; used from the next start")
         return CERT_CHECK
@@ -260,6 +290,44 @@ def message(state, name):
     if status.get("record") == "failed":
         text += f"更新 {name} 的解析失败，盒子会继续重试。"
     return text
+
+
+def not_after(state):
+    """The installed certificate's end as a Unix time, or None."""
+    out = _openssl("x509", "-noout", "-enddate", "-in", str(Path(state) / "tls" / "own" / "fullchain.pem"))
+    if out.returncode:
+        return None
+    try:
+        import calendar
+        return calendar.timegm(time.strptime(out.stdout.strip().split("=", 1)[1], "%b %d %H:%M:%S %Y %Z"))
+    except (IndexError, ValueError):
+        return None
+
+
+def certificate_state(state, name, now=None, soon_days=30):
+    """The `certificate` domain of the status (docs/STATUS-MODEL.md): self_signed (no own name), ok,
+    expiring_soon (< soon_days), expired, renewing, issuing, failed; with not_after (ISO date) when known.
+    Judged by the box clock, which clock_floor keeps from running backwards."""
+    if not name:
+        return {"state": "self_signed", "reason": None, "not_after": None}
+    status = read_status(state)
+    if status.get("name") != name:
+        status = {}
+    phase = status.get("phase")
+    end = not_after(state)
+    end_text = time.strftime("%Y-%m-%d", time.gmtime(end)) if end else None
+    current = now if now is not None else time.time()
+    if end is None:
+        if phase == "retry":
+            return {"state": "failed", "reason": status.get("reason") or "not-obtained", "not_after": None}
+        return {"state": "issuing", "reason": None if phase == "issuing" else "waiting-for-internet", "not_after": None}
+    if end <= current:
+        return {"state": "expired", "reason": status.get("reason") if phase == "retry" else None, "not_after": end_text}
+    if phase == "renewing":
+        return {"state": "renewing", "reason": None, "not_after": end_text}
+    if end - current < soon_days * 86400:
+        return {"state": "expiring_soon", "reason": status.get("reason") if phase == "retry" else None, "not_after": end_text}
+    return {"state": "ok", "reason": None, "not_after": end_text}
 
 
 def serving(state):

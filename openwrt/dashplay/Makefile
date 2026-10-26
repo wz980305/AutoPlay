@@ -47,11 +47,15 @@ endef
 # state/ and identity/ are created by postinst and never owned by the package, so an upgrade or removal
 # keeps pairings, certificates and the MFi identity.
 define Package/dashplay/install
-	$(INSTALL_DIR) $(1)/opt/dashplay $(1)/etc/init.d $(1)/etc/config $(1)/usr/libexec $(1)/etc/uci-defaults
+	$(INSTALL_DIR) $(1)/opt/dashplay $(1)/etc/init.d $(1)/etc/config $(1)/usr/libexec $(1)/etc/uci-defaults \
+		$(1)/etc/hotplug.d/iface $(1)/etc/hotplug.d/ntp
 	cd $(PKG_BUILD_DIR)/bundle && tar -cf - --exclude=./state --exclude=./identity . | tar -xf - -C $(1)/opt/dashplay
 	$(INSTALL_BIN) ./files/dashplay.init $(1)/etc/init.d/dashplay
 	# Tesla constants at install time: LAN 100.96.0.1/24, old options and DNS records dropped (D1, D2, D4).
 	$(INSTALL_BIN) ./files/90-dashplay-tesla $(1)/etc/uci-defaults/90-dashplay-tesla
+	# WAN up / NTP synced: retry the DuckDNS record and the certificate at once (reliability_audit #6).
+	$(INSTALL_BIN) ./files/hotplug-iface $(1)/etc/hotplug.d/iface/90-dashplay
+	$(INSTALL_BIN) ./files/hotplug-ntp $(1)/etc/hotplug.d/ntp/90-dashplay
 	# Online update: LuCI's check / start command (update.py launch runs the update as a procd service of its own).
 	$(INSTALL_BIN) ./files/dashplay-update $(1)/usr/libexec/dashplay-update
 	$(INSTALL_CONF) ./files/dashplay.config $(1)/etc/config/dashplay
@@ -65,6 +69,15 @@ chmod 700 /opt/dashplay/state /opt/dashplay/state/receiver /opt/dashplay/identit
 # ZTE F50 (MU300 OpenWrt): the system's boot scripts, faster and without dropping CarPlay right after it came up
 # (mu300_boot.py; it changes only the exact originals, keeps them, and "mu300_boot.py revert" puts them back)
 if [ -d /opt/mu300 ]; then python3 /opt/dashplay/mu300_boot.py apply; fi
+# The AppCDS archive now, not at the first clean exit the car never gives the JVM (reliability_audit #19). Best
+# effort: needs the identity files and about a minute; a failure changes nothing.
+if [ -s /opt/dashplay/identity/offline-mfi/identity.pk8 ] && [ -x /usr/lib/dashplay-jre/bin/java ]; then
+	printf '{"ssid": "prime", "passphrase": "prime-cds"}\n' > /tmp/dashplay-prime.json
+	/etc/init.d/dashplay stop
+	PYTHONDONTWRITEBYTECODE=1 python3 /opt/dashplay/run-receiver.py --root /opt/dashplay --bind 127.0.0.1 --interface lo \
+		--channel 36 --hotspot /tmp/dashplay-prime.json --java /usr/lib/dashplay-jre/bin/java --no-wireless --prime-cds || true
+	rm -f /tmp/dashplay-prime.json
+fi
 /etc/init.d/dashplay enable
 /etc/init.d/dashplay restart
 exit 0
