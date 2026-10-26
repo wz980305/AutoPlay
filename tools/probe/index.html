@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>AutoPlay 车机浏览器探测</title>
+<!--
+  AutoPlay stage-0 car-browser capability probe.
+  Single self-contained file: no external resources, works over plain http and https,
+  ES2017-safe for Chromium 94+ (no optional chaining, no nullish coalescing, no class fields).
+  Every probe is wrapped in try/catch and degrades to a "not available" row.
+  License: GPL-3.0 (see /LICENSE in the AutoPlay repository).
+-->
+<style>
+  :root {
+    --bg: #0b0d10;
+    --cell: #16191e;
+    --fg: #f2f4f7;
+    --muted: rgba(242, 244, 247, 0.72);
+    --ok: #30d158;
+    --warn: #ffd60a;
+    --bad: #ff453a;
+    --info: #4da3ff;
+    --line: rgba(255, 255, 255, 0.12);
+    --fs: 26px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f4f5f7;
+      --cell: #ffffff;
+      --fg: #111318;
+      --muted: rgba(17, 19, 24, 0.7);
+      --ok: #1f9d43;
+      --warn: #a67c00;
+      --bad: #d0332a;
+      --info: #0a66d0;
+      --line: rgba(0, 0, 0, 0.12);
+    }
+  }
+  html { font-size: var(--fs); }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0.6rem 16px 3rem;
+    background: var(--bg);
+    color: var(--fg);
+    font: 400 1rem/1.35 -apple-system, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
+    overscroll-behavior: none;
+  }
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+  }
+  h1 { font-size: 1.4rem; margin: 0; font-weight: 700; }
+  h2 { font-size: 1.15rem; margin: 1.2rem 0 0.4rem; font-weight: 600; color: var(--muted); }
+  .sub { color: var(--muted); font-size: 0.85rem; }
+  button {
+    font: inherit;
+    font-size: 1rem;
+    min-height: 2.7rem;
+    padding: 0.4rem 1rem;
+    border-radius: 0.6rem;
+    border: 1px solid var(--line);
+    background: var(--cell);
+    color: var(--fg);
+    cursor: pointer;
+  }
+  button.primary { background: #0a84ff; border-color: #0a84ff; color: #fff; font-weight: 600; }
+  button:disabled { opacity: 0.5; }
+  .bar { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0; }
+  table { width: 100%; border-collapse: collapse; background: var(--cell); border-radius: 0.6rem; overflow: hidden; }
+  td, th { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; }
+  th { font-weight: 600; color: var(--muted); font-size: 0.85rem; }
+  td.k { width: 36%; font-weight: 600; }
+  td.v { width: 44%; word-break: break-word; }
+  td.s { width: 20%; font-weight: 700; }
+  td.v small { display: block; color: var(--muted); font-size: 0.8rem; line-height: 1.3; }
+  .ok { color: var(--ok); }
+  .warn { color: var(--warn); }
+  .bad { color: var(--bad); }
+  .info { color: var(--info); }
+  .na { color: var(--muted); }
+  canvas { display: block; width: 100%; height: 220px; background: #000; border-radius: 0.6rem; }
+  .counter { font-size: 2.4rem; font-weight: 700; font-variant-numeric: tabular-nums; margin: 0.3rem 0; }
+  textarea, input {
+    font: inherit;
+    font-size: 0.9rem;
+    width: 100%;
+    color: var(--fg);
+    background: var(--cell);
+    border: 1px solid var(--line);
+    border-radius: 0.6rem;
+    padding: 0.5rem;
+  }
+  textarea { min-height: 7rem; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.75rem; }
+  .touchpad {
+    height: 9rem;
+    border: 2px dashed var(--line);
+    border-radius: 0.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    font-size: 1.2rem;
+    color: var(--muted);
+  }
+  .note { color: var(--muted); font-size: 0.85rem; margin: 0.3rem 0; }
+  #tapHint {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding: 0.7rem 16px;
+    background: rgba(10, 132, 255, 0.92);
+    color: #fff;
+    font-size: 1.1rem;
+    font-weight: 600;
+    text-align: center;
+  }
+  #tapHint.hidden { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1 data-i18n="title">AutoPlay 车机浏览器探测</h1>
+    <div class="sub" data-i18n="subtitle">阶段 0 · 不连接 iPhone，只看浏览器能做什么</div>
+  </div>
+  <div class="bar">
+    <button id="langBtn">English</button>
+    <button id="rerunBtn" data-i18n="rerun">重新检测</button>
+  </div>
+</header>
+
+<h2 data-i18n="secEnv">环境</h2>
+<table id="envTable"><tbody></tbody></table>
+
+<h2 data-i18n="secMedia">媒体能力（决定画面链路）</h2>
+<table id="mediaTable"><tbody></tbody></table>
+
+<h2 data-i18n="secInteract">需要轻点后才能测的</h2>
+<p class="note" data-i18n="interactNote">点下面的按钮，每个结果会写进上表。全屏请求可能让页面重排；麦克风请求会弹出权限框。</p>
+<div class="bar">
+  <button class="primary" id="btnAudio" data-i18n="btnAudio">轻点：解锁声音</button>
+  <button id="btnFullscreen" data-i18n="btnFullscreen">请求全屏</button>
+  <button id="btnWakeLock" data-i18n="btnWakeLock">请求屏幕常亮</button>
+  <button id="btnMic" data-i18n="btnMic">请求麦克风</button>
+</div>
+<table id="interactTable"><tbody></tbody></table>
+
+<h2 data-i18n="secTouch">触控</h2>
+<div class="touchpad" id="touchpad" data-i18n="touchpad">用一根或多根手指按住这里</div>
+<table id="touchTable"><tbody></tbody></table>
+
+<h2 data-i18n="secAnim">画布动画测试（行车中是否还在刷新）</h2>
+<p class="note" data-i18n="animNote">停车时点开始，然后挂挡行驶。计数器停了就说明浏览器在行车时冻结了页面；计数器照常走说明 canvas 路线可用。</p>
+<div class="bar">
+  <button class="primary" id="btnAnim10" data-i18n="btnAnim10">开始 10 秒</button>
+  <button id="btnAnim60" data-i18n="btnAnim60">开始 60 秒</button>
+  <button id="btnAnimStop" data-i18n="btnAnimStop">停止</button>
+</div>
+<div class="counter" id="animCounter">0</div>
+<canvas id="animCanvas" width="1280" height="220"></canvas>
+<table id="animTable"><tbody></tbody></table>
+
+<h2 data-i18n="secFetch">网络可达性（浏览器是否拦截私网地址）</h2>
+<p class="note" data-i18n="fetchNote">每行一个地址，超时 4 秒。no-cors 模式下只能看出"有应答 / 被拒绝 / 超时"，看不到状态码。https 页面上请求 http 地址会被当作混合内容拦截，结果同样是"被拒绝"。</p>
+<textarea id="fetchUrls">http://100.96.0.1/
+https://100.96.0.1:18443/
+http://192.168.1.1/
+https://192.168.1.1/
+http://captive.apple.com/hotspot-detect.html</textarea>
+<div class="bar">
+  <button class="primary" id="btnFetch" data-i18n="btnFetch">测试可达性</button>
+</div>
+<table id="fetchTable"><tbody></tbody></table>
+
+<h2 data-i18n="secOut">结果</h2>
+<div class="bar">
+  <button class="primary" id="btnCopy" data-i18n="btnCopy">复制结果</button>
+  <input id="postUrl" value="https://100.96.0.1:18443/probe" style="max-width: 24rem">
+  <button id="btnPost" data-i18n="btnPost">POST 到盒子</button>
+</div>
+<p class="note" id="outStatus"></p>
+<textarea id="outText" readonly></textarea>
+
+<div id="tapHint" data-i18n="tapHint">先轻点屏幕任意位置：记录 AudioContext 解锁前后的状态</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- i18n ----------
+  var STR = {
+    zh: {
+      title: 'AutoPlay 车机浏览器探测',
+      subtitle: '阶段 0 · 不连接 iPhone，只看浏览器能做什么',
+      rerun: '重新检测',
+      secEnv: '环境',
+      secMedia: '媒体能力（决定画面链路）',
+      secInteract: '需要轻点后才能测的',
+      interactNote: '点下面的按钮，每个结果会写进上表。全屏请求可能让页面重排；麦克风请求会弹出权限框。',
+      btnAudio: '轻点：解锁声音',
+      btnFullscreen: '请求全屏',
+      btnWakeLock: '请求屏幕常亮',
+      btnMic: '请求麦克风',
+      secTouch: '触控',
+      touchpad: '用一根或多根手指按住这里',
+      secAnim: '画布动画测试（行车中是否还在刷新）',
+      animNote: '停车时点开始，然后挂挡行驶。计数器停了就说明浏览器在行车时冻结了页面；计数器照常走说明 canvas 路线可用。',
+      btnAnim10: '开始 10 秒',
+      btnAnim60: '开始 60 秒',
+      btnAnimStop: '停止',
+      secFetch: '网络可达性（浏览器是否拦截私网地址）',
+      fetchNote: '每行一个地址，超时 4 秒。no-cors 模式下只能看出"有应答 / 被拒绝 / 超时"，看不到状态码。https 页面上请求 http 地址会被当作混合内容拦截，结果同样是"被拒绝"。',
+      btnFetch: '测试可达性',
+      secOut: '结果',
+      btnCopy: '复制结果',
+      btnPost: 'POST 到盒子',
+      tapHint: '先轻点屏幕任意位置：记录 AudioContext 解锁前后的状态',
+      yes: '有', no: '无', na: '不可用', pending: '待测', ok: '通过', fail: '失败', timeout: '超时',
+      copied: '已复制到剪贴板', copyFail: '剪贴板不可用，请长按下方文本框手动复制',
+      posting: '正在发送…', posted: '已发送（no-cors，无法确认服务端是否接收）', postFail: '发送失败：',
+      running: '进行中', done: '完成',
+      insecure: '非安全上下文：WebCodecs/getUserMedia/Wake Lock 不可用',
+      notTapped: '尚未轻点',
+      // row labels
+      r_ua: 'userAgent', r_chrome: 'Chrome 大版本', r_brands: 'userAgentData', r_screen: 'screen 尺寸',
+      r_inner: 'innerWidth × innerHeight', r_outer: 'outerWidth × outerHeight', r_dpr: 'devicePixelRatio',
+      r_vv: 'visualViewport.scale / 尺寸', r_secure: 'isSecureContext', r_proto: '页面协议与地址',
+      r_scheme: 'prefers-color-scheme（实时）', r_motion: 'prefers-reduced-motion', r_lang: 'navigator.language',
+      r_cores: 'hardwareConcurrency / deviceMemory', r_orient: 'screen.orientation', r_visibility: 'visibilityState（实时）',
+      r_pointer: 'pointer / hover 媒体查询', r_online: 'navigator.onLine',
+      r_vd: 'WebCodecs VideoDecoder', r_vd_h264: 'H.264 avc1.42E01F 1280×720', r_vd_h264_hw: '…硬件优先',
+      r_vd_hevc: 'HEVC hvc1 1280×720', r_vd_hevc_hw: '…硬件优先', r_vf: 'VideoFrame',
+      r_ad: 'WebCodecs AudioDecoder', r_ad_aac: 'AAC-LC mp4a.40.2', r_ad_opus: 'Opus', r_ae: 'AudioEncoder（麦克风上行）',
+      r_mse: 'MSE MediaSource', r_mse_h264: 'MSE avc1', r_mse_hevc: 'MSE hvc1', r_mse_aac: 'MSE mp4a.40.2', r_mse_flac: 'MSE flac',
+      r_rtc: 'WebRTC RTCPeerConnection', r_rtc_codecs: 'WebRTC 视频解码能力', r_mstp: 'MediaStreamTrackProcessor（主线程）',
+      r_gum: 'getUserMedia 存在', r_ms: 'Media Session API', r_fsEnabled: 'document.fullscreenEnabled', r_wl: 'Wake Lock 存在',
+      r_ws: 'WebSocket', r_worker: 'Worker / OffscreenCanvas', r_ac_before: 'AudioContext 状态（加载时）',
+      r_ac_after: 'AudioContext 状态（轻点后）', r_audioEl: '<audio> 播放（轻点后）', r_mediaKeys: 'Media Session 按键事件',
+      r_fs: 'requestFullscreen 结果', r_wlReq: 'Wake Lock 请求结果', r_micReq: 'getUserMedia 请求结果',
+      r_pe: 'PointerEvent', r_maxTouch: 'navigator.maxTouchPoints', r_touchNow: '当前触点数（实时）', r_touchMax: '最大同时触点数',
+      r_touchTypes: '收到的事件类型',
+      r_anim: '动画测试状态', r_animFrames: 'rAF 帧数 / 平均 fps', r_animTicks: 'setInterval 计数（100ms）',
+      r_animGap: '最大帧间隔', r_animVis: '期间 visibilitychange 次数', r_animHidden: '期间页面被隐藏的总时长',
+      n_h264: '主链路。不支持则只能走 MSE/WebRTC 兜底',
+      n_hevc: '可选。只有在支持且解码够快时才向 iPhone 申请 HEVC',
+      n_mse: 'B 档（驻车兼容）。Tesla 行车时 <video> 被禁',
+      n_rtc: 'C/C′ 档。需要盒子加 WebRTC 协议栈',
+      n_mstp: 'C′ 档关键：HTTP 页面下主线程可用才成立',
+      n_secure: 'WebCodecs 只在 https 下可用',
+      n_ms: '方向盘按键是否交给网页，看下方"按键事件"行',
+      n_ac: 'suspended 表示需要先轻点才出声（自动播放策略）',
+      n_fetch_opaque: '有应答（opaque）', n_fetch_blocked: '被拒绝 / 不可达 / 混合内容',
+      n_dpr: 'Tesla 2026.26 后默认缩放提高，CSS 像素 ≠ 物理像素',
+      n_vd_absent: 'VideoDecoder 不存在（非 https，或 Chromium < 94）'
+    },
+    en: {
+      title: 'AutoPlay car-browser probe',
+      subtitle: 'Stage 0 · no iPhone needed, only what the browser can do',
+      rerun: 'Re-run',
+      secEnv: 'Environment',
+      secMedia: 'Media capabilities (decide the display path)',
+      secInteract: 'Needs a tap first',
+      interactNote: 'Tap the buttons; each result lands in the table. Fullscreen may reflow the page; the mic request opens a permission prompt.',
+      btnAudio: 'Tap: unlock audio',
+      btnFullscreen: 'Request fullscreen',
+      btnWakeLock: 'Request wake lock',
+      btnMic: 'Request microphone',
+      secTouch: 'Touch',
+      touchpad: 'Hold one or more fingers here',
+      secAnim: 'Canvas animation test (does it keep painting while driving?)',
+      animNote: 'Start while parked, then shift into Drive. If the counter stops, the browser froze the page in Drive; if it keeps going, the canvas path is usable.',
+      btnAnim10: 'Start 10 s',
+      btnAnim60: 'Start 60 s',
+      btnAnimStop: 'Stop',
+      secFetch: 'Reachability (does the browser block private ranges?)',
+      fetchNote: 'One URL per line, 4 s timeout. In no-cors mode only "answered / refused / timeout" is visible, not the status code. An http URL from an https page is blocked as mixed content and also shows as "refused".',
+      btnFetch: 'Test reachability',
+      secOut: 'Results',
+      btnCopy: 'Copy results',
+      btnPost: 'POST to box',
+      tapHint: 'Tap anywhere first: records the AudioContext state before and after the tap',
+      yes: 'yes', no: 'no', na: 'n/a', pending: 'pending', ok: 'ok', fail: 'fail', timeout: 'timeout',
+      copied: 'Copied to clipboard', copyFail: 'Clipboard unavailable; long-press the text box below to copy',
+      posting: 'Sending…', posted: 'Sent (no-cors: server receipt cannot be confirmed)', postFail: 'Send failed: ',
+      running: 'running', done: 'done',
+      insecure: 'Insecure context: WebCodecs/getUserMedia/Wake Lock unavailable',
+      notTapped: 'not tapped yet',
+      r_ua: 'userAgent', r_chrome: 'Chrome major', r_brands: 'userAgentData', r_screen: 'screen size',
+      r_inner: 'innerWidth × innerHeight', r_outer: 'outerWidth × outerHeight', r_dpr: 'devicePixelRatio',
+      r_vv: 'visualViewport.scale / size', r_secure: 'isSecureContext', r_proto: 'page protocol and address',
+      r_scheme: 'prefers-color-scheme (live)', r_motion: 'prefers-reduced-motion', r_lang: 'navigator.language',
+      r_cores: 'hardwareConcurrency / deviceMemory', r_orient: 'screen.orientation', r_visibility: 'visibilityState (live)',
+      r_pointer: 'pointer / hover media queries', r_online: 'navigator.onLine',
+      r_vd: 'WebCodecs VideoDecoder', r_vd_h264: 'H.264 avc1.42E01F 1280×720', r_vd_h264_hw: '…prefer-hardware',
+      r_vd_hevc: 'HEVC hvc1 1280×720', r_vd_hevc_hw: '…prefer-hardware', r_vf: 'VideoFrame',
+      r_ad: 'WebCodecs AudioDecoder', r_ad_aac: 'AAC-LC mp4a.40.2', r_ad_opus: 'Opus', r_ae: 'AudioEncoder (mic uplink)',
+      r_mse: 'MSE MediaSource', r_mse_h264: 'MSE avc1', r_mse_hevc: 'MSE hvc1', r_mse_aac: 'MSE mp4a.40.2', r_mse_flac: 'MSE flac',
+      r_rtc: 'WebRTC RTCPeerConnection', r_rtc_codecs: 'WebRTC video decode capabilities', r_mstp: 'MediaStreamTrackProcessor (main thread)',
+      r_gum: 'getUserMedia present', r_ms: 'Media Session API', r_fsEnabled: 'document.fullscreenEnabled', r_wl: 'Wake Lock present',
+      r_ws: 'WebSocket', r_worker: 'Worker / OffscreenCanvas', r_ac_before: 'AudioContext state (on load)',
+      r_ac_after: 'AudioContext state (after tap)', r_audioEl: '<audio> playback (after tap)', r_mediaKeys: 'Media Session key events',
+      r_fs: 'requestFullscreen result', r_wlReq: 'Wake Lock request result', r_micReq: 'getUserMedia request result',
+      r_pe: 'PointerEvent', r_maxTouch: 'navigator.maxTouchPoints', r_touchNow: 'current touch points (live)', r_touchMax: 'max simultaneous touch points',
+      r_touchTypes: 'event types seen',
+      r_anim: 'animation test state', r_animFrames: 'rAF frames / average fps', r_animTicks: 'setInterval ticks (100 ms)',
+      r_animGap: 'longest frame gap', r_animVis: 'visibilitychange events during run', r_animHidden: 'total hidden time during run',
+      n_h264: 'Main path. Without it only the MSE/WebRTC fallbacks remain',
+      n_hevc: 'Optional. Request HEVC from the iPhone only if supported and fast enough',
+      n_mse: 'Tier B (parked fallback). Tesla blocks <video> in Drive',
+      n_rtc: 'Tier C/C′. Needs a WebRTC stack on the box',
+      n_mstp: 'Key for tier C′: must be on the main thread of an HTTP page',
+      n_secure: 'WebCodecs only in https',
+      n_ms: 'Whether wheel buttons reach the page: see the "key events" row below',
+      n_ac: 'suspended = a tap is needed before sound (autoplay policy)',
+      n_fetch_opaque: 'answered (opaque)', n_fetch_blocked: 'refused / unreachable / mixed content',
+      n_dpr: 'Tesla 2026.26+ raised the default zoom: CSS px ≠ device px',
+      n_vd_absent: 'VideoDecoder missing (not https, or Chromium < 94)'
+    }
+  };
+  var lang = 'zh';
+  try {
+    var saved = window.localStorage ? localStorage.getItem('autoplay-probe-lang') : null;
+    if (saved === 'en' || saved === 'zh') lang = saved;
+    else if (navigator.language && navigator.language.indexOf('zh') !== 0) lang = 'en';
+  } catch (e) { /* storage may be blocked */ }
+  function t(key) { var d = STR[lang] || STR.zh; return d[key] !== undefined ? d[key] : (STR.zh[key] !== undefined ? STR.zh[key] : key); }
+
+  // ---------- results store ----------
+  // results[section][key] = { value, status, note }
+  var results = {};
+  var ORDER = [];
+  function set(section, key, value, status, noteKey) {
+    if (!results[section]) results[section] = {};
+    if (!results[section][key]) ORDER.push(section + '.' + key);
+    results[section][key] = { value: value, status: status || 'na', note: noteKey || '' };
+    render(section);
+    renderOut();
+  }
+  function statusText(s) {
+    switch (s) {
+      case 'ok': return t('yes');
+      case 'bad': return t('no');
+      case 'warn': return t('fail');
+      case 'info': return '';
+      default: return t('na');
+    }
+  }
+  function render(section) {
+    var table = document.getElementById(section + 'Table');
+    if (!table) return;
+    var tbody = table.tBodies[0];
+    var rows = results[section] || {};
+    var html = '';
+    var keys = Object.keys(rows);
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      var r = rows[k];
+      var label = k.indexOf('fetch:') === 0 ? k.substring(6) : t('r_' + k);
+      var note = r.note ? '<small>' + esc(t(r.note)) + '</small>' : '';
+      html += '<tr><td class="k">' + esc(label) + '</td><td class="v">' + esc(String(r.value)) + note +
+        '</td><td class="s ' + r.status + '">' + esc(statusText(r.status)) + '</td></tr>';
+    }
+    tbody.innerHTML = html;
+  }
+  function renderAll() {
+    var secs = Object.keys(results);
+    for (var i = 0; i < secs.length; i++) render(secs[i]);
+    renderOut();
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;';
+    });
+  }
+  function serialize() {
+    var lines = ['# AutoPlay probe ' + new Date().toISOString(), '# ' + location.href];
+    for (var i = 0; i < ORDER.length; i++) {
+      var parts = ORDER[i].split('.');
+      var sec = parts[0], key = parts.slice(1).join('.');
+      var r = results[sec] && results[sec][key];
+      if (!r) continue;
+      lines.push(sec + '.' + key + ' = ' + String(r.value).replace(/\s+/g, ' ') + (r.status !== 'info' ? '  [' + r.status + ']' : ''));
+    }
+    return lines.join('\n');
+  }
+  function renderOut() {
+    var ta = document.getElementById('outText');
+    if (ta) ta.value = serialize();
+  }
+
+  // ---------- helpers ----------
+  function has(path) {
+    try {
+      var o = window;
+      var parts = path.split('.');
+      for (var i = 0; i < parts.length; i++) {
+        if (o === null || o === undefined) return false;
+        o = o[parts[i]];
+      }
+      return o !== undefined && o !== null;
+    } catch (e) { return false; }
+  }
+  function errName(e) {
+    if (!e) return 'error';
+    var n = e.name || 'Error';
+    var m = e.message || '';
+    return n + (m ? ': ' + m : '');
+  }
+  function withTimeout(promise, ms) {
+    return new Promise(function (resolve, reject) {
+      var done = false;
+      var timer = setTimeout(function () { if (!done) { done = true; reject(new Error('timeout ' + ms + 'ms')); } }, ms);
+      promise.then(function (v) { if (!done) { done = true; clearTimeout(timer); resolve(v); } },
+        function (e) { if (!done) { done = true; clearTimeout(timer); reject(e); } });
+    });
+  }
+
+  // ---------- environment ----------
+  function probeEnv() {
+    try { set('env', 'ua', navigator.userAgent, 'info'); } catch (e) { set('env', 'ua', errName(e), 'na'); }
+    try {
+      var m = /Chrom(?:e|ium)\/(\d+)/.exec(navigator.userAgent);
+      set('env', 'chrome', m ? m[1] : 'not Chromium', m ? (parseInt(m[1], 10) >= 94 ? 'ok' : 'warn') : 'bad');
+    } catch (e) { set('env', 'chrome', errName(e), 'na'); }
+    try {
+      if (navigator.userAgentData && navigator.userAgentData.brands) {
+        var b = navigator.userAgentData.brands.map(function (x) { return x.brand + ' ' + x.version; }).join(', ');
+        set('env', 'brands', b + (navigator.userAgentData.platform ? ' / ' + navigator.userAgentData.platform : ''), 'info');
+      } else set('env', 'brands', t('na'), 'na');
+    } catch (e) { set('env', 'brands', errName(e), 'na'); }
+    try { set('env', 'screen', screen.width + ' × ' + screen.height + ' (avail ' + screen.availWidth + ' × ' + screen.availHeight + ')', 'info'); } catch (e) { set('env', 'screen', errName(e), 'na'); }
+    try { set('env', 'inner', window.innerWidth + ' × ' + window.innerHeight, 'info'); } catch (e) { set('env', 'inner', errName(e), 'na'); }
+    try { set('env', 'outer', window.outerWidth + ' × ' + window.outerHeight, 'info'); } catch (e) { set('env', 'outer', errName(e), 'na'); }
+    try {
+      var dpr = window.devicePixelRatio;
+      set('env', 'dpr', String(dpr) + '  (' + Math.round(window.innerWidth * dpr) + ' × ' + Math.round(window.innerHeight * dpr) + ' device px)', 'info', 'n_dpr');
+    } catch (e) { set('env', 'dpr', errName(e), 'na'); }
+    try {
+      if (window.visualViewport) {
+        var vv = window.visualViewport;
+        set('env', 'vv', vv.scale + ' / ' + Math.round(vv.width) + ' × ' + Math.round(vv.height), 'info');
+      } else set('env', 'vv', t('na'), 'na');
+    } catch (e) { set('env', 'vv', errName(e), 'na'); }
+    try { set('env', 'secure', String(window.isSecureContext), window.isSecureContext ? 'ok' : 'bad', 'n_secure'); } catch (e) { set('env', 'secure', errName(e), 'na'); }
+    try { set('env', 'proto', location.protocol + '//' + location.host + location.pathname, 'info'); } catch (e) { set('env', 'proto', errName(e), 'na'); }
+    try {
+      var mq = window.matchMedia('(prefers-color-scheme: dark)');
+      var upd = function () { set('env', 'scheme', mq.matches ? 'dark' : 'light', 'info'); };
+      upd();
+      if (mq.addEventListener) mq.addEventListener('change', upd); else if (mq.addListener) mq.addListener(upd);
+    } catch (e) { set('env', 'scheme', errName(e), 'na'); }
+    try { set('env', 'motion', window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'reduce' : 'no-preference', 'info'); } catch (e) { set('env', 'motion', errName(e), 'na'); }
+    try { set('env', 'lang', navigator.language + ' [' + (navigator.languages || []).join(',') + ']', 'info'); } catch (e) { set('env', 'lang', errName(e), 'na'); }
+    try { set('env', 'cores', String(navigator.hardwareConcurrency) + ' / ' + (navigator.deviceMemory !== undefined ? navigator.deviceMemory + ' GB' : t('na')), 'info'); } catch (e) { set('env', 'cores', errName(e), 'na'); }
+    try { set('env', 'orient', screen.orientation ? screen.orientation.type + ' ' + screen.orientation.angle + '°' : t('na'), 'info'); } catch (e) { set('env', 'orient', errName(e), 'na'); }
+    try {
+      var vis = function () { set('env', 'visibility', document.visibilityState + (document.hasFocus && document.hasFocus() ? ' / focus' : ' / no focus'), 'info'); };
+      vis();
+      document.addEventListener('visibilitychange', vis);
+    } catch (e) { set('env', 'visibility', errName(e), 'na'); }
+    try {
+      set('env', 'pointer', 'pointer:' + (matchMedia('(pointer: coarse)').matches ? 'coarse' : matchMedia('(pointer: fine)').matches ? 'fine' : 'none') +
+        ' hover:' + (matchMedia('(hover: hover)').matches ? 'hover' : 'none'), 'info');
+    } catch (e) { set('env', 'pointer', errName(e), 'na'); }
+    try { set('env', 'online', String(navigator.onLine), 'info'); } catch (e) { set('env', 'online', errName(e), 'na'); }
+  }
+
+  // ---------- media ----------
+  function probeMedia() {
+    var hasVD = has('VideoDecoder');
+    set('media', 'vd', hasVD ? t('yes') : t('no'), hasVD ? 'ok' : 'bad', hasVD ? 'n_h264' : 'n_vd_absent');
+    set('media', 'vf', has('VideoFrame') ? t('yes') : t('no'), has('VideoFrame') ? 'ok' : 'bad');
+    var vdCfgs = [
+      ['vd_h264', { codec: 'avc1.42E01F', codedWidth: 1280, codedHeight: 720 }, 'n_h264'],
+      ['vd_h264_hw', { codec: 'avc1.42E01F', codedWidth: 1280, codedHeight: 720, hardwareAcceleration: 'prefer-hardware' }, ''],
+      ['vd_hevc', { codec: 'hvc1.1.6.L93.B0', codedWidth: 1280, codedHeight: 720 }, 'n_hevc'],
+      ['vd_hevc_hw', { codec: 'hvc1.1.6.L93.B0', codedWidth: 1280, codedHeight: 720, hardwareAcceleration: 'prefer-hardware' }, '']
+    ];
+    vdCfgs.forEach(function (c) {
+      var key = c[0], cfg = c[1], note = c[2];
+      if (!hasVD) { set('media', key, t('na'), 'na', note); return; }
+      set('media', key, t('pending'), 'na', note);
+      try {
+        withTimeout(window.VideoDecoder.isConfigSupported(cfg), 5000).then(function (r) {
+          var hw = r.config && r.config.hardwareAcceleration ? ' (' + r.config.hardwareAcceleration + ')' : '';
+          set('media', key, (r.supported ? 'supported' : 'unsupported') + hw, r.supported ? 'ok' : (key.indexOf('hevc') >= 0 ? 'warn' : 'bad'), note);
+        }, function (e) { set('media', key, errName(e), 'bad', note); });
+      } catch (e) { set('media', key, errName(e), 'bad', note); }
+    });
+
+    var hasAD = has('AudioDecoder');
+    set('media', 'ad', hasAD ? t('yes') : t('no'), hasAD ? 'ok' : 'bad');
+    var adCfgs = [
+      ['ad_aac', { codec: 'mp4a.40.2', sampleRate: 44100, numberOfChannels: 2 }],
+      ['ad_opus', { codec: 'opus', sampleRate: 48000, numberOfChannels: 2 }]
+    ];
+    adCfgs.forEach(function (c) {
+      var key = c[0], cfg = c[1];
+      if (!hasAD) { set('media', key, t('na'), 'na'); return; }
+      set('media', key, t('pending'), 'na');
+      try {
+        withTimeout(window.AudioDecoder.isConfigSupported(cfg), 5000).then(function (r) {
+          set('media', key, r.supported ? 'supported' : 'unsupported', r.supported ? 'ok' : 'warn');
+        }, function (e) { set('media', key, errName(e), 'warn'); });
+      } catch (e) { set('media', key, errName(e), 'warn'); }
+    });
+    set('media', 'ae', has('AudioEncoder') ? t('yes') : t('no'), has('AudioEncoder') ? 'ok' : 'warn');
+
+    var hasMSE = has('MediaSource');
+    set('media', 'mse', hasMSE ? t('yes') : t('no'), hasMSE ? 'ok' : 'warn', 'n_mse');
+    var mseCfgs = [
+      ['mse_h264', 'video/mp4; codecs="avc1.42E01F"'],
+      ['mse_hevc', 'video/mp4; codecs="hvc1.1.6.L93.B0"'],
+      ['mse_aac', 'audio/mp4; codecs="mp4a.40.2"'],
+      ['mse_flac', 'audio/mp4; codecs="flac"']
+    ];
+    mseCfgs.forEach(function (c) {
+      try {
+        if (!hasMSE) { set('media', c[0], t('na'), 'na'); return; }
+        var ok = window.MediaSource.isTypeSupported(c[1]);
+        set('media', c[0], (ok ? 'supported' : 'unsupported') + '  ' + c[1], ok ? 'ok' : 'warn');
+      } catch (e) { set('media', c[0], errName(e), 'warn'); }
+    });
+
+    var hasRTC = has('RTCPeerConnection');
+    set('media', 'rtc', hasRTC ? t('yes') : t('no'), hasRTC ? 'ok' : 'warn', 'n_rtc');
+    try {
+      if (hasRTC && window.RTCRtpReceiver && window.RTCRtpReceiver.getCapabilities) {
+        var caps = window.RTCRtpReceiver.getCapabilities('video');
+        var names = {};
+        (caps && caps.codecs || []).forEach(function (c) { names[c.mimeType.replace('video/', '')] = 1; });
+        set('media', 'rtc_codecs', Object.keys(names).join(', ') || t('na'), 'info');
+      } else set('media', 'rtc_codecs', t('na'), 'na');
+    } catch (e) { set('media', 'rtc_codecs', errName(e), 'na'); }
+    var hasMSTP = has('MediaStreamTrackProcessor');
+    set('media', 'mstp', hasMSTP ? t('yes') : t('no'), hasMSTP ? 'ok' : 'warn', 'n_mstp');
+    var hasGUM = has('navigator.mediaDevices.getUserMedia');
+    set('media', 'gum', hasGUM ? t('yes') : t('no'), hasGUM ? 'ok' : 'warn');
+    var hasMS = has('navigator.mediaSession');
+    set('media', 'ms', hasMS ? t('yes') : t('no'), hasMS ? 'ok' : 'warn', 'n_ms');
+    try { set('media', 'fsEnabled', String(document.fullscreenEnabled), document.fullscreenEnabled ? 'ok' : 'warn'); } catch (e) { set('media', 'fsEnabled', errName(e), 'na'); }
+    set('media', 'wl', has('navigator.wakeLock') ? t('yes') : t('no'), has('navigator.wakeLock') ? 'ok' : 'warn');
+    set('media', 'ws', has('WebSocket') ? t('yes') : t('no'), has('WebSocket') ? 'ok' : 'bad');
+    set('media', 'worker', (has('Worker') ? 'Worker' : '-') + ' / ' + (has('OffscreenCanvas') ? 'OffscreenCanvas' : '-'), has('Worker') ? 'ok' : 'warn');
+  }
+
+  // ---------- interaction (tap-gated) ----------
+  var audioCtx = null;
+  var tapped = false;
+  function probeAudioInitial() {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) { set('interact', 'ac_before', t('na'), 'na', 'n_ac'); return; }
+      audioCtx = new AC();
+      set('interact', 'ac_before', audioCtx.state, audioCtx.state === 'running' ? 'ok' : 'warn', 'n_ac');
+    } catch (e) { set('interact', 'ac_before', errName(e), 'na', 'n_ac'); }
+    set('interact', 'ac_after', t('notTapped'), 'na');
+    set('interact', 'audioEl', t('notTapped'), 'na');
+    set('interact', 'mediaKeys', t('pending'), 'na', 'n_ms');
+    set('interact', 'fs', t('notTapped'), 'na');
+    set('interact', 'wlReq', t('notTapped'), 'na');
+    set('interact', 'micReq', t('notTapped'), 'na');
+  }
+  function onFirstTap() {
+    if (tapped) return;
+    tapped = true;
+    try { document.getElementById('tapHint').className = 'hidden'; } catch (e) { /* ignore */ }
+    unlockAudio();
+  }
+  function unlockAudio() {
+    try {
+      if (!audioCtx) { set('interact', 'ac_after', t('na'), 'na'); return; }
+      var report = function () { set('interact', 'ac_after', audioCtx.state, audioCtx.state === 'running' ? 'ok' : 'warn'); };
+      var p = audioCtx.resume();
+      if (p && p.then) p.then(report, function (e) { set('interact', 'ac_after', errName(e), 'warn'); }); else report();
+      try {
+        var osc = audioCtx.createOscillator();
+        var g = audioCtx.createGain();
+        g.gain.value = 0.0001;
+        osc.connect(g); g.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.05);
+      } catch (e2) { /* ignore */ }
+    } catch (e) { set('interact', 'ac_after', errName(e), 'warn'); }
+    playSilentAudioElement();
+  }
+  // A 1 s silent 8 kHz mono WAV, built in memory so the page stays self-contained.
+  function silentWavUrl() {
+    var rate = 8000, seconds = 1, samples = rate * seconds;
+    var buf = new ArrayBuffer(44 + samples * 2);
+    var v = new DataView(buf);
+    function str(off, s) { for (var i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); }
+    str(0, 'RIFF'); v.setUint32(4, 36 + samples * 2, true); str(8, 'WAVE');
+    str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    str(36, 'data'); v.setUint32(40, samples * 2, true);
+    return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+  }
+  var audioEl = null;
+  function playSilentAudioElement() {
+    try {
+      if (!audioEl) {
+        audioEl = document.createElement('audio');
+        audioEl.loop = true;
+        audioEl.volume = 0.01;
+        audioEl.src = silentWavUrl();
+        document.body.appendChild(audioEl);
+      }
+      var p = audioEl.play();
+      if (p && p.then) {
+        p.then(function () { set('interact', 'audioEl', 'playing', 'ok'); installMediaSession(); },
+          function (e) { set('interact', 'audioEl', errName(e), 'warn'); });
+      } else { set('interact', 'audioEl', 'play() returned no promise', 'info'); installMediaSession(); }
+    } catch (e) { set('interact', 'audioEl', errName(e), 'warn'); }
+  }
+  var keyEvents = [];
+  function installMediaSession() {
+    try {
+      if (!navigator.mediaSession) { set('interact', 'mediaKeys', t('na'), 'na', 'n_ms'); return; }
+      if (window.MediaMetadata) {
+        navigator.mediaSession.metadata = new MediaMetadata({ title: 'AutoPlay probe', artist: 'press a wheel button', album: 'AutoPlay' });
+      }
+      var actions = ['play', 'pause', 'previoustrack', 'nexttrack', 'seekbackward', 'seekforward', 'stop'];
+      actions.forEach(function (a) {
+        try {
+          navigator.mediaSession.setActionHandler(a, function () {
+            keyEvents.push(a + '@' + new Date().toISOString().substr(11, 8));
+            set('interact', 'mediaKeys', keyEvents.join(' '), 'ok', 'n_ms');
+            if (a === 'pause' && audioEl) { try { audioEl.pause(); } catch (e) { /* ignore */ } }
+            if (a === 'play' && audioEl) { try { audioEl.play(); } catch (e) { /* ignore */ } }
+          });
+        } catch (e) { /* action not supported by this browser */ }
+      });
+      set('interact', 'mediaKeys', 'handlers installed, waiting for wheel/media buttons…', 'info', 'n_ms');
+    } catch (e) { set('interact', 'mediaKeys', errName(e), 'na', 'n_ms'); }
+  }
+  function requestFullscreen() {
+    try {
+      var el = document.documentElement;
+      var fn = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (!fn) { set('interact', 'fs', t('na'), 'bad'); return; }
+      var p = fn.call(el);
+      if (p && p.then) {
+        p.then(function () { set('interact', 'fs', 'granted (' + window.innerWidth + ' × ' + window.innerHeight + ')', 'ok'); },
+          function (e) { set('interact', 'fs', errName(e), 'warn'); });
+      } else {
+        setTimeout(function () {
+          var on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+          set('interact', 'fs', on ? 'granted (' + window.innerWidth + ' × ' + window.innerHeight + ')' : 'no promise, not fullscreen', on ? 'ok' : 'warn');
+        }, 500);
+      }
+    } catch (e) { set('interact', 'fs', errName(e), 'warn'); }
+  }
+  var wakeLock = null;
+  function requestWakeLock() {
+    try {
+      if (!navigator.wakeLock) { set('interact', 'wlReq', t('na'), 'warn'); return; }
+      withTimeout(navigator.wakeLock.request('screen'), 5000).then(function (s) {
+        wakeLock = s;
+        set('interact', 'wlReq', 'granted (' + s.type + ')', 'ok');
+        s.addEventListener('release', function () { set('interact', 'wlReq', 'released', 'info'); });
+      }, function (e) { set('interact', 'wlReq', errName(e), 'warn'); });
+    } catch (e) { set('interact', 'wlReq', errName(e), 'warn'); }
+  }
+  function requestMic() {
+    try {
+      if (!has('navigator.mediaDevices.getUserMedia')) { set('interact', 'micReq', t('na'), 'warn'); return; }
+      set('interact', 'micReq', t('pending'), 'na');
+      withTimeout(navigator.mediaDevices.getUserMedia({ audio: true }), 30000).then(function (stream) {
+        var tracks = stream.getAudioTracks();
+        var label = tracks.length ? tracks[0].label : '';
+        var settings = tracks.length && tracks[0].getSettings ? tracks[0].getSettings() : {};
+        set('interact', 'micReq', 'granted: ' + (label || 'unnamed') + (settings.sampleRate ? ' @' + settings.sampleRate + 'Hz' : '') +
+          (settings.echoCancellation !== undefined ? ' AEC=' + settings.echoCancellation : ''), 'ok');
+        tracks.forEach(function (tr) { try { tr.stop(); } catch (e) { /* ignore */ } });
+      }, function (e) { set('interact', 'micReq', errName(e), 'warn'); });
+    } catch (e) { set('interact', 'micReq', errName(e), 'warn'); }
+  }
+
+  // ---------- touch ----------
+  var touchMax = 0, touchTypes = {};
+  function probeTouch() {
+    set('touch', 'pe', has('PointerEvent') ? t('yes') : t('no'), has('PointerEvent') ? 'ok' : 'warn');
+    try { set('touch', 'maxTouch', String(navigator.maxTouchPoints), navigator.maxTouchPoints > 0 ? 'ok' : 'warn'); } catch (e) { set('touch', 'maxTouch', errName(e), 'na'); }
+    set('touch', 'touchNow', '0', 'info');
+    set('touch', 'touchMax', '0', 'info');
+    set('touch', 'touchTypes', '-', 'info');
+    var pad = document.getElementById('touchpad');
+    var active = {};
+    function count() { return Object.keys(active).length; }
+    function upd(type) {
+      touchTypes[type] = 1;
+      var n = count();
+      if (n > touchMax) touchMax = n;
+      set('touch', 'touchNow', String(n), 'info');
+      set('touch', 'touchMax', String(touchMax), touchMax >= 2 ? 'ok' : 'info');
+      set('touch', 'touchTypes', Object.keys(touchTypes).join(' '), 'info');
+    }
+    try {
+      pad.addEventListener('pointerdown', function (e) { active['p' + e.pointerId] = 1; upd('pointerdown:' + e.pointerType); e.preventDefault(); });
+      pad.addEventListener('pointerup', function (e) { delete active['p' + e.pointerId]; upd('pointerup'); });
+      pad.addEventListener('pointercancel', function (e) { delete active['p' + e.pointerId]; upd('pointercancel'); });
+      pad.addEventListener('pointerleave', function (e) { delete active['p' + e.pointerId]; upd('pointerleave'); });
+      pad.addEventListener('touchstart', function (e) {
+        touchTypes['touchstart'] = 1;
+        var n = e.touches.length;
+        if (n > touchMax) touchMax = n;
+        set('touch', 'touchNow', String(n), 'info');
+        set('touch', 'touchMax', String(touchMax), touchMax >= 2 ? 'ok' : 'info');
+        set('touch', 'touchTypes', Object.keys(touchTypes).join(' '), 'info');
+        e.preventDefault();
+      }, { passive: false });
+      pad.addEventListener('touchend', function (e) { touchTypes['touchend'] = 1; set('touch', 'touchNow', String(e.touches.length), 'info'); set('touch', 'touchTypes', Object.keys(touchTypes).join(' '), 'info'); });
+      pad.addEventListener('mousedown', function () { touchTypes['mousedown'] = 1; set('touch', 'touchTypes', Object.keys(touchTypes).join(' '), 'info'); });
+    } catch (e) { set('touch', 'touchTypes', errName(e), 'na'); }
+  }
+
+  // ---------- canvas animation ----------
+  var anim = { running: false, raf: 0, timer: 0, frames: 0, ticks: 0, start: 0, last: 0, maxGap: 0, vis: 0, hiddenMs: 0, hiddenAt: 0, duration: 10000 };
+  function animVisibility() {
+    if (!anim.running) return;
+    anim.vis++;
+    if (document.visibilityState === 'hidden') anim.hiddenAt = Date.now();
+    else if (anim.hiddenAt) { anim.hiddenMs += Date.now() - anim.hiddenAt; anim.hiddenAt = 0; }
+    animReport(false);
+  }
+  function animReport(final) {
+    var el = Date.now() - anim.start;
+    var fps = el > 0 ? (anim.frames * 1000 / el) : 0;
+    set('anim', 'anim', (final ? t('done') : t('running')) + ' ' + Math.round(el / 1000) + 's / ' + Math.round(anim.duration / 1000) + 's', final ? 'ok' : 'info');
+    set('anim', 'animFrames', anim.frames + ' / ' + fps.toFixed(1) + ' fps', fps >= 20 ? 'ok' : (fps > 0 ? 'warn' : 'bad'));
+    set('anim', 'animTicks', String(anim.ticks) + ' (expected ' + Math.round(el / 100) + ')', 'info');
+    set('anim', 'animGap', Math.round(anim.maxGap) + ' ms', anim.maxGap > 1000 ? 'warn' : 'info');
+    set('anim', 'animVis', String(anim.vis), anim.vis ? 'warn' : 'info');
+    set('anim', 'animHidden', Math.round(anim.hiddenMs / 1000) + ' s', anim.hiddenMs ? 'warn' : 'info');
+  }
+  function animStart(ms) {
+    animStop(true);
+    anim.running = true; anim.frames = 0; anim.ticks = 0; anim.maxGap = 0; anim.vis = 0; anim.hiddenMs = 0; anim.hiddenAt = 0;
+    anim.duration = ms; anim.start = Date.now(); anim.last = performance.now();
+    var canvas = document.getElementById('animCanvas');
+    var ctx = null;
+    try { ctx = canvas.getContext('2d', { alpha: false, desynchronized: true }); } catch (e) { try { ctx = canvas.getContext('2d'); } catch (e2) { ctx = null; } }
+    var counter = document.getElementById('animCounter');
+    function frame(now) {
+      if (!anim.running) return;
+      var gap = now - anim.last;
+      if (gap > anim.maxGap) anim.maxGap = gap;
+      anim.last = now;
+      anim.frames++;
+      var el = Date.now() - anim.start;
+      counter.textContent = anim.frames + '  (' + (el / 1000).toFixed(1) + ' s)';
+      if (ctx) {
+        try {
+          var w = canvas.width, h = canvas.height;
+          ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+          var x = (el / 2) % w;
+          ctx.fillStyle = '#30d158'; ctx.fillRect(x, 0, 60, h);
+          ctx.fillStyle = (anim.frames % 2) ? '#fff' : '#888';
+          ctx.fillRect(w - 80, 20, 60, 60);
+          ctx.fillStyle = '#fff'; ctx.font = 'bold 120px sans-serif'; ctx.textBaseline = 'middle';
+          ctx.fillText(String(anim.frames), 40, h / 2);
+        } catch (e) { /* ignore paint errors */ }
+      }
+      if (anim.frames % 15 === 0) animReport(false);
+      if (el >= anim.duration) { animStop(false); return; }
+      anim.raf = requestAnimationFrame(frame);
+    }
+    anim.raf = requestAnimationFrame(frame);
+    anim.timer = setInterval(function () { if (anim.running) anim.ticks++; }, 100);
+    document.addEventListener('visibilitychange', animVisibility);
+    animReport(false);
+  }
+  function animStop(silent) {
+    if (!anim.running) return;
+    anim.running = false;
+    try { cancelAnimationFrame(anim.raf); } catch (e) { /* ignore */ }
+    try { clearInterval(anim.timer); } catch (e) { /* ignore */ }
+    document.removeEventListener('visibilitychange', animVisibility);
+    if (anim.hiddenAt) { anim.hiddenMs += Date.now() - anim.hiddenAt; anim.hiddenAt = 0; }
+    if (!silent) animReport(true);
+  }
+
+  // ---------- fetch reachability ----------
+  function probeFetch() {
+    var text = document.getElementById('fetchUrls').value || '';
+    var urls = text.split('\n').map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
+    urls.forEach(function (url) {
+      var key = 'fetch:' + url;
+      set('fetch', key, t('pending'), 'na');
+      try {
+        var ctrl = window.AbortController ? new AbortController() : null;
+        var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 4000);
+        var t0 = performance.now();
+        var opts = { mode: 'no-cors', cache: 'no-store', credentials: 'omit', redirect: 'follow' };
+        if (ctrl) opts.signal = ctrl.signal;
+        withTimeout(fetch(url, opts), 4500).then(function (r) {
+          clearTimeout(timer);
+          var ms = Math.round(performance.now() - t0);
+          set('fetch', key, (r.type === 'opaque' ? t('n_fetch_opaque') : r.type + ' ' + r.status) + ' · ' + ms + ' ms', 'ok');
+        }, function (e) {
+          clearTimeout(timer);
+          var ms = Math.round(performance.now() - t0);
+          var aborted = e && (e.name === 'AbortError' || /timeout/.test(e.message || ''));
+          set('fetch', key, (aborted ? t('timeout') : errName(e)) + ' · ' + ms + ' ms', aborted ? 'warn' : 'bad', aborted ? '' : 'n_fetch_blocked');
+        });
+      } catch (e) { set('fetch', key, errName(e), 'bad'); }
+    });
+  }
+
+  // ---------- output ----------
+  function copyResults() {
+    var text = serialize();
+    var status = document.getElementById('outStatus');
+    var fallback = function () {
+      try {
+        var ta = document.getElementById('outText');
+        ta.focus(); ta.select();
+        var ok = document.execCommand && document.execCommand('copy');
+        status.textContent = ok ? t('copied') : t('copyFail');
+      } catch (e) { status.textContent = t('copyFail'); }
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { status.textContent = t('copied'); }, fallback);
+      } else fallback();
+    } catch (e) { fallback(); }
+  }
+  function postResults() {
+    var status = document.getElementById('outStatus');
+    var url = document.getElementById('postUrl').value.trim();
+    if (!url) return;
+    status.textContent = t('posting');
+    var body = JSON.stringify({ probe: 'autoplay-stage0', at: new Date().toISOString(), page: location.href, results: results, text: serialize() });
+    try {
+      withTimeout(fetch(url, { method: 'POST', mode: 'no-cors', cache: 'no-store', credentials: 'omit',
+        headers: { 'Content-Type': 'text/plain' }, body: body }), 8000)
+        .then(function () { status.textContent = t('posted'); },
+          function (e) { status.textContent = t('postFail') + errName(e); });
+    } catch (e) { status.textContent = t('postFail') + errName(e); }
+  }
+
+  // ---------- language ----------
+  function applyLang() {
+    try { document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en'; } catch (e) { /* ignore */ }
+    var nodes = document.querySelectorAll('[data-i18n]');
+    for (var i = 0; i < nodes.length; i++) {
+      var k = nodes[i].getAttribute('data-i18n');
+      nodes[i].textContent = t(k);
+    }
+    document.getElementById('langBtn').textContent = lang === 'zh' ? 'English' : '中文';
+    try { document.title = t('title'); } catch (e) { /* ignore */ }
+    renderAll();
+  }
+  function toggleLang() {
+    lang = lang === 'zh' ? 'en' : 'zh';
+    try { if (window.localStorage) localStorage.setItem('autoplay-probe-lang', lang); } catch (e) { /* ignore */ }
+    applyLang();
+  }
+
+  // ---------- wiring ----------
+  function runAll() {
+    try { probeEnv(); } catch (e) { set('env', 'ua', errName(e), 'na'); }
+    try { probeMedia(); } catch (e) { set('media', 'vd', errName(e), 'na'); }
+    try { probeAudioInitial(); } catch (e) { set('interact', 'ac_before', errName(e), 'na'); }
+    try { probeTouch(); } catch (e) { set('touch', 'pe', errName(e), 'na'); }
+    set('anim', 'anim', t('pending'), 'na');
+    set('anim', 'animFrames', '-', 'na');
+    set('anim', 'animTicks', '-', 'na');
+    set('anim', 'animGap', '-', 'na');
+    set('anim', 'animVis', '-', 'na');
+    set('anim', 'animHidden', '-', 'na');
+    if (!window.isSecureContext) {
+      try { document.getElementById('outStatus').textContent = t('insecure'); } catch (e) { /* ignore */ }
+    }
+  }
+  function on(id, ev, fn) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener(ev, function (e) { try { fn(e); } catch (err) { try { document.getElementById('outStatus').textContent = errName(err); } catch (e2) { /* ignore */ } } });
+  }
+  on('langBtn', 'click', toggleLang);
+  on('rerunBtn', 'click', function () {
+    results = {}; ORDER = []; keyEvents = []; touchMax = 0; touchTypes = {};
+    var tables = document.querySelectorAll('table');
+    for (var i = 0; i < tables.length; i++) tables[i].tBodies[0].innerHTML = '';
+    runAll(); applyLang();
+  });
+  on('btnAudio', 'click', function () { onFirstTap(); unlockAudio(); });
+  on('btnFullscreen', 'click', function () { onFirstTap(); requestFullscreen(); });
+  on('btnWakeLock', 'click', function () { onFirstTap(); requestWakeLock(); });
+  on('btnMic', 'click', function () { onFirstTap(); requestMic(); });
+  on('btnAnim10', 'click', function () { animStart(10000); });
+  on('btnAnim60', 'click', function () { animStart(60000); });
+  on('btnAnimStop', 'click', function () { animStop(false); });
+  on('btnFetch', 'click', probeFetch);
+  on('btnCopy', 'click', copyResults);
+  on('btnPost', 'click', postResults);
+  // pointerup / touchend / click are the events that grant user activation (a touch pointerdown does not),
+  // so the AudioContext.resume() inside onFirstTap runs with activation on both touch and mouse input.
+  document.addEventListener('pointerup', onFirstTap, { once: true, capture: true });
+  document.addEventListener('touchend', onFirstTap, { once: true, capture: true, passive: true });
+  document.addEventListener('click', onFirstTap, { once: true, capture: true });
+  window.addEventListener('resize', function () {
+    try {
+      set('env', 'inner', window.innerWidth + ' × ' + window.innerHeight, 'info');
+      if (window.visualViewport) set('env', 'vv', window.visualViewport.scale + ' / ' + Math.round(window.visualViewport.width) + ' × ' + Math.round(window.visualViewport.height), 'info');
+    } catch (e) { /* ignore */ }
+  });
+  window.addEventListener('error', function (e) {
+    try { document.getElementById('outStatus').textContent = 'JS error: ' + (e.message || e); } catch (err) { /* ignore */ }
+  });
+
+  runAll();
+  applyLang();
+})();
+</script>
+</body>
+</html>

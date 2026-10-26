@@ -1,0 +1,37 @@
+#!/bin/sh /etc/rc.common
+# AutoPlay measurement logger (tools/f50/measure.sh) as a procd service.
+# Install:  cp tools/f50/measure.sh /usr/sbin/autoplay-measure && chmod 755 /usr/sbin/autoplay-measure
+#           cp tools/f50/measure.init /etc/init.d/autoplay-measure && chmod 755 /etc/init.d/autoplay-measure
+#           printf 'CAR_IP=100.96.0.20\nINTERVAL=10\nFLUSH=60\n' > /etc/autoplay/measure.conf
+#           /etc/init.d/autoplay-measure enable && /etc/init.d/autoplay-measure start
+# Output:   /var/run/autoplay/measure.csv (tmpfs, bounded) and /opt/autoplay/state/measure/measure-<bootid>.csv
+# Report:   python3 tools/f50/measure-report.py /opt/autoplay/state/measure/measure-*.csv
+START=99
+STOP=10
+USE_PROCD=1
+PROG=/usr/sbin/autoplay-measure
+CONF=/etc/autoplay/measure.conf
+
+start_service() {
+	[ -x "$PROG" ] || { echo "autoplay-measure: $PROG missing"; return 1; }
+	mkdir -p /var/run/autoplay
+	procd_open_instance
+	procd_set_param command "$PROG"
+	procd_set_param env AUTOPLAY_MEASURE_CONF="$CONF"
+	# a crash restarts the logger after 5 s, at most 10 times per hour
+	procd_set_param respawn 3600 5 10
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	# a low priority: measurement must never compete with the receiver (H3)
+	procd_set_param nice 10
+	procd_close_instance
+}
+
+service_triggers() {
+	procd_add_reload_trigger autoplay
+}
+
+reload_service() {
+	stop
+	start
+}
