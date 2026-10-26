@@ -143,6 +143,32 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
     private fun selectedPresent(): Boolean = selectedPhone?.let { presence("present", it) } == true
     private fun selectPhone(): String? = presenceResult("select")?.takeIf { it.matches(Regex("(?:[0-9A-F]{2}:){5}[0-9A-F]{2}")) }
 
+    /**
+     * Each phone's iOS major version by its Bluetooth address (SETUP deviceID), kept in phone-ios.properties for its
+     * next connection: /info is answered before the phone states its version, and day/night works differently on iOS
+     * 26 (setNightMode) and 27 (appearance updates). A phone not seen yet is taken for iOS 27 or newer. Design from
+     * the dashplay-tesla fork of DashPlay (GPL-3.0), re-implemented.
+     */
+    private val iosFile: Path get() = config.stateDir.resolve("phone-ios.properties")
+    private fun knownIos(phone: String?): Int? = phone?.takeIf { it.isNotBlank() }?.let { address ->
+        runCatching { Properties().apply { Files.newInputStream(iosFile).use { load(it) } }.getProperty(address.uppercase())?.toIntOrNull() }.getOrNull()
+    }
+    private fun rememberIos(phone: String, version: String) {
+        val major = version.substringBefore('.').toIntOrNull() ?: return
+        if (phone.isBlank() || knownIos(phone) == major) return
+        runCatching {
+            val all = Properties()
+            runCatching { Files.newInputStream(iosFile).use { all.load(it) } }
+            all.setProperty(phone.uppercase(), major.toString())
+            Files.createDirectories(config.stateDir)
+            val temporary = iosFile.resolveSibling("${iosFile.fileName}.tmp")
+            Files.newOutputStream(temporary).use { all.store(it, "iPhone iOS major versions by Bluetooth address") }
+            Files.move(temporary, iosFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+        }.onFailure { log.warn("phone iOS version not saved: {}", it.message) }
+        log.info("phone {} runs iOS {}; appearance updates={}", phone, major, major >= APPEARANCE_MIN_IOS)
+    }
+    private fun appearanceUpdatesFor(phone: String?): Boolean = (knownIos(phone) ?: APPEARANCE_MIN_IOS) >= APPEARANCE_MIN_IOS
+
     val airPlayConfig: AirPlayConfig
         get() = AirPlayConfig(
             deviceName = config.deviceName,
@@ -166,6 +192,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             model = config.model,
             oemLabel = "盒子设置",
             icons = listOf(AirPlayIcon(180, 180, checkNotNull(javaClass.getResourceAsStream("/f50-settings.png")).use { it.readBytes() })),
+            appearanceUpdates = appearanceUpdatesFor(selectedPhone),
         )
 
     private val listener = object : AirPlaySessionListener {
@@ -202,7 +229,8 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         }
 
         override fun onDeviceInfo(session: AirPlaySession, info: AirPlayDeviceInfo) {
-            log.info("iPhone connected name={} model={} deviceId={}", info.name, info.model, info.deviceId)
+            log.info("iPhone connected name={} model={} deviceId={} ios={}", info.name, info.model, info.deviceId, info.osVersion.ifEmpty { "-" })
+            rememberIos(info.deviceId, info.osVersion)
             hub.setSessionState(true, info.name)
         }
 
@@ -777,6 +805,8 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         /** AirPlay pair-setup PIN advertised for first-time connections. */
         const val PAIRING_PIN = "3939"
         private const val PAIRINGS_FILE = "pairings.properties"
+        /** From this iOS major on, day/night goes through the appearance updates (AirPlayConfig.appearanceUpdates). */
+        private const val APPEARANCE_MIN_IOS = 27
         private const val SUPERVISOR_INTERVAL_MS = 2_000L
         private const val QUICK_RETRY_DELAY_MS = 1_500L
         internal const val QUICK_RETRY_WINDOW_MS = 15_000L

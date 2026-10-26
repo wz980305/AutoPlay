@@ -50,6 +50,10 @@ object AirPlayInfoPlist {
         }
         info["extendedFeatures"] = listOf("vocoderInfo", "enhancedRequestCarUI")
         info["displays"] = displays
+        if (config.appearanceUpdates) {
+            info["enablesUIAppearance"] = true
+            info["enablesMapAppearance"] = true
+        }
         info["hidDevices"] = listOf(
             AirPlayHid.touchHidDevice(config.main.widthPixels, config.main.heightPixels, MAIN_UUID),
             AirPlayHid.knobHidDevice(MAIN_UUID),
@@ -140,6 +144,22 @@ object AirPlayInfoPlist {
     private const val VIEW_AREA_ANIMATION_MILLIS = 300
 
     /**
+     * uiAppearanceUpdate / mapAppearanceUpdate for the main screen, on the event channel: the iOS 27 way to switch
+     * light and dark. appearanceMode and appearanceSetting are 2,2 for dark and 1,1 for light (the dashplay-tesla
+     * fork's observation in a car; the meaning of the two numbers beyond that is not documented anywhere we have).
+     */
+    fun appearanceCommands(night: Boolean): List<Map<String, Any?>> = listOf("uiAppearanceUpdate", "mapAppearanceUpdate").map { type ->
+        linkedMapOf(
+            "type" to type,
+            "params" to linkedMapOf(
+                "uuid" to MAIN_UUID,
+                "appearanceMode" to if (night) 2 else 1,
+                "appearanceSetting" to if (night) 2 else 1,
+            ),
+        )
+    }
+
+    /**
      * updateViewArea for the main screen, on the event channel: the iPhone acts on it with an animation duration
      * and the adjacent areas (DiPlay on a BYD Tang with iOS 27; key names beside AirPlayReceiverSessionViewAreaUpdate
      * in CarPlaySDK).
@@ -176,13 +196,10 @@ object AirPlayInfoPlist {
             "heightPhysical" to heightPhysical,
             "features" to (display.features ?: (DISPLAY_FEATURE_HIGH_FIDELITY_TOUCH or DISPLAY_FEATURE_KNOBS)),
             "primaryInputDevice" to display.primaryInputDevice,
-            // Automatic UI and map appearance (0), declared before any setNightMode. Without these a BYD Tang's
-            // CarPlay did not follow its runtime day/night commands; with them it did (DiPlay 4be0fa39,
-            // docs/TANG21_APPEARANCE.md). Our "always day" had not brightened the picture either (F50 2026-10-10).
-            "uiAppearanceMode" to 0,
-            "uiAppearanceSetting" to 0,
-            "mapAppearanceMode" to 0,
-            "mapAppearanceSetting" to 0,
+            // No uiAppearanceMode/Setting or mapAppearanceMode/Setting keys (DiPlay 4be0fa39 set the four to 0 for a BYD
+            // Tang): with them an iPhone on "automatic" stayed light whatever setNightMode said (dashplay-tesla fork,
+            // 2026-10-22). Day/night goes through the commands: setNightMode, and for iOS 27 the appearance updates
+            // declared by enablesUIAppearance/enablesMapAppearance (AirPlayConfig.appearanceUpdates).
         )
 
         // Several areas let the car move CarPlay between them (a browser window that changes shape) with

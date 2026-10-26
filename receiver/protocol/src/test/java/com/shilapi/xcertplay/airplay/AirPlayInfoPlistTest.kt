@@ -35,25 +35,34 @@ class AirPlayInfoPlistTest {
     }
 
     @Test
-    fun everyDisplayDeclaresAutomaticAppearance() {
-        val info = AirPlayInfoPlist.build(
-            AirPlayConfig(
-                deviceName = "test",
-                deviceId = "02:00:00:00:00:02",
-                btMac = "02:00:00:00:00:02",
-                sourceVersion = "366.0",
-                main = AirPlayDisplayConfig(widthPixels = 1280, heightPixels = 720),
-                cluster = AirPlayDisplayConfig(widthPixels = 800, heightPixels = 480),
-            ),
+    fun noDisplayPinsAnAppearanceAndIos27UpdatesAreDeclaredOnRequest() {
+        // The four DiPlay *AppearanceMode/Setting = 0 keys kept an iPhone on "automatic" light whatever setNightMode
+        // said (dashplay-tesla fork, 2026-10-22): none is declared. iOS 27 follows the appearance updates, declared
+        // in /info only when the receiver will send them.
+        val base = AirPlayConfig(
+            deviceName = "test",
+            deviceId = "02:00:00:00:00:02",
+            btMac = "02:00:00:00:00:02",
+            sourceVersion = "366.0",
+            main = AirPlayDisplayConfig(widthPixels = 1280, heightPixels = 720),
+            cluster = AirPlayDisplayConfig(widthPixels = 800, heightPixels = 480),
         )
-
+        val info = AirPlayInfoPlist.build(base)
         val displays = info["displays"] as List<*>
         assertEquals(2, displays.size)
         for (display in displays.map { it as Map<*, *> }) {
             for (key in listOf("uiAppearanceMode", "uiAppearanceSetting", "mapAppearanceMode", "mapAppearanceSetting")) {
-                assertEquals(key, 0, display[key])
+                assertFalse(key, display.containsKey(key))
             }
         }
+        assertFalse(info.containsKey("enablesUIAppearance"))
+        val newer = AirPlayInfoPlist.build(base.copy(appearanceUpdates = true))
+        assertEquals(true, newer["enablesUIAppearance"])
+        assertEquals(true, newer["enablesMapAppearance"])
+        val dark = AirPlayInfoPlist.appearanceCommands(true).map { it["type"] to (it["params"] as Map<*, *>) }
+        assertEquals(listOf("uiAppearanceUpdate", "mapAppearanceUpdate"), dark.map { it.first })
+        assertTrue(dark.all { it.second["appearanceMode"] == 2 && it.second["appearanceSetting"] == 2 && it.second["uuid"] == AirPlayInfoPlist.MAIN_UUID })
+        assertTrue(AirPlayInfoPlist.appearanceCommands(false).all { (it["params"] as Map<*, *>)["appearanceMode"] == 1 })
     }
 
     @Test
