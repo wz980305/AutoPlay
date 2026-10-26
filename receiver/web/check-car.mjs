@@ -192,9 +192,9 @@ assert.equal(aspectChanged({width:1280,height:720},{width:1920,height:720}),true
   Object.defineProperty(performance,'now',{value:realNow,configurable:true,writable:true}); }
 // Music must take exactly one route; voice/navigation keep the existing Web Audio path.
 const edges=[];let music;let packets=0;
-class Node {gain={value:1};connect(to){edges.push(to);}disconnect(){}}
+class Node {gain={value:1,cancelScheduledValues(){},setValueAtTime(v){this.value=v;},linearRampToValueAtTime(v,at){this.value=v;this.rampedTo=at;}};connect(to){edges.push(to);}disconnect(){}}
 globalThis.AudioContext=class {state='running';destination={speaker:true};createGain(){return new Node();}resume(){return Promise.resolve();}};
-globalThis.TestMusic=class {static supported(){return true;}static key(c){return JSON.stringify([c.sampleRate,c.channels,Array.from(c.description)]);}constructor(config){music=this;this.configKey=JSON.stringify([config.sampleRate,config.channels,Array.from(config.description)]);}unlocked=false;playing=false;configKey="";pause(){this.playing=false;this.paused=true;}volume(){}unlock(){this.unlocked=true;this.unlocks=(this.unlocks??0)+1;return Promise.resolve();}packet(){packets++;}close(){this.closed=true;}};
+globalThis.TestMusic=class {static supported(){return true;}static key(c){return JSON.stringify([c.sampleRate,c.channels,Array.from(c.description)]);}constructor(config){music=this;this.configKey=JSON.stringify([config.sampleRate,config.channels,Array.from(config.description)]);}unlocked=false;playing=false;configKey="";currentVolume=1;volumes=[];pause(){this.playing=false;this.paused=true;}volume(v){this.currentVolume=v;this.volumes.push(v);}unlock(){this.unlocked=true;this.unlocks=(this.unlocks??0)+1;return Promise.resolve();}packet(){packets++;}close(){this.closed=true;}};
 const {AudioEngine}=await load('audio',s=>s.replace(/^import .*?;$/gm,'')+'\nconst MusicOutput=globalThis.TestMusic;const MUSIC_ELEMENT=true;const AudioCodec={AacLc:1,Opus:2,Lpcm:3};\nfunction audioStartTime(){return 0;}');
 const audio=new AudioEngine(()=>{});assert.equal(edges.length,1);assert.equal(edges[0].speaker,true);
 audio.handleConfig({streamType:102,codec:1,name:'media',sampleRate:48000,channels:2,description:new Uint8Array([0x11,0x90])});
@@ -205,6 +205,18 @@ audio.stopStream(102);assert.equal(music.closed,undefined,"Pause retains native 
 const pausedMusic=music;
 audio.handleConfig({streamType:102,codec:1,name:'media',sampleRate:48000,channels:2,description:new Uint8Array([0x11,0x90])});
 assert.equal(music,pausedMusic,'Resume reuses the native media element');assert.equal(audio.streams.get(102).music,pausedMusic,'as the stream\'s music');
+{ // Duck/unduck (media_performance_audit #2): the iPhone lowers the music under a prompt, the page ramps the media
+  // gain and the element's volume over the given time, and a music stream that starts while ducked starts ducked.
+  const intervals=[];globalThis.window=globalThis.window??{};window.setInterval=f=>{intervals.push(f);return intervals.length;};window.clearInterval=id=>{intervals[id-1]=null;};
+  const tick=()=>{for(let i=0;i<100&&intervals.some(Boolean);i++)intervals.forEach(f=>f&&f());};
+  music.volumes.length=0;audio.duck(0.2,500);tick();
+  assert.ok(music.volumes.length>=5&&Math.abs(music.volumes.at(-1)-0.2)<1e-9,'the element volume ramps down in steps to the level');
+  assert.equal(audio.streams.get(102).gain.gain.value,0.2,'and the media gain ramps to it');
+  assert.deepEqual(audio.duckReport(),{ducks:1},'counted for the viewer log');
+  audio.stopStream(102);audio.handleConfig({streamType:102,codec:1,name:'media',sampleRate:48000,channels:2,description:new Uint8Array([0x11,0x90])});
+  assert.equal(music.currentVolume,0.2,'a stream that starts while ducked starts ducked');
+  audio.duck(1,300);tick();assert.ok(Math.abs(music.currentVolume-1)<1e-9,'unduck brings it back');assert.deepEqual(audio.duckReport(),{unducks:1});
+  assert.deepEqual(audio.duckReport(),{},'counted afresh each report'); }
 audio.stopAll();assert.equal(music.closed,true);assert.equal(audio.isPlaying,false);
 const {aacInit,aacFragment}=await load('aac-mp4');
 const init=aacInit(48000,2,new Uint8Array([0x11,0x90]));

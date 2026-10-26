@@ -71,6 +71,7 @@ export class MusicOutput {
     return this.element.play().catch(error=>{if((error as Error)?.name==='NotAllowedError')this.counts.musicBlocked++;throw error;});
   }
   volume(value:number){this.element.volume=Math.max(0,Math.min(1,value));}
+  get currentVolume(){return this.element.volume;}
   packet(data:Uint8Array){
     if(this.closed)return;
     this.lastPacket=performance.now();this.frames.push(data.slice());

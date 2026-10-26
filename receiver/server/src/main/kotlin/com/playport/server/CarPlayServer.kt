@@ -83,6 +83,10 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
     @Volatile private var presenceLearned = false
     @Volatile private var lastPeer: String? = null
 
+    /** duckAudio / unduckAudio commands seen, for the log. */
+    private val ducks = java.util.concurrent.atomic.AtomicLong(0)
+    private val unducks = java.util.concurrent.atomic.AtomicLong(0)
+
     @Volatile private var selectedPhone: String? = null
     @Volatile private var invitedPhone: String? = null
     @Volatile private var invitedAt = 0L
@@ -254,6 +258,24 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                     }.joinToString(",")
                 }
                 log.info("CarPlay resource ownership: {}", resources)
+            }
+            // duckAudio / unduckAudio (media_performance_audit #2): the iPhone wants the music under a prompt or Siri
+            // lower, then back. The page plays both when music goes through it (after Siri; any car-music-off setup),
+            // so it gets the level and the ramp. The volume comes as dB (<= 0) or as a linear fraction (0..1]; both
+            // are mapped to a gain. Counted and logged so a drive log shows what the phone really sends.
+            if (type == "duckAudio" || type == "unduckAudio") {
+                val raw = (params["volume"] as? Number)?.toDouble()
+                val level = when {
+                    type == "unduckAudio" -> 1.0
+                    raw == null -> DUCK_DEFAULT_LEVEL
+                    raw <= 0.0 -> Math.pow(10.0, raw / 20.0)
+                    raw <= 1.0 -> raw
+                    else -> DUCK_DEFAULT_LEVEL
+                }.coerceIn(0.0, 1.0)
+                val durationMs = ((params["durationMs"] as? Number)?.toLong() ?: 0L).coerceIn(0L, 5_000L)
+                val count = (if (type == "duckAudio") ducks else unducks).incrementAndGet()
+                log.info("audio {} level={} ms={} volume={} count={}", type, String.format(java.util.Locale.ROOT, "%.3f", level), durationMs, raw ?: "-", count)
+                hub.duck(level, durationMs)
             }
         }
 
@@ -807,6 +829,8 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         private const val PAIRINGS_FILE = "pairings.properties"
         /** From this iOS major on, day/night goes through the appearance updates (AirPlayConfig.appearanceUpdates). */
         private const val APPEARANCE_MIN_IOS = 27
+        /** Music gain under a prompt when duckAudio names no usable volume (about -14 dB). */
+        private const val DUCK_DEFAULT_LEVEL = 0.2
         private const val SUPERVISOR_INTERVAL_MS = 2_000L
         private const val QUICK_RETRY_DELAY_MS = 1_500L
         internal const val QUICK_RETRY_WINDOW_MS = 15_000L

@@ -100,6 +100,9 @@ export interface ServerMessage {
   sessionActive?: boolean;
   /** With sessionActive false: ended to apply a new display, the iPhone comes straight back. */
   restarting?: boolean;
+  /** "duck": the music's gain the iPhone asks for (1 = as sent) and the ramp to it in ms (duckAudio/unduckAudio). */
+  level?: number;
+  ms?: number;
   width?: number;
   height?: number;
   viewers?: number;

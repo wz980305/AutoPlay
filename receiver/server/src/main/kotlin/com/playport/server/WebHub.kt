@@ -93,6 +93,9 @@ data class ServerMessage(
     val message: String? = null,
     /** "session" ended because the receiver applies a new display: the phone comes back at once (keep the picture). */
     val restarting: Boolean? = null,
+    /** "duck": the music's gain the iPhone asks for (1.0 = as sent) and the ramp to it, from duckAudio/unduckAudio. */
+    val level: Double? = null,
+    val ms: Long? = null,
 )
 
 private class WsClient(
@@ -162,6 +165,11 @@ class WebHub(
 
     fun hostUiRequested() {
         broadcastJson(ServerMessage(type = "host-ui", sessionActive = sessionActive))
+    }
+
+    /** The iPhone's duckAudio/unduckAudio: every page ramps its music gain to [level] over [durationMs]. */
+    fun duck(level: Double, durationMs: Long) {
+        broadcastJson(ServerMessage(type = "duck", level = level, ms = durationMs))
     }
 
     fun videoCodec(type: Int): VideoCodec? = codecsByStream[type]
