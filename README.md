@@ -6,7 +6,7 @@ AutoPlay 是 [PlayPort](https://github.com/youcci/playport) + [DashPlay](https:/
 
 > 一台刷了 OpenWrt（[mu300-linux](https://github.com/dikeckaan/mu300-linux) 的 `mu300-linux` 镜像，厂商 5.4 内核，紫光展锐 T760）的**中兴 F50** 随身 WiFi，接车上 USB 供电，接收 iPhone 的无线 CarPlay，把画面显示在**特斯拉**车机自带的浏览器里。
 
-**状态：工程骨架，未上车验证。** 仓库里的接收端、盒子侧和 OpenWrt 包来自上游 2026-10-25 的快照（DashPlay `e3beae4`、openwrt-dashplay `5f17702`、PlayPort `9a0882d` + 63 个补丁），加上本仓库的工具和文档。本里程碑没有在任何一辆车上跑过；Kotlin 侧的改动也没有在编写环境里编译过（见 `receiver/docs/UNVERIFIED-KOTLIN.md`）。把它当成一份带代码的设计文档，而不是能直接装的产品。
+**状态：工程骨架，未上车验证。** 0.1.0 里程碑在上游 2026-10-25 的快照（DashPlay `e3beae4`、openwrt-dashplay `5f17702`、PlayPort `9a0882d` + 63 个补丁）之上，已经落地了三件事：接收端按"只做 F50 + 特斯拉"裁剪并修了审计里的一批问题（`receiver/docs/TRIM-LOG.md`）；盒子侧删掉其他平台和模式、改成特斯拉常量、补上分组件守护、状态模型、升级日志与回滚、证书状态、出厂重置，软件包改名 `autoplay`（`box/docs/TRIM-LOG.md`、`box/docs/STATUS-MODEL.md`）；本仓库的工具和文档。**没有验证的：** Kotlin 侧的改动没有编译过（编写环境没有 Gradle 和网络，`receiver/docs/UNVERIFIED-KOTLIN.md` 逐文件列出要看什么）；没有在任何一台 F50 上安装运行过；没有在任何一辆车上跑过。验证过的只有：网页端 `tsc` 无错、esbuild 能构建、四个 `check*.mjs` 通过；盒子侧 225 个单元测试通过；工具的语法检查、单元测试和探测页的无头渲染。把它当成一份带代码的设计文档，而不是能直接装的产品。
 
 **这不是 Apple 认证产品。** 运行需要用户自己提供配件认证身份；仓库、包、文档、测试里都不含身份材料，也不会自动下载。公开流传的共享身份随时可能被撤销（见 `NOTICE.md`、`docs/SECURITY.md`）。
 
@@ -18,9 +18,9 @@ F50 开 5 GHz 热点（100.96.0.1/24），用蓝牙 iAP2 引导 iPhone 连上来
 
 | 目录 | 内容 | 来源 |
 |---|---|---|
-| `receiver/` | Kotlin/JVM 接收端（iAP2、AirPlay、MFi 签名接口、WSS 服务）和 TypeScript 投屏页 `receiver/web/` | PlayPort 硬分叉，DashPlay 的补丁已按顺序落成 git 历史 |
-| `box/` | 盒子侧 Python：procd 守护、F50 蓝牙拉起（私有 BlueZ）、设置页、特斯拉模式、DuckDNS 证书、升级、安装脚本、测试 | DashPlay |
-| `openwrt/` | OpenWrt 25.12 的 apk 包：程序、jlink 裁剪的 Temurin 21 JRE、LuCI 插件 | openwrt-dashplay |
+| `receiver/` | Kotlin/JVM 接收端（iAP2、AirPlay、MFi 签名接口、WSS 服务）和 TypeScript 投屏页 `receiver/web/`。已按特斯拉裁剪：去掉有线、macOS、麦克风上行、正在播放/封面/媒体会话、小鹏全屏家族；默认性能模式关、1920 上限、300mm 界面；状态驱动的提示、恢复中遮罩、整宽声音解锁条、rem 字号、iOS 27 深浅色、导航播报压低音乐、触摸最短按压。`web/src/flags.ts` 放常量 | PlayPort 硬分叉，DashPlay 的 63 个补丁按顺序落成 git 历史，再加 22 个裁剪与修复提交 |
+| `box/` | 盒子侧 Python：procd 守护（`supervision.py` 分组件重启、蓝牙 10/20/40/60 秒重试、接收端存活探测）、F50 蓝牙拉起（私有 BlueZ）、状态模型 `/var/run/autoplay/status.json`（9 个域，每项 `{state, reason, since}`）、设置页（S1/S2 已修：F50 上没有"数据线"文案，蓝牙故障显示红条和原因）、特斯拉常量（LAN 100.96.0.1/24、联网检测常驻应答、7 个 uci 键）、DuckDNS 证书退避与状态、升级日志与回滚、时钟下限、出厂重置、安装脚本、测试 | DashPlay，删掉 Debian/N1/玩客云/STA/外接路由/IPv6/本地 CA/有线之后 |
+| `openwrt/` | OpenWrt 25.12 的 apk 包：`autoplay`（`/opt/autoplay`、`/etc/init.d/autoplay`、`/etc/config/autoplay`，postinst 从 `/opt/dashplay` 迁移，`CONFLICTS dashplay`）、`autoplay-jre`（jlink 裁剪的 Temurin 21）、`luci-app-autoplay`（概览 + 4 个标签） | openwrt-dashplay，改名并精简 |
 | `tools/` | 本仓库新增：`probe/`（车机浏览器探测页）、`f50/`（加固脚本、测量服务、报告工具）、`car/`（触摸延迟测法） | AutoPlay |
 | `docs/` | 架构、构建、测试、路线图、特斯拉专项、安全、决策记录 | AutoPlay |
 
@@ -30,6 +30,7 @@ F50 开 5 GHz 热点（100.96.0.1/24），用蓝牙 iAP2 引导 iPhone 连上来
 - 第 1 周的配置加固：[`tools/f50/harden.sh`](tools/f50/README.md)（`--dry-run` 先看）。
 - 测量体系：[`tools/f50/measure.sh`](tools/f50/README.md) + `measure-report.py`；触摸延迟：[`tools/car/touch-latency.md`](tools/car/touch-latency.md)。
 - 怎么编译：[`docs/BUILD.md`](docs/BUILD.md)；怎么测：[`docs/TEST.md`](docs/TEST.md)。
+- 这次裁剪了什么、哪些没编译：[`receiver/docs/TRIM-LOG.md`](receiver/docs/TRIM-LOG.md)、[`receiver/docs/UNVERIFIED-KOTLIN.md`](receiver/docs/UNVERIFIED-KOTLIN.md)、[`box/docs/TRIM-LOG.md`](box/docs/TRIM-LOG.md)；盒子状态的含义：[`box/docs/STATUS-MODEL.md`](box/docs/STATUS-MODEL.md)。
 - 特斯拉要注意什么：[`docs/TESLA.md`](docs/TESLA.md)。
 - 接下来做什么、什么已经做了：[`docs/ROADMAP.md`](docs/ROADMAP.md)、[`CHANGELOG.md`](CHANGELOG.md)。
 - 为什么这样决定：[`docs/DECISIONS.md`](docs/DECISIONS.md)。
