@@ -1,23 +1,32 @@
-/* iOS dark Settings language, shared with the box settings page (scripts/onecloud/settings_ui.py).
-   The player stays dark in both day and night: it sits next to CarPlay on a car screen. */
+/* iOS dark Settings language, shared with the box settings page. The player stays dark in both day and night: it sits
+   next to CarPlay on a car screen.
+   Scale (viewer audit §13): the root font size follows the screen, clamp(18px, 1.9vmin, 26px), and every size below
+   is in rem of it. 1920x1200 at DPR 1 gives 22.8 px; a Tesla page (1256x706 CSS at 1.53) gives 18 px CSS = 27.5 device
+   px, about 4.7 mm, the ISO 15008 floor for text read from the driver's seat. Nothing a driver reads is below 1rem. */
 :root { color-scheme: dark; --bg:#000; --cell:#1C1C1E; --cell-hi:#2C2C2E; --press:#3A3A3C; --sep:rgba(84,84,88,.6);
-  --label:#FFF; --secondary:rgba(235,235,245,.6); --tint:#0A84FF; --green:#30D158; --red:#FF453A; --gray:#8E8E93;
-  --fill:rgba(120,120,128,.24);
-  font:17px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
-  color:var(--label); background:var(--bg); -webkit-text-size-adjust:100%; }
+  --label:#FFF; --secondary:rgba(235,235,245,.72); --tint:#0A84FF; --tint-under-white:#0066D6; --green:#30D158; --red:#FF453A; --gray:#8E8E93;
+  --fill:rgba(120,120,128,.24); --overlay:rgba(20,20,22,.88); --overlay-edge:rgba(255,255,255,.28);
+  /* Type: display (the state headline), title (sheet and banner), body (rows, hints, toasts), caption (Advanced only), mono (HUD). */
+  --t-display:2.2rem; --t-title:1.6rem; --t-body:1.1rem; --t-caption:.9rem; --t-mono:.8rem;
+  /* Space, radii, touch targets (3.5rem is about 16 mm on a 1.5x car screen). */
+  --space-1:.5rem; --space-2:.75rem; --space-3:1rem; --space-4:1.5rem; --space-5:2rem;
+  --radius:.75rem; --radius-sheet:1.25rem; --hit-primary:3.5rem; --hit-secondary:2.75rem; --hit-gap:.5rem;
+  font-size:clamp(18px, 1.9vmin, 26px);
+  font-family:-apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
+  line-height:1.35; color:var(--label); background:var(--bg); -webkit-text-size-adjust:100%; }
 * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-body { margin:0; overflow:hidden; background:var(--bg); }
+body { margin:0; overflow:hidden; background:var(--bg); font-size:var(--t-body); }
 button, input, select { font:inherit; color:inherit; }
 button { cursor:pointer; touch-action:manipulation; }
-button:disabled { opacity:.4; cursor:default; }
+button:disabled { opacity:.45; cursor:default; }
 :focus-visible { outline:3px solid var(--tint); outline-offset:2px; }
 [hidden] { display:none !important; }
 .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
-.ico { width:22px; height:22px; flex:none; display:block; }
+.ico { width:1.4rem; height:1.4rem; flex:none; display:block; }
 .ico.dim { color:var(--secondary); }
 
-/* Pinned to the window's edges, not 100vh/100dvh: the XPeng's Chrome 120 kept 100dvh at 641 px after fullscreen
-   changes while the window was 579, and CarPlay's bottom row (home button) went below the screen (2026-10-13). */
+/* Pinned to the window's edges, not 100vh/100dvh: a car browser kept 100dvh at 641 px after fullscreen changes
+   while the window was 579, and CarPlay's bottom row (home button) went below the screen (2026-10-13). */
 #app { position:fixed; top:0; right:0; bottom:0; left:0; background:#000; }
 #screen-container { position:absolute; top:0; right:0; bottom:0; left:0; inset:0; display:flex; justify-content:center; align-items:center; }
 /* View areas: the area in use fills the view from the top left; the rest of the stream stays outside it. */
@@ -28,136 +37,139 @@ button:disabled { opacity:.4; cursor:default; }
 /* Recovering (viewer audit V1): the link dropped after a picture was shown. The last frame stays up under a 40 % veil
    with one centred notice, until the first new frame (cross-fade) or the hold runs out; touches are paused meanwhile
    (the canvas is inert). Never a timed toast: a dead picture must not look live. */
-#recovering { position:absolute; top:0; right:0; bottom:0; left:0; display:grid; place-items:center; padding:24px;
+#recovering { position:absolute; top:0; right:0; bottom:0; left:0; display:grid; place-items:center; padding:var(--space-4);
   background:rgba(0,0,0,.4); pointer-events:none; opacity:0; transition:opacity .25s ease-out; }
 #recovering.on { opacity:1; }
-#recovering .notice { display:flex; align-items:center; gap:14px; max-width:calc(100vw - 48px); padding:18px 28px; border-radius:18px;
-  background:rgba(20,20,22,.88); border:1px solid rgba(255,255,255,.28); color:#fff; font-size:26px; line-height:1.3; font-weight:600;
-  text-align:center; box-shadow:0 8px 30px rgba(0,0,0,.4); }
-#recovering .spinner { width:26px; height:26px; border-width:3px; }
+#recovering .notice { display:flex; align-items:center; gap:var(--space-2); max-width:calc(100vw - 3rem); padding:var(--space-3) var(--space-4);
+  border-radius:var(--radius-sheet); background:var(--overlay); border:1px solid var(--overlay-edge); color:#fff;
+  font-size:1.4rem; line-height:1.3; font-weight:600; text-align:center; box-shadow:0 8px 30px rgba(0,0,0,.4); }
+#recovering .spinner { width:1.4rem; height:1.4rem; border-width:3px; }
 
-/* Waiting screen: what is happening, then the three things a driver can do here. */
+/* Waiting screen: the state is the message (viewer audit V14). Brand as an eyebrow, the state line large, one reason
+   under it, then the things a driver can do here as full-height rows. */
 #overlay { position:absolute; top:0; right:0; bottom:0; left:0; inset:0; display:flex; align-items:center; justify-content:center;
-  padding:max(24px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom)); background:#000; overflow:auto; pointer-events:none; }
-.welcome { width:min(440px,100%); text-align:center; animation:rise .45s cubic-bezier(.2,.8,.2,1) both; }
-.welcome h1 { font-size:clamp(34px,6vw,48px); line-height:1.05; letter-spacing:-.025em; font-weight:700; margin:0 0 14px; }
-.status { display:flex; align-items:center; justify-content:center; gap:10px; font-size:20px; font-weight:600; margin:0; }
-#connection-hint { color:var(--secondary); font-size:15px; line-height:1.45; margin:8px auto 28px; max-width:30em; }
-.spinner { width:18px; height:18px; flex:none; border-radius:50%; border:2.5px solid var(--fill); border-top-color:var(--secondary); animation:spin .9s linear infinite; }
+  padding:max(var(--space-4),env(safe-area-inset-top)) var(--space-3) max(var(--space-4),env(safe-area-inset-bottom)); background:#000; overflow:auto; pointer-events:none; }
+.welcome { width:min(720px,60vw); min-width:min(100%,22rem); text-align:center; animation:rise .45s cubic-bezier(.2,.8,.2,1) both; }
+.welcome h1 { font-size:var(--t-body); line-height:1.2; letter-spacing:.08em; text-transform:uppercase; font-weight:600; color:var(--secondary); margin:0 0 var(--space-2); }
+.status { display:flex; align-items:center; justify-content:center; gap:var(--space-2); font-size:var(--t-display); line-height:1.15; font-weight:700; letter-spacing:-.02em; margin:0; }
+#connection-hint { color:var(--secondary); font-size:var(--t-body); line-height:1.45; margin:var(--space-2) auto var(--space-4); max-width:30em; min-height:1.45em; }
+.spinner { width:1.4rem; height:1.4rem; flex:none; border-radius:50%; border:3px solid var(--fill); border-top-color:var(--label); animation:spin .9s linear infinite; }
 #app[data-state=waiting] .spinner, #app[data-state=access] .spinner { display:none; }
 .actions { text-align:left; pointer-events:auto; }
 @keyframes rise { from { opacity:0; transform:translateY(8px); } }
 @keyframes spin { to { transform:rotate(1turn); } }
 
-/* Inset grouped list */
-.group { background:var(--cell); border-radius:12px; overflow:hidden; }
-.cell { display:flex; align-items:center; gap:12px; width:100%; min-height:52px; padding:10px 16px; position:relative;
-  background:none; border:0; border-radius:0; color:inherit; text-align:left; text-decoration:none; font:inherit; }
+/* Inset grouped list: every row at least the primary touch target. */
+.group { background:var(--cell); border-radius:var(--radius); overflow:hidden; }
+.cell { display:flex; align-items:center; gap:var(--space-2); width:100%; min-height:var(--hit-primary); padding:var(--space-1) var(--space-3); position:relative;
+  background:none; border:0; border-radius:0; color:inherit; text-align:left; text-decoration:none; font:inherit; font-size:var(--t-body); }
 .group > :not([hidden]) ~ :not([hidden]), .group details > .inner { border-top:.5px solid var(--sep); }
 a.cell, button.cell, summary.cell, label.cell { cursor:pointer; transition:background-color .12s ease-out; }
 a.cell:active, button.cell:active, summary.cell:active, label.cell:active { background:var(--press); transition:none; }
+button.cell:disabled { opacity:1; color:var(--secondary); }
 .cell .main { flex:1; min-width:0; }
 .cell .main b { display:block; font-weight:400; }
-.cell .main span { display:block; color:var(--secondary); font-size:13px; line-height:1.35; margin-top:1px; }
-.cell .value { color:var(--secondary); font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; max-width:55%; }
-.tile { width:30px; height:30px; flex:none; border-radius:7px; display:grid; place-items:center; color:#fff; }
-.tile .ico { width:19px; height:19px; }
+.cell .main span { display:block; color:var(--secondary); font-size:1rem; line-height:1.35; margin-top:.1rem; }
+.cell .value { color:var(--secondary); font-size:1rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; max-width:45%; }
+.tile { width:2rem; height:2rem; flex:none; border-radius:.45rem; display:grid; place-items:center; color:#fff; }
+.tile .ico { width:1.25rem; height:1.25rem; }
 .tile.blue { background:var(--tint); } .tile.green { background:var(--green); } .tile.gray { background:var(--gray); }
 .chev { flex:none; display:block; }
-.chev::after { content:""; display:block; width:8px; height:8px; margin-right:4px; border:solid rgba(235,235,245,.3); border-width:0 2px 2px 0; transform:rotate(-45deg); }
+.chev::after { content:""; display:block; width:.5rem; height:.5rem; margin-right:.25rem; border:solid rgba(235,235,245,.55); border-width:0 2px 2px 0; transform:rotate(-45deg); }
 details[open] > summary .chev::after { transform:rotate(45deg); }
 summary { list-style:none; } summary::-webkit-details-marker { display:none; }
-.group-title { color:var(--secondary); font-size:13px; margin:26px 16px 7px; }
-.foot { color:var(--secondary); font-size:13px; line-height:1.45; margin:7px 16px 0; }
-.gap { height:26px; }
-.foot + .group { margin-top:22px; }
-.inner { padding:12px 16px 16px; }
-/* Advanced: the switch rows and the form inside one details, separated like the group's own cells. */
-.inner.advanced { padding:0 0 16px; }
-.inner.advanced > .cell { padding-left:16px; padding-right:16px; }
+.group-title { color:var(--secondary); font-size:1rem; margin:var(--space-4) var(--space-3) var(--space-1); }
+.foot { color:var(--secondary); font-size:1rem; line-height:1.45; margin:var(--space-1) var(--space-3) 0; }
+.gap { height:var(--space-4); }
+.foot + .group { margin-top:var(--space-4); }
+.inner { padding:var(--space-2) var(--space-3) var(--space-3); }
+.inner.text p { color:var(--secondary); font-size:var(--t-caption); line-height:1.5; margin:0 0 var(--space-1); overflow-wrap:anywhere; }
+/* Advanced: the switch rows and the form inside one details, separated like the group's own cells; captions allowed. */
+.inner.advanced { padding:0 0 var(--space-3); }
+.inner.advanced > .cell { padding-left:var(--space-3); padding-right:var(--space-3); }
 .inner.advanced > .cell + .cell, .inner.advanced > form { border-top:.5px solid var(--sep); }
-.inner.advanced > form { padding:12px 16px 0; }
-.inner.advanced > .foot { margin-top:10px; }
-.inner.text p { color:var(--secondary); font-size:14px; line-height:1.5; margin:0 0 8px; overflow-wrap:anywhere; }
-select { background:none; border:0; color:var(--secondary); font-size:17px; text-align:right; min-width:0; max-width:55%; padding:6px 0; cursor:pointer; text-overflow:ellipsis; }
+.inner.advanced > form { padding:var(--space-2) var(--space-3) 0; }
+.inner.advanced > .foot { margin-top:var(--space-2); }
+.inner.advanced .cell .main span, .inner.advanced .foot { font-size:var(--t-caption); }
+select { background:none; border:0; color:var(--secondary); font-size:var(--t-body); text-align:right; min-width:0; max-width:50%; min-height:var(--hit-secondary); padding:.3rem 0; cursor:pointer; text-overflow:ellipsis; }
 select option { color:#000; }
 .cell select { margin-left:auto; }
 
-/* iOS switch */
-.switch { appearance:none; -webkit-appearance:none; flex:none; width:51px; height:31px; margin:0; border-radius:16px; background:var(--fill);
+/* iOS switch, scaled with the text. */
+.switch { appearance:none; -webkit-appearance:none; flex:none; width:3rem; height:1.8rem; margin:0; border-radius:.9rem; background:var(--fill);
   position:relative; cursor:pointer; transition:background-color .2s ease-out; }
-.switch::after { content:""; position:absolute; top:2px; left:2px; width:27px; height:27px; border-radius:50%; background:#fff;
+.switch::after { content:""; position:absolute; top:.1rem; left:.1rem; width:1.6rem; height:1.6rem; border-radius:50%; background:#fff;
   box-shadow:0 3px 8px rgba(0,0,0,.15), 0 3px 1px rgba(0,0,0,.06); transition:transform .25s cubic-bezier(.3,.7,.4,1); }
 .switch:checked { background:var(--green); }
-.switch:checked::after { transform:translateX(20px); }
+.switch:checked::after { transform:translateX(1.2rem); }
 
-.volume { gap:14px; }
-.volume input[type=range] { flex:1; min-width:0; height:32px; margin:0; accent-color:#fff; }
+.volume { gap:var(--space-2); }
+.volume input[type=range] { flex:1; min-width:0; height:var(--hit-secondary); margin:0; accent-color:#fff; }
 .volume output { min-width:3.2em; text-align:right; color:var(--secondary); font-variant-numeric:tabular-nums; }
 
-.btn { display:block; width:100%; min-height:50px; margin:14px 0 0; padding:13px 16px; border:0; border-radius:12px; background:var(--tint);
-  color:#fff; font-weight:600; text-align:center; transition:transform .1s ease-out; }
+.btn { display:block; width:100%; min-height:var(--hit-primary); margin:var(--space-2) 0 0; padding:var(--space-2) var(--space-3); border:0; border-radius:var(--radius); background:var(--tint-under-white);
+  color:#fff; font-weight:600; font-size:var(--t-body); text-align:center; transition:transform .1s ease-out; }
 .btn:active { transform:scale(.97); }
 .btn.plain { background:var(--fill); color:var(--tint); font-weight:400; }
-button.text { background:none; border:0; color:var(--tint); font-size:17px; font-weight:600; padding:10px 4px; min-height:44px; }
+button.text { background:none; border:0; color:var(--tint); font-size:var(--t-body); font-weight:600; padding:var(--space-1) var(--space-2); min-height:var(--hit-secondary); min-width:var(--hit-primary); }
 button.text:active { opacity:.5; }
 fieldset { border:0; padding:0; margin:0; min-width:0; }
-.pair { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:0 0 12px; }
-.pair label { display:flex; flex-direction:column; gap:6px; color:var(--secondary); font-size:13px; }
-.pair input, .pair select { width:100%; min-width:0; max-width:none; min-height:44px; padding:8px 12px; border:0; border-radius:10px;
-  background:var(--cell-hi); color:var(--label); font-size:17px; text-align:left; }
-#fallback-controls { display:flex; flex-wrap:wrap; gap:10px; }
-#fallback-controls button { min-height:44px; padding:10px 16px; border:0; border-radius:10px; background:var(--cell-hi); }
+.pair { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-2); margin:0 0 var(--space-2); }
+.pair label { display:flex; flex-direction:column; gap:.3rem; color:var(--secondary); font-size:var(--t-caption); }
+.pair input, .pair select { width:100%; min-width:0; max-width:none; min-height:var(--hit-secondary); padding:.4rem var(--space-2); border:0; border-radius:var(--radius);
+  background:var(--cell-hi); color:var(--label); font-size:var(--t-body); text-align:left; }
+#fallback-controls { display:flex; flex-wrap:wrap; gap:var(--hit-gap); }
+#fallback-controls button { min-height:var(--hit-primary); min-width:var(--hit-primary); padding:var(--space-1) var(--space-3); border:0; border-radius:var(--radius); background:var(--cell-hi); font-size:var(--t-body); }
 #fallback-controls button:active { background:var(--press); }
 
-/* Floating chrome over the live picture: translucent material, never an opaque bar. (The glass fullscreen button that
-   sat over CarPlay's own controls is gone: the Tesla hop lives in the welcome row and the settings sheet.) */
-.capsule { position:absolute; left:50%; transform:translateX(-50%); max-width:calc(100vw - 32px); padding:12px 20px; border-radius:22px;
-  background:rgba(44,44,46,.92); -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); border:.5px solid rgba(255,255,255,.14);
-  color:#fff; font-size:16px; line-height:1.45; text-align:center; box-shadow:0 8px 30px rgba(0,0,0,.4); }
-#toast { top:max(16px,env(safe-area-inset-top)); pointer-events:none; animation:drop .3s cubic-bezier(.2,.8,.2,1); }
+/* Notices over the live picture: a plain translucent fill with an edge, never a blur (a backdrop-filter above the
+   canvas costs the low-latency path, media_performance_audit #8). The toast sits bottom-centre, away from CarPlay's
+   navigation banner at the top (viewer audit V12). */
+.capsule { position:absolute; left:50%; transform:translateX(-50%); max-width:calc(100vw - 2rem); padding:var(--space-2) var(--space-4); border-radius:1.4rem;
+  background:var(--overlay); border:1px solid var(--overlay-edge);
+  color:#fff; font-size:1.3rem; line-height:1.4; text-align:center; box-shadow:0 8px 30px rgba(0,0,0,.4); }
+#toast { bottom:max(var(--space-4),env(safe-area-inset-bottom)); pointer-events:none; animation:drop .3s cubic-bezier(.2,.8,.2,1); }
 /* Debug overlay (debug-hud.ts): bottom right, away from the CarPlay dock on the left; takes no touches. */
-#debug-hud { position:absolute; right:max(8px,env(safe-area-inset-right)); bottom:max(8px,env(safe-area-inset-bottom)); z-index:2;
-  padding:6px 9px; border-radius:8px; background:rgba(0,0,0,.55); color:#fff; pointer-events:none; white-space:pre;
-  font:12px/1.45 ui-monospace,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums; }
+#debug-hud { position:absolute; right:max(.4rem,env(safe-area-inset-right)); bottom:max(.4rem,env(safe-area-inset-bottom)); z-index:2;
+  padding:.3rem .5rem; border-radius:.4rem; background:rgba(0,0,0,.6); color:#fff; pointer-events:none; white-space:pre;
+  font:var(--t-mono)/1.45 ui-monospace,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums; }
 #debug-hud[hidden] { display:none; }
 /* Sound unlock (viewer audit V7): in a Tesla the navigation prompts come through this page, and the browser plays
    nothing before a tap; every reload (the borderless hop, the 15 s reload) loses that again. So: a full-width bar at the
    very bottom edge (the picture fills the view, there is no chrome strip to put it in), large, that says "anywhere",
    pulses once when it appears, and shows only while the AudioContext is suspended AND a stream this page plays
    (type 100/101/102) has arrived; a car that routes everything over Bluetooth never sees it. */
-.unlock-bar { position:absolute; left:0; right:0; bottom:0; margin:0; padding:18px 24px max(18px,env(safe-area-inset-bottom)); border:0;
-  border-top:1px solid rgba(255,255,255,.28); background:rgba(20,20,22,.88); color:#fff; font-size:28px; line-height:1.3; font-weight:600;
+.unlock-bar { position:absolute; left:0; right:0; bottom:0; margin:0; padding:var(--space-3) var(--space-4) max(var(--space-3),env(safe-area-inset-bottom)); border:0;
+  border-top:1px solid var(--overlay-edge); background:var(--overlay); color:#fff; font-size:1.55rem; line-height:1.3; font-weight:600;
   text-align:center; box-shadow:0 -8px 30px rgba(0,0,0,.35); animation:pulse .7s ease-out 1; }
 .unlock-bar:active { background:rgba(44,44,46,.95); }
 @keyframes pulse { 0% { transform:translateY(12px); opacity:0; } 60% { transform:translateY(-3px); opacity:1; } 100% { transform:none; } }
-@keyframes drop { from { opacity:0; transform:translate(-50%,-10px); } }
-#error-banner { position:absolute; bottom:max(16px,env(safe-area-inset-bottom)); left:16px; right:16px; max-width:560px; max-height:40vh; margin:auto;
-  overflow:auto; padding:14px 16px; border-radius:14px; background:var(--cell); box-shadow:inset 4px 0 var(--red), 0 8px 30px rgba(0,0,0,.4); }
-#error-banner summary { color:var(--secondary); font-size:15px; padding:6px 0; cursor:pointer; }
-#error-text { overflow-wrap:anywhere; color:var(--secondary); font-size:14px; }
-#error-banner button { float:right; margin-top:-36px; }
+@keyframes drop { from { opacity:0; transform:translate(-50%,10px); } }
+#error-banner { position:absolute; bottom:max(var(--space-3),env(safe-area-inset-bottom)); left:var(--space-3); right:var(--space-3); max-width:36rem; max-height:40vh; margin:auto;
+  overflow:auto; padding:var(--space-2) var(--space-3); border-radius:var(--radius); background:var(--cell); box-shadow:inset 4px 0 var(--red), 0 8px 30px rgba(0,0,0,.4); }
+#error-banner > b { display:block; font-size:var(--t-title); font-weight:600; line-height:1.25; padding-right:var(--hit-primary); }
+#error-banner summary { color:var(--secondary); font-size:1rem; padding:.3rem 0; min-height:var(--hit-secondary); display:flex; align-items:center; cursor:pointer; }
+#error-text { overflow-wrap:anywhere; color:var(--secondary); font-size:1rem; }
+#error-banner button { position:absolute; top:var(--space-1); right:var(--space-1); }
 
 /* Settings sheet: slides in from the right edge and leaves the same way. */
-dialog { margin:0 0 0 auto; height:100%; max-height:100%; width:min(480px,100vw); max-width:100%; padding:0; border:0;
-  background:#000; color:inherit; overflow:auto; overscroll-behavior:contain; }
+dialog { margin:0 0 0 auto; height:100%; max-height:100%; width:min(30rem,100vw); max-width:100%; padding:0; border:0;
+  background:#000; color:inherit; overflow:auto; overscroll-behavior:contain; font-size:var(--t-body); }
 dialog[open] { animation:sheet-in .32s cubic-bezier(.2,.8,.2,1); }
 dialog.closing { animation:sheet-out .2s cubic-bezier(.4,0,1,1) forwards; }
 dialog::backdrop { background:rgba(0,0,0,.45); }
 @keyframes sheet-in { from { transform:translateX(100%); } }
 @keyframes sheet-out { to { transform:translateX(100%); } }
-header { position:sticky; top:0; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:16px;
-  padding:max(10px,env(safe-area-inset-top)) 16px 8px 20px; background:rgba(0,0,0,.72);
-  -webkit-backdrop-filter:blur(20px) saturate(180%); backdrop-filter:blur(20px) saturate(180%); }
+header { position:sticky; top:0; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:var(--space-3);
+  padding:max(var(--space-1),env(safe-area-inset-top)) var(--space-2) var(--space-1) var(--space-3); background:rgba(0,0,0,.92); }
 h2:focus { outline:none; }
-h2 { font-size:28px; line-height:1.15; font-weight:700; letter-spacing:-.02em; margin:6px 0; }
-.settings-body { padding:4px 16px max(32px,env(safe-area-inset-bottom)); }
-.settings-body > .group:first-child { margin-top:8px; }
+h2 { font-size:var(--t-title); line-height:1.15; font-weight:700; letter-spacing:-.02em; margin:.3rem 0; }
+.settings-body { padding:.25rem var(--space-3) max(var(--space-5),env(safe-area-inset-bottom)); }
+.settings-body > .group:first-child { margin-top:var(--space-1); }
 
-@media (max-width:480px) { dialog { width:100vw; } }
 @media (prefers-reduced-motion:reduce) {
   *, *::before, *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
 }
 @media (prefers-reduced-transparency:reduce) {
-  .capsule, header { -webkit-backdrop-filter:none; backdrop-filter:none; background:#2C2C2E; }
+  .capsule, .unlock-bar, #recovering .notice, header { background:#2C2C2E; }
 }
