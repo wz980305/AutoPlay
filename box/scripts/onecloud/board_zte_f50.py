@@ -5,10 +5,10 @@ and run a private D-Bus and BlueZ, as DashPlay's earlier F50-only service did (2
 The F50 runs a vendor 5.4 kernel; OpenWrt's bluez-daemon pulls in kmod-bluetooth for 6.12 (checked
 2026-10-12), so BlueZ lives in its own root (--setup makes it with apk, scripts off, from the
 official feeds) and is never installed into the system.
-uci autoplay.main (supervisor_openwrt.py):
-  option bluetooth_service '/usr/bin/python3 /opt/autoplay/board_zte_f50.py'
-  option dbus_address 'unix:path=/var/run/autoplay/bluetooth/system_bus_socket'
-It runs until a part exits; the supervisor then restarts everything.
+The supervisor (supervisor_openwrt.BluetoothManager) always starts this helper and talks to BlueZ at
+unix:path=/var/run/autoplay/bluetooth/system_bus_socket (BLUETOOTH_BUS); there is no uci option for it
+any more (the DashPlay options bluetooth_service/dbus_address are removed by the uci-defaults script).
+It runs until a part exits; the supervisor then restarts it with back-off and a reason word.
 """
 import argparse
 import os

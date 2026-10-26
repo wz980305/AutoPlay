@@ -1,120 +1,75 @@
-# openwrt-dashplay
+# AutoPlay packages for OpenWrt
 
 [中文](README.md)
 
-OpenWrt packages for [DashPlay](https://github.com/yizhixiaoheigou/DashPlay): receive an iPhone's CarPlay on an OpenWrt 25.12 router or portable Wi-Fi, and show it, with sound and touch, in the browser of the head unit or any other device.
+The three packages of [AutoPlay](../box/README.en.md) for the ZTE F50 (OpenWrt 25.12, `apk`):
 
-- `dashplay`: the program and its service (`/opt/autoplay`, `/etc/init.d/autoplay`, `/etc/config/autoplay`), for every architecture. The program itself is the `autoplay-bundle-<version>.tar` attached to each DashPlay release (`PKG_SOURCE_URL` and `PKG_HASH` in `dashplay/Makefile`); this repository keeps no second copy of the source.
-- `autoplay-jre`: the musl build of the Eclipse Temurin 21 JRE (OpenWrt has no Java), for aarch64 and x86_64.
-- `luci-app-autoplay` (with a Chinese translation): the admin page "Services → DashPlay".
+- `autoplay`: the program and its boot service (`/opt/autoplay`, `/etc/init.d/autoplay`, `/etc/config/autoplay`), architecture-independent. The program is the `autoplay-bundle-<version>.tar` attached to each AutoPlay release (`PKG_SOURCE_URL` and `PKG_HASH` in `autoplay/Makefile`); no second copy of the source lives here.
+- `autoplay-jre`: Eclipse Temurin 21 JRE, musl build (OpenWrt has no Java), aarch64 and x86_64.
+- `luci-app-autoplay` (with `luci-i18n-autoplay-zh-cn`): Services → AutoPlay in LuCI, an overview block and four tabs (network, iPhone, name, update).
 
-**No technical background needed**: once you have a Phicomm N1, a OneCloud (玩客云), a ZTE F50 running OpenWrt or another OpenWrt router, send this sentence to your AI assistant (Claude Code, Codex, WorkBuddy, Doubao, DeepSeek and the like all work). It asks which device you have and installs DashPlay step by step, calling you only to plug or unplug power or tap something on your phone:
+> **Not an Apple-certified product.** It needs the accessory identity you supply: [box/README.en.md](../box/README.en.md#accessory-identity).
 
-> Please download https://raw.githubusercontent.com/yizhixiaoheigou/DashPlay/main/skills/autoplay-install/SKILL.md with curl in a terminal and read all of it (not through a web summarizer, which may return an old or shortened copy), then follow it step by step to install DashPlay for me.
+Normally nothing here is installed by hand: the `autoplay` stage of the [installer](../box/scripts/f50-install.py) installs the packages and moves the LAN to `100.96.0.1/24`. Below is the manual route and what the packages do.
 
-> **This is not an Apple-certified product.** You have to supply your own accessory authentication identity; see DashPlay's README.
-
-DashPlay on a router or portable Wi-Fi you already run with OpenWrt: the iPhone connects wirelessly (Bluetooth + Wi-Fi) or by cable, and the head unit's browser opens a web page with CarPlay. The network stays configured in OpenWrt as usual; the plugin does not take it over.
-
-## 1. Requirements
-
-- OpenWrt **25.12** (the release that installs packages with `apk`), on an **aarch64 (ARM64) or x86_64** CPU (the only two with a Java build).
-- About 230 MB of free storage (including dependencies, mostly Java; measured: about 225 MB more after installation) and preferably 512 MB of memory or more.
-- Preferably 5 GHz Wi-Fi; wireless CarPlay also needs Bluetooth that Linux supports (built in or a USB dongle); wired CarPlay needs a USB port that works as a host (a port that takes a USB stick usually does).
-- Your own CarPlay authentication files (not included; see section 3).
-
-## 2. Install
-
-Download the packages from this repository's release page, copy them to the router (for example `scp` to `/tmp`), log in over SSH and run:
+## Installing by hand
 
 ```sh
 cd /tmp
 apk update
-apk add --allow-untrusted autoplay-jre-*_$(cat /etc/apk/arch).apk dashplay-2*.apk luci-app-autoplay-*.apk luci-i18n-autoplay-zh-cn-*.apk
-# Wireless CarPlay (Bluetooth); add kmod-btusb for a USB Bluetooth dongle:
-apk add bluez-daemon
-# Wired CarPlay (cable):
-apk add kmod-tun
+apk add --allow-untrusted autoplay-jre-*_$(cat /etc/apk/arch).apk autoplay-2*.apk luci-app-autoplay-*.apk luci-i18n-autoplay-zh-cn-*.apk
+python3 /opt/autoplay/board_zte_f50.py --setup     # the F50's own BlueZ (below)
 ```
 
-There is one `autoplay-jre` package per architecture; the command above picks the one that matches `cat /etc/apk/arch` (downloading only that one also works). The packages are not signed, hence `--allow-untrusted`.
+The packages are unsigned, hence `--allow-untrusted`. About 230 MB of storage, most of it Java.
 
-## 3. Add the CarPlay authentication files
+The postinst:
 
-Give DashPlay's [install notes for AI assistants (Chinese)](https://github.com/yizhixiaoheigou/DashPlay/blob/main/docs/DashPlay-AI安装说明.md) and your two files to your AI assistant, with the router's address and SSH user name and password; the files go to `/opt/autoplay/identity/offline-mfi/`. DashPlay starts working once they are in place.
+- sets the LAN to `100.96.0.1/24` (RFC 6598 shared address space, which the Tesla browser opens) with gateway and DNS in DHCP; a LAN on another address is changed, and car and phone reconnect once;
+- removes the DashPlay-era uci options and dhcp records, leaving seven options: `enabled`, `viewer_port`, `idle_release`, `duckdns_domain`, `duckdns_token`, `update_check`, `update_mirror`;
+- when coming from DashPlay, moves `/opt/dashplay/{state,identity}` and the private BlueZ root to `/opt/autoplay` and copies the options from `/etc/config/dashplay` (`autoplay` and `dashplay` conflict; the online update removes the old packages first);
+- primes Java's AppCDS archive, which saves a few seconds at boot.
 
-## 4. Set up and use
+### Bluetooth on the F50
 
-1. In the OpenWrt admin, "Services → DashPlay": check that it is running and choose the "Wi-Fi handed to the iPhone" (default automatic: the first access point that is up, 5 GHz first).
-2. Click "DashPlay settings (add iPhone)" to open the settings page (`http://<router address>:18080/`) and add the iPhone from the head unit's screen: on the iPhone open "Settings → Bluetooth" and stay on that page, compare the six digits and confirm on both sides. With a cable, tap "Trust" on the iPhone the first time.
-3. The head unit joins the router's Wi-Fi and opens `https://dashplay.lan:18443/` in its browser (or `https://<router address>:18443/`). When it warns about the certificate, choose "continue".
+The F50 runs a vendor 5.4 kernel; OpenWrt's `bluez-daemon` pulls in 6.12 kernel modules and breaks Bluetooth and Wi-Fi. `board_zte_f50.py --setup` installs BlueZ from the F50's own official feeds into the private root `/opt/autoplay-bluez`; the supervisor always brings Bluetooth up through it, retrying at 10/20/40 s and then every 60 s, and shows the reason on the settings page and in LuCI.
 
-When the Wi-Fi name, password or channel changes in the admin, DashPlay follows on its own; no reinstall needed.
+## Using it
 
-**When the head unit cannot open the page**: usually not needed; do only the step that applies. A certificate warning with "continue": continue. No way to continue: install the DashPlay CA certificate (settings page, "Download the box CA certificate") or use the own name below. The head unit refuses a LAN address: use "Head unit refuses every LAN address" or "Public IPv6 address for the name" below. All of them are on the tab "Services → DashPlay → When the head unit cannot open the page", each saying which problem it solves.
+- Settings page: `http://100.96.0.1:18080/` (`http://100.96.0.2/` redirects there).
+- Car browser: `https://autoplay.lan:18443/`; with a DuckDNS name, `https://<name>.duckdns.org:18443/` with a Let's Encrypt certificate and no warning.
+- LuCI Services → AutoPlay: overview (one line each for Bluetooth, iPhone, certificate and update, with the reason); "network" shows the AP and the subnet; "iPhone" invites or removes; "name" takes the DuckDNS name and token; "update" checks, upgrades, sets the mirror.
+- The Tesla's Wi-Fi needs "stay connected while driving", otherwise it drops the Wi-Fi as soon as the car leaves Park. If the car cannot see the AP, set the wireless country to CN and channel 149 (`--country`/`--channel` of the installer's `tesla` stage).
 
-**When the head unit refuses a LAN address (optional)**: some head unit browsers will not open a private address such as `192.168.x.x`. If the router has a public IPv6 address and hands IPv6 on to its Wi-Fi, set "Public IPv6 address for the name" in "Services → DashPlay → When the head unit cannot open the page" to "Also": the name (`dashplay.lan`, say) then also points at the router's own public IPv6 address. The head unit sees a public address, but that address is the router itself, so the picture still comes straight over the Wi-Fi, without the internet and without mobile data. DashPlay follows a new address (a mobile network reconnecting). "Only" leaves the LAN address out, to check that this path works; the DashPlay settings page then opens at `http://<router address>:18080/`. The head unit must be on the router's Wi-Fi; client isolation or a browser that only opens listed sites is not got round this way. Command: `uci set autoplay.main.public_ipv6=1 && uci commit autoplay && /etc/init.d/autoplay restart`.
+Status and reason words: [box/docs/STATUS-MODEL.md](../box/docs/STATUS-MODEL.md).
 
-**Tesla (optional)**: turn on "Tesla mode" in "Services → DashPlay → General". The network of the router's own Wi-Fi moves to `100.96.0.1/24` (Tesla's browser opens no LAN address such as `192.168.x.x`, not even by name, but opens this carrier shared range), and the name and own name follow; music, calls and Siri are left to the Tesla over Bluetooth (pair the iPhone with the car and pick it as the media source: steering wheel, media card and volume are the car's own), while the page shows the picture and plays navigation prompts, louder; the page's fullscreen button goes through v.qq.com and 1905.com back to the page without the address bar. **Turn on "Remain connected in Drive" for the Tesla's Wi-Fi**: otherwise it leaves the Wi-Fi as soon as it leaves Park (reverse, drive) and the picture stops until it is back in Park. Afterwards reconnect the car and phones to the Wi-Fi and open the admin at `http://100.96.0.1/`; turning it off puts the previous address back. If the Tesla does not see the Wi-Fi, set the country to China and the channel to 149. For another car that refuses LAN addresses, "Head unit refuses every LAN address" in "When the head unit cannot open the page" moves the network alone.
+## Updating
 
-**Sound over the car's Bluetooth (optional, any car)**: when the car itself can pair with the iPhone over Bluetooth, turn on "Music over the car's Bluetooth" in "General": the steering wheel, media card and volume are the car's own, and the page shows the picture and plays navigation prompts, louder. "Calls and Siri over the car's Bluetooth" keeps calls and Siri on the car's own microphone and speakers instead of the page (worth a try when calls through the page echo). Either works alone; Tesla mode includes both. Pair the iPhone with the car first and pick it as the media source. Command: `uci set autoplay.main.car_music=1` (or `car_voice=1`), then `uci commit autoplay && /etc/init.d/autoplay restart`. A Tesla update that blocks this range too would end this way.
+Services → AutoPlay → update, or "程序更新" on the settings page: one check a day, a new version is only announced; "upgrade now" downloads the signed release from GitHub (or a mirror), does not run while CarPlay is in use, backs up pairings, certificate and settings first, stops if the plan touches the kernel, kernel modules or the system BlueZ, and reinstalls the previous version when the new one does not come up (receiver not answering within about 4 minutes, or Bluetooth not powered). Progress is journaled in `state/update-journal.json`; after a power cut the next boot finishes or rolls back.
 
-**Releasing the iPhone when nobody watches (optional)**: when no page has shown the picture for 5 minutes, DashPlay ends wireless CarPlay and the iPhone stops encoding and sending its screen, so a phone left near a router that stays on (at home, say) does not keep running hot and slow. The cost: a page opened again after that has to invite the iPhone, about 7 s to the picture; a page that stays open (also while hidden by the reverse camera or another app) is not affected, nor is wired CarPlay. For the picture at once, set "Release the iPhone after (seconds)" in "Services → DashPlay" to 0 (never) or another number of seconds, or run `uci set autoplay.main.idle_release=0 && uci commit autoplay && /etc/init.d/autoplay restart`.
+By hand: `apk update && apk add --upgrade --simulate --allow-untrusted /tmp/autoplay-upgrade/*.apk` to see the plan, then without `--simulate` once it contains user-space packages only. Do not remove and reinstall, do not sysupgrade, do not overwrite `/opt/autoplay/{state,identity}`.
 
-**When the head unit's browser blocks the certificate with no "continue" (optional)**: sign up for a free sub-domain at duckdns.org and enter it ("Own name", e.g. `mycar`) with the "DuckDNS token" under "Services → DashPlay → When the head unit cannot open the page". The address name becomes `mycar.duckdns.org`: DashPlay points it at the router and uses the bundled acme.sh to get a free Let's Encrypt certificate (DNS validation, no open port; the router needs internet access), renewed automatically. The certificate is used from DashPlay's next start; the head unit then opens `https://mycar.duckdns.org:18443/` without a warning. The DashPlay settings page shows its progress and end date under "When the head unit cannot open the page".
-
-**When the router joins the car hotspot or a portable Wi-Fi as a client**: the head unit does not use the router's DNS, so use `https://<router's address on that network>:18443/`; and that network must be in a firewall zone that accepts input (the default wan zone rejects the iPhone's connections; the settings page warns about it).
-
-**Another router's Wi-Fi (optional)**: for phones and the head unit on a travel router with better radios (GL.iNet, Cudy and the like) while DashPlay stays on this router (a ZTE F50 giving 4G and DashPlay, say):
-1. Set the travel router up as an **access point bridged into this router's LAN**: its link to this router (a cable port, or the USB tethering interface it gets from the F50's USB port, cdc_ncm) and its Wi-Fi in one bridge, its own DHCP off, so that phones and the head unit get their addresses here. Give its Wi-Fi a **fixed channel**.
-2. In "Services → DashPlay" on this router, choose "Another router's Wi-Fi" as the Wi-Fi handed to the iPhone and enter its name, password type, password and **the channel it actually uses** (see its status page or a phone's Wi-Fi details; some routers move the primary channel, 36 became 40 in a test); "bridged into network" is usually `lan`.
-3. The head unit joins the travel router's Wi-Fi and opens `https://dashplay.lan:18443/` as usual.
-
-When that Wi-Fi's name, password or channel changes, change it here too. After Tesla mode moves the network, devices on the travel router must rejoin its Wi-Fi by hand. Tried on 2026-10-19 with a OneCloud standing in for the travel router (the F50's USB port in the OneCloud, its USB Wi-Fi adapter bridged as the access point): the iPhone joined and showed the picture, about 90 ms behind, no dropped frames. Commands: `uci set autoplay.main.wifi=external`, then `external_ssid`, `external_key`, `external_security` (wpa2/wpa3/open) and `external_channel`, and `uci commit autoplay && /etc/init.d/autoplay restart`.
-
-When the head unit's browser cannot open the page or blocks the certificate, see section 4 of the [AI install notes (Chinese)](https://github.com/yizhixiaoheigou/DashPlay/blob/main/docs/DashPlay-AI安装说明.md).
-
-**Calls and Siri** use the head unit's microphone through the browser and play on its media channel (not the headrest speakers); the other side may hear its own echo. While the iPhone is also on the car's own Bluetooth, the car takes the call and the microphone and the other side hears nothing: disconnect the iPhone from the car's own Bluetooth to call over CarPlay. An app of the head unit playing sound pauses the iPhone; press play once on the steering wheel or the media card to go on.
-
-## 5. Security note
-
-As with the boxes, anyone who can join this Wi-Fi can open the CarPlay page and the settings page. Keep that in mind on your main home router; on a router used only in the car it matters little.
-
-## 6. Uninstall
+## Removing
 
 ```sh
-apk del luci-i18n-autoplay-zh-cn luci-app-autoplay dashplay autoplay-jre
+apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
 ```
 
-Added iPhones, certificates and the authentication files stay in `/opt/autoplay/`; delete them by hand when you no longer need them.
-
-## ZTE F50 (MU300 OpenWrt)
-
-The F50 runs a vendor 5.4 kernel and must not get the system `bluez-daemon` (it pulls in 6.12 kernel modules). DashPlay brings the F50's own Bluetooth start-up with BlueZ in a separate directory:
-
-```sh
-python3 /opt/autoplay/board_zte_f50.py --setup      # makes /opt/autoplay-bluez from the F50's own official package feeds
-uci set autoplay.main.bluetooth_service='/usr/bin/python3 /opt/autoplay/board_zte_f50.py'
-uci set autoplay.main.dbus_address='unix:path=/var/run/autoplay/bluetooth/system_bus_socket'
-uci commit autoplay && /etc/init.d/autoplay restart
-```
-
-The F50's USB port cannot act as a host, so it is wireless only. This repository contains no tools or firmware for flashing OpenWrt onto the F50.
+Added iPhones, the certificate and the identity stay under `/opt/autoplay/`; delete them by hand when you are sure (or use the settings page's factory reset first). The LAN is not changed back.
 
 ## Building the packages
 
-Needs Docker (the container needs no privileges, host network or devices).
+Needs Docker (the container gets no privileges, host network or devices).
 
 ```sh
-sh scripts/build-packages.sh out/                         # the SDK downloads the program bundle from DashPlay's release and checks it
-sh scripts/build-packages.sh out/ autoplay-bundle.tar     # or uses a bundle you built yourself
-sh scripts/lab-test.sh out/                               # installs, starts, checks and removes them in a clean OpenWrt 25.12.5 container
+sh scripts/build-packages.sh out/                         # the SDK downloads the release bundle and checks its hash
+sh scripts/build-packages.sh out/ autoplay-bundle.tar     # or your own bundle (box/scripts/build-bundle.sh)
+sh scripts/lab-test.sh out/                               # install, start, check, remove in a clean OpenWrt 25.12.5 container
+sh scripts/bump-autoplay.sh <version> autoplay-bundle-<version>.tar   # after a release: version and hash in autoplay/Makefile
 ```
 
-This repository also works as a package feed: add `src-git dashplay https://github.com/yizhixiaoheigou/openwrt-dashplay.git` to the OpenWrt SDK's `feeds.conf`. Dependencies are runtime-only (`EXTRA_DEPENDS`), so packaging compiles neither Python nor kernel modules.
-
-After a new DashPlay release, download its `autoplay-bundle-<version>.tar` and run `sh scripts/bump-autoplay.sh <version> autoplay-bundle-<version>.tar` to update the version and hash in `dashplay/Makefile`, then build.
+Dependencies are runtime-only (`EXTRA_DEPENDS`); the build compiles no Python and no kernel modules.
 
 ## License and trademarks
 
-GPL-3.0; see [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md). CarPlay, iPhone, AirPlay and MFi are trademarks of Apple Inc.; this project is not affiliated with or endorsed by Apple.
+GPL-3.0, see [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md). CarPlay, iPhone, AirPlay and MFi are trademarks of Apple Inc.; this project is not affiliated with or endorsed by Apple.
