@@ -19,15 +19,33 @@ import threading
 import time
 import urllib.parse
 
+import factory_reset
 import own_domain
 from pairing_window import PairingWindow
 import settings_ui as ui
+import state as state_files
 import tesla_checks
 import diagnostics
 import update
 
 MAX_BODY = 4096
 CHECK_LOG_EVERY = 60   # s: one diag line per car connectivity check and reply, repeats counted into the next
+# Names a request may carry in its Host header besides the box's own addresses (reliability_audit #16: a Host
+# check against DNS rebinding; the Tesla check names are answered before this and never reach the page).
+LOCAL_HOSTS = {state_files.LOCAL_NAME, "dashplay.lan", state_files.MDNS_NAME, "localhost"}
+BLUETOOTH_TEXT = {   # reason codes of the bluetooth domain (status_model) -> what the owner reads (S2)
+    "helper-starting": "蓝牙正在启动",
+    "powering": "蓝牙适配器正在上电",
+    "adapter-not-powered": "蓝牙适配器没有上电，盒子会一直重试",
+    "controller-init-failed": "蓝牙芯片初始化失败（Marlin3 固件没有接受配置）",
+    "controller-timeout": "蓝牙芯片没有响应",
+    "bluez-missing": "盒子上缺少蓝牙程序（安装没有完成：重新运行装机的 dashplay 步骤）",
+    "rfkill": "找不到唯一的蓝牙开关（rfkill）",
+    "hci-busy": "另一个程序占着蓝牙控制器",
+    "hci-lost": "蓝牙控制器消失了（Wi-Fi 芯片复位），正在重新启动",
+    "storage-conflict": "/var/lib/bluetooth 被别的程序占用",
+    "daemon-exit": "蓝牙后台程序退出了，正在重启",
+}
 
 
 def _load(path: Path):
@@ -37,14 +55,33 @@ def _load(path: Path):
         return None
 
 
+def host_allowed(host, allowed_networks, names=()):
+    """Whether a request's Host header names this box: one of its names, or an address on a network whose
+    clients may use the page (the router's own address there), or the loopback."""
+    name = (host or "").rsplit(":", 1)[0].strip("[]").lower().rstrip(".")
+    if not name:
+        return False
+    if name in LOCAL_HOSTS or name in {n.lower() for n in names if n}:
+        return True
+    try:
+        address = ipaddress.ip_address(name)
+    except ValueError:
+        return False
+    return address.is_loopback or address == state_files.SHARED_LAN.ip or any(address in net for net in allowed_networks)
+
+
 class SettingsPage:
-    def __init__(self, state: Path, status, on_change, allowed_networks, admin="/cgi-bin/luci/admin/network/wireless"):
-        """status() -> dict for display (supervisor_openwrt); on_change(reason) restarts the service;
-        allowed_networks() -> the networks whose clients may use the page; admin: LuCI's Wi-Fi page."""
+    def __init__(self, state: Path, status, on_change, allowed_networks, admin="/cgi-bin/luci/admin/network/wireless",
+                 root=None):
+        """status() -> dict for display (a status_model snapshot); on_change(reason) restarts the service;
+        allowed_networks() -> the networks whose clients may use the page; admin: LuCI's Wi-Fi page;
+        root: the program directory (factory reset)."""
         self.state = state
+        self.root = root or state.parent
         self.admin = admin
         self.pairing = PairingWindow(state.parent)
         self.status, self.on_change, self.allowed = status, on_change, allowed_networks
+        self.uci = factory_reset.subprocess.run   # the factory reset's uci runner (tests replace it)
         self.server = None
         self.checks_seen, self.checks_lock = {}, threading.Lock()
 
@@ -57,7 +94,11 @@ class SettingsPage:
 
             def _allowed(self):
                 client = ipaddress.ip_address(self.client_address[0].removeprefix("::ffff:"))
-                return client.is_loopback or any(client in net for net in page.allowed())
+                if not (client.is_loopback or any(client in net for net in page.allowed())):
+                    return False
+                status = page.status()
+                names = (status.get("name"), status.get("own_name"), urllib.parse.urlsplit(status.get("home", "")).hostname)
+                return host_allowed(self.headers.get("Host", ""), page.allowed(), names)
 
             def _send(self, code, body, ctype="text/html; charset=utf-8", extra=None):
                 data = body if isinstance(body, bytes) else body.encode()
@@ -65,6 +106,8 @@ class SettingsPage:
                 self.send_header("Content-Type", ctype)
                 self.send_header("Content-Length", str(len(data)))
                 self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Frame-Options", "DENY")
+                self.send_header("X-Content-Type-Options", "nosniff")
                 for k, v in (extra or {}).items():
                     self.send_header(k, v)
                 self.end_headers()
@@ -81,6 +124,10 @@ class SettingsPage:
                 if self.path == "/diag.txt":
                     return self._send(200, diagnostics.DiagLog(page.state / "diag").text(), "text/plain; charset=utf-8",
                                       {"Content-Disposition": 'attachment; filename="dashplay-diag.txt"'})
+                if self.path == "/status.json":
+                    return self._send(200, json.dumps(page.status(), ensure_ascii=False), "application/json")
+                if self.path.split("?")[0] == "/reset":
+                    return self._send(200, page.render_reset())
                 if self.path.split("?")[0] != "/":
                     return self._send(404, "not found")
                 self._send(200, page.render(self.path.partition("?")[2]))
@@ -177,7 +224,27 @@ class SettingsPage:
             if form.get("action") == "install":
                 return update.launch(self.state.parent)
             raise ValueError("未知操作。")
+        if path == "/reset":
+            self.check_nonce(form)
+            return self.reset(form)
         raise ValueError("网络在 OpenWrt 后台设置。")
+
+    def reset(self, form):
+        """Factory reset (reliability_audit #24): the typed word confirms; the identity needs its own words."""
+        if form.get("confirm", "").strip() != factory_reset.RESET_CONFIRMATION:
+            raise ValueError(f"请在确认框里输入「{factory_reset.RESET_CONFIRMATION}」。")
+        if self.pairing.presence().get("active"):
+            raise ValueError("当前有人使用 CarPlay，请先断开再重置。")
+        identity = form.get("identity", "").strip() == factory_reset.IDENTITY_CONFIRMATION
+        self.pairing.stop()
+        try:
+            self.pairing.reset_all()   # BlueZ forgets the iPhones too (best effort: BlueZ may be down)
+        except Exception:   # noqa: BLE001
+            pass
+        removed = factory_reset.wipe(self.root, identity=identity, uci=self.uci)
+        threading.Timer(1.0, self.on_change, args=("factory reset",)).start()
+        return ("已重置：删除了配对、证书和设置" + ("，以及认证文件" if identity else "")
+                + f"（{len(removed)} 项）。盒子约 1 分钟后以出厂状态重新启动，请重新添加 iPhone。")
 
     # Blocks ----------------------------------------------------------------------------------
 
@@ -235,8 +302,19 @@ class SettingsPage:
         status = self.status()
         return ("on", status.get("ssid", ""), "路由器 Wi-Fi") if status.get("ssid") else ("wait", "Wi-Fi", "等待 Wi-Fi")
 
+    def box_node(self):
+        """The box in the chain: red when Bluetooth or the receiver is down, orange while they start."""
+        status = self.status()
+        bluetooth = (status.get("bluetooth") or {}).get("state")
+        system = (status.get("system") or {}).get("state")
+        if bluetooth == "failed" or system == "degraded":
+            return ("bad", "盒子", "蓝牙没有启动" if bluetooth == "failed" else "程序反复重启")
+        if bluetooth == "starting" or system in ("starting", "restarting"):
+            return ("wait", "盒子", "正在启动")
+        return ("on", "盒子", "运行中")
+
     def chain(self, devices, presence, phase):
-        return ui.chain(self.hotspot_node(), self.phone_node(devices, presence.get("active"), phase))
+        return ui.chain(self.hotspot_node(), self.phone_node(devices, presence.get("active"), phase), self.box_node())
 
     def phones_block(self, nonce):
         """Pairing flow while it runs; otherwise the device list and the add button. Returns (html, refresh, devices)."""
@@ -262,9 +340,10 @@ class SettingsPage:
         """Bluetooth pairing: the only way an iPhone reaches this box (no USB host on the F50, S1).
         Returns (html, refresh, devices)."""
         block, refresh, devices = self.phones_block(nonce)
-        if self.status().get("bluetooth") is False:
-            # No Bluetooth adapter was powered when the service started: say so instead of inventing a cable.
-            block = ui.banner("蓝牙没有启动，暂时不能添加或邀请 iPhone。重启盒子；仍然不行请下载诊断记录。", "bad") + block
+        bluetooth = self.status().get("bluetooth") or {}
+        if bluetooth.get("state") not in (None, "on", "unknown"):
+            # Bluetooth is not up: say so instead of inventing a cable (the banner at the top says why).
+            block = ui.banner("蓝牙还没就绪，暂时不能添加或邀请 iPhone；就绪后会自动继续。", "wait") + block
         return block, refresh, devices
 
     def entries_block(self, status, refresh):
@@ -290,7 +369,27 @@ class SettingsPage:
     def notices(self):
         status = self.status()
         html = ""
-        if status.get("identity") is False:
+        bluetooth = status.get("bluetooth") or {}
+        if bluetooth.get("state") in ("failed", "starting") and bluetooth.get("reason") not in (None, "helper-starting", "powering"):
+            # S2: the real reason at the top of the chain, never a cable story.
+            reason = BLUETOOTH_TEXT.get(bluetooth["reason"], bluetooth["reason"])
+            html += ui.banner(f"蓝牙没有启动：{reason}（重启盒子 / 查看诊断）", "bad")
+        elif bluetooth.get("state") == "failed":
+            html += ui.banner("蓝牙没有启动，盒子会一直重试（重启盒子 / 查看诊断）", "bad")
+        phone = status.get("phone") or {}
+        if phone.get("state") == "pairing-lost":
+            html += ui.banner("iPhone 连续两次拒绝了蓝牙连接：它忘记了这台盒子。请删除此 iPhone 后重新添加。", "bad")
+        certificate = status.get("certificate") or {}
+        if certificate.get("state") in ("expiring_soon", "expired", "failed"):
+            until = certificate.get("not_after")
+            text = {"expiring_soon": f"正式证书将于 {until} 到期",
+                    "expired": f"正式证书已于 {until} 过期，特斯拉会看到证书警告",
+                    "failed": "正式证书还没申请到"}[certificate["state"]]
+            uplink = (status.get("uplink") or {}).get("state")
+            advice = "盒子现在没网无法续签：插上能上网的 SIM 卡开机一次。" if uplink == "offline" else "盒子联网后会自动续签。"
+            html += ui.banner(text + "。" + advice, "wait")
+        identity = status.get("identity")
+        if identity is False or (isinstance(identity, dict) and identity.get("state") == "missing"):
             host = urllib.parse.urlsplit(self.home()).hostname or ""
             # No credentials here: the F50's root password is the installer's, never 1234 (S3).
             html += ui.banner(f"还缺 CarPlay 认证文件。把「AI 安装说明」交给你的 AI 助手，并告诉它盒子地址 {host}"
@@ -317,7 +416,8 @@ class SettingsPage:
         phase = self.pairing.status().get("phase", "closed")
         reach = self.ddns_block()
         advanced = ('<a class=cell href="/diag.txt"><span class=main><b>下载诊断记录</b>'
-                    '<span>画面卡顿、断线时，把它交给 AI 助手或开发者分析</span></span><span class=chev></span></a>')
+                    '<span>画面卡顿、断线时，把它交给 AI 助手或开发者分析</span></span><span class=chev></span></a>'
+                    '<a class="cell destructive" href="/reset">恢复出厂设置…</a>')
         intro = ui.other_screen(self.home()) if not devices and not refresh else ""
         body = (f'<h1 class=span>盒子设置</h1>{notice}{self.chain(devices, presence, phase)}<div>'
                 + self.entries_block(status, refresh)
@@ -329,3 +429,20 @@ class SettingsPage:
                 + ui.group("高级", advanced)
                 + '</div>')
         return ui.page("盒子设置", body, refresh or update.running(self.state.parent), wide=True)
+
+    def render_reset(self):
+        """The factory-reset page: what goes, two typed confirmations (no JS confirm() to bypass)."""
+        nonce = self.pairing.nonce
+        body = (f'<a class=back href="/">‹ 盒子设置</a><h1>恢复出厂设置</h1>'
+                '<p class=sub>删除这台盒子上所有属于你的数据，然后以出厂状态重新启动。</p>'
+                + ui.group("会被删除", '<div class=cell><span class=main><b>已添加的 iPhone</b><span>蓝牙配对、CarPlay 配对记录、上次使用的记录</span></span></div>'
+                           '<div class=cell><span class=main><b>证书与密钥</b><span>正式证书、DuckDNS 申请账户、网页访问令牌</span></span></div>'
+                           '<div class=cell><span class=main><b>设置与记录</b><span>自己的网址、画面端口、诊断记录和日志；OpenWrt 的 Wi-Fi 不变</span></span></div>')
+                + f'<form method=post action=/reset>{ui.hidden(nonce)}'
+                + ui.group("确认", f'<label class=cell><span class=main><b>输入「{factory_reset.RESET_CONFIRMATION}」</b></span>'
+                           '<input type=text name=confirm autocomplete=off autocapitalize=off style="text-align:right" required></label>'
+                           f'<label class=cell><span class=main><b>同时删除 CarPlay 认证文件</b><span>只有在转让或出售盒子时才需要；输入「{factory_reset.IDENTITY_CONFIRMATION}」</span></span>'
+                           '<input type=text name=identity autocomplete=off autocapitalize=off style="text-align:right"></label>',
+                           "认证文件删除后，重装时要重新提供；不删的话，重置后盒子仍能工作，只需重新添加 iPhone。")
+                + '<button class="btn destructive">恢复出厂设置</button></form>')
+        return ui.page("恢复出厂设置", body)
