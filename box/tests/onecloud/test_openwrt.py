@@ -13,8 +13,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/onecloud')
 import platform_openwrt as ow
 from settings_page import SettingsPage
 import supervisor_openwrt
-from supervisor_openwrt import (name_changes, read_config, trusted_networks, shared_lan_changes,
-                               shared_lan_conflict, apply_shared_lan, car_audio_args, waiting_trust, waiting_warning)
+from supervisor_openwrt import (read_config, trusted_networks, shared_lan_conflict, waiting_trust, waiting_warning,
+                               obsolete_options, legacy_dns_cleanup, lan_warning, box_name, receiver_command,
+                               SETTINGS_PORT, OBSOLETE_OPTIONS, DEFAULTS)
 
 
 class ViewerPortConfigTests(unittest.TestCase):
@@ -37,17 +38,6 @@ WIRELESS = {
          "config": {"mode": "sta", "ssid": "Xpeng", "encryption": "psk2", "key": "car-pass", "network": ["wwan"]}}]},
 }
 LAN = {"up": True, "l3_device": "br-lan", "ipv4-address": [{"address": "192.168.1.1", "mask": 24}]}
-FIREWALL = """firewall.@zone[0]=zone
-firewall.@zone[0].name='lan'
-firewall.@zone[0].network='lan'
-firewall.@zone[0].input='ACCEPT'
-firewall.@zone[1]=zone
-firewall.@zone[1].name='wan'
-firewall.@zone[1].network='wan' 'wan6' 'wwan'
-firewall.@zone[1].input='REJECT'
-firewall.@rule[0]=rule
-firewall.@rule[0].network='wwan'
-"""
 
 
 class HandoffTests(unittest.TestCase):
@@ -65,11 +55,13 @@ class HandoffTests(unittest.TestCase):
         self.assertEqual((network["ssid"], network["ifname"], network["network"]), ("Car-5G", "phy1-ap0", "lan"))
         self.assertEqual(reason, "")
 
-    def test_named_section_may_be_a_client_network(self):
-        network, _ = ow.pick_network(ow.wifi_networks(WIRELESS), "wwan")
-        self.assertEqual((network["mode"], network["ssid"]), ("sta", "Xpeng"))
-        self.assertEqual(ow.pick_network(ow.wifi_networks(WIRELESS), "nope"),
-                         (None, "Wi-Fi section nope not found or switched off"))
+    def test_client_networks_are_never_candidates(self):
+        # The F50 cannot be a client and an access point at once (tesla_only_box_delta.md D10).
+        only_sta = {radio: dict(data, interfaces=[i for i in data["interfaces"] if i["config"]["mode"] == "sta"])
+                    for radio, data in WIRELESS.items()}
+        network, reason = ow.pick_network(ow.wifi_networks(only_sta))
+        self.assertIsNone(network)
+        self.assertEqual(reason, "no Wi-Fi network is switched on (access point)")
 
     def test_waits_while_the_radio_is_down_and_skips_enterprise(self):
         down = json.loads(json.dumps(WIRELESS))
@@ -83,14 +75,11 @@ class HandoffTests(unittest.TestCase):
                                                                "network": ["lan"]}}]}}
         self.assertIn("password type", ow.pick_network(ow.wifi_networks(enterprise))[1])
 
-    def test_channel_address_and_firewall_parsing(self):
+    def test_channel_and_address_parsing(self):
         self.assertEqual(ow.parse_channel("Interface phy1-ap0\n\tchannel 149 (5745 MHz), width: 80 MHz"), 149)
         self.assertIsNone(ow.parse_channel("Interface phy1-ap0\n\ttype AP"))
         self.assertEqual(ow.interface_address(LAN), ("br-lan", ipaddress.IPv4Interface("192.168.1.1/24")))
         self.assertEqual(ow.interface_address({"up": False}), (None, None))
-        self.assertEqual(ow.zone_input(FIREWALL, "lan"), "ACCEPT")
-        self.assertEqual(ow.zone_input(FIREWALL, "wwan"), "REJECT")
-        self.assertIsNone(ow.zone_input(FIREWALL, "guest"))
 
     def test_handoff_reads_ubus_and_the_live_channel(self):
         calls = {"network.wireless": WIRELESS, "network.interface.lan": LAN}
@@ -136,17 +125,6 @@ class TrustedNetworkTests(unittest.TestCase):
         self.assertEqual(trusted_networks(car), [ipaddress.IPv4Network("192.168.43.0/24")])
 
 
-# `ip -6 -o addr show scope global` and `ip -6 -o route show default` on the F50 (2026-10-13): the public
-# address is on the mobile modem; the LAN has a unique local prefix and hands the modem's /64 on by relay.
-F50_ADDR = """13: sipa_eth0    inet6 2408:8409:8500:1d4:a00:1ff:fe00:1/64 scope global dynamic mngtmpaddr \\       valid_lft forever preferred_lft forever
-34: br-lan    inet6 fd9e:30a4:d99::1/60 scope global noprefixroute \\       valid_lft forever preferred_lft forever
-"""
-F50_ROUTE = """default via fe80::1 dev sipa_eth0 proto ra metric 1024 expires 62108sec pref medium
-default via fe80::1 dev sipa_eth0 proto static metric 4096 pref medium
-"""
-
-
-
 class WaitingForWifiTests(unittest.TestCase):
     # 2026-10-19 (momo): the F50's own Wi-Fi turned off, the settings page never opened while DashPlay waited for it.
     def test_the_settings_page_trusts_the_planned_wifi_or_else_the_lan(self):
@@ -160,14 +138,11 @@ class WaitingForWifiTests(unittest.TestCase):
         # A disabled wifi-iface is left out of `ubus call network.wireless status` altogether (F50, 2026-10-19).
         radio_only = {"radio0": {"up": True, "config": {"band": "5g", "channel": "149"}, "interfaces": []}}
         self.assertEqual(ow.pick_network(ow.wifi_networks(radio_only)),
-                         (None, "no Wi-Fi network is switched on (access point or client)"))
-        self.assertEqual(ow.pick_network(ow.wifi_networks(radio_only), "ap0"),
-                         (None, "Wi-Fi section ap0 not found or switched off"))
+                         (None, "no Wi-Fi network is switched on (access point)"))
 
     def test_the_page_says_what_it_waits_for(self):
         self.assertIn("还没准备好：「DashPlay-F50」还没开启。", waiting_warning("Wi-Fi DashPlay-F50 is not up yet"))
-        self.assertIn("路由器的 WiFi 都关着", waiting_warning("no Wi-Fi network is switched on (access point or client)"))
-        self.assertIn("选的 WiFi（ap0）不存在或已关闭", waiting_warning("Wi-Fi section ap0 not found or switched off"))
+        self.assertIn("路由器的 Wi-Fi 都关着", waiting_warning("no Wi-Fi network is switched on (access point)"))
         self.assertIn("「Car-5G」所在的网络 lan 还没有地址",
                       waiting_warning("network lan for Wi-Fi Car-5G has no IPv4 address yet"))
         self.assertIn("the other router's Wi-Fi channel is missing",   # anything else as it is
@@ -215,70 +190,44 @@ def applied(uci, changes):
     return "\n".join(lines) + "\n"
 
 
-class NameRecordTests(unittest.TestCase):
-    """The own name's uci dhcp records: a local A record, or none plus the rebind whitelist (Tesla mode)."""
+class LegacyCleanupTests(unittest.TestCase):
+    """What older releases left in uci goes once (D2): own-name DNS records, rebind whitelist, obsolete options."""
 
-    def test_tesla_online_own_domain_returns_to_public_resolution(self):
-        start = applied(DHCP, name_changes(DHCP, NAME, LAN_IP))
-        tesla = applied(start, name_changes(start, NAME, None, rebind=True))
-        self.assertNotIn('dhcp.dashplay=', tesla)
-        self.assertNotIn('dhcp.dashplay6=', tesla)
-        self.assertNotIn(f"dhcp.cfg01411c.server='/{NAME}/'", tesla, 'no local A answer')
-        self.assertIn(f"dhcp.cfg01411c.rebind_domain='/{NAME}/'", tesla, 'the upstream answer is let through')
-        normal = applied(tesla, name_changes(tesla, NAME, None, previous=NAME))
-        self.assertNotIn('rebind_domain', normal)
-        self.assertNotIn('server=', normal)
-        self.assertEqual(name_changes(normal, NAME, None), [])
+    def test_nothing_to_do_on_a_clean_box(self):
+        self.assertEqual(legacy_dns_cleanup(DHCP), [])
+        self.assertEqual(obsolete_options("dashplay.main=dashplay\ndashplay.main.enabled='1'\n"), [])
 
-    def test_tesla_own_domain_is_whitelisted_for_rebind_protection(self):
-        changes = name_changes(DHCP, NAME, None, rebind=True)
-        self.assertIn(["add_list", f"dhcp.cfg01411c.rebind_domain=/{NAME}/"], changes)
-        after = applied(DHCP, changes)
-        self.assertIn(f"dhcp.cfg01411c.rebind_domain='/{NAME}/'", after)
-        self.assertNotIn('server=', after, 'the name is still not answered locally')
-        self.assertEqual(name_changes(after, NAME, None, rebind=True, previous=NAME), [], 'nothing to do when current')
+    def test_old_name_records_and_whitelist_go(self):
+        old = DHCP + (f"dhcp.dashplay=domain\ndhcp.dashplay.name='{NAME}'\ndhcp.dashplay.ip='{LAN_IP}'\n"
+                      f"dhcp.dashplay6=domain\ndhcp.dashplay6.name='{NAME}'\ndhcp.dashplay6.ip='{PUBLIC}'\n"
+                      f"dhcp.cfg01411c.server='/{NAME}/' '192.0.2.53'\n"
+                      f"dhcp.cfg01411c.rebind_domain='/{NAME}/' '/other.example/'\n")
+        changes = legacy_dns_cleanup(old)
+        self.assertIn(["delete", "dhcp.dashplay"], changes)
+        self.assertIn(["delete", "dhcp.dashplay6"], changes)
+        self.assertIn(["del_list", f"dhcp.cfg01411c.server=/{NAME}/"], changes)
+        self.assertIn(["del_list", f"dhcp.cfg01411c.rebind_domain=/{NAME}/"], changes)
+        self.assertEqual(changes[-1], ["commit", "dhcp"])
+        after = applied(old, changes)
+        self.assertNotIn("dashplay", after)
+        self.assertIn("'/other.example/'", after, "other programs' entries stay")
+        self.assertIn("'192.0.2.53'", after)
+        self.assertEqual(legacy_dns_cleanup(after), [])
 
-    def test_a_renamed_domain_replaces_the_whitelist_entry(self):
-        tesla = applied(DHCP, name_changes(DHCP, NAME, None, rebind=True))
-        renamed = applied(tesla, name_changes(tesla, 'dashplay.lan', None, rebind=True, previous=NAME))
-        self.assertNotIn(f'/{NAME}/', renamed)
-        self.assertIn("dhcp.cfg01411c.rebind_domain='/dashplay.lan/'", renamed)
-
-    def test_turning_tesla_mode_off_removes_the_whitelist(self):
-        tesla = applied(DHCP, name_changes(DHCP, NAME, None, rebind=True))
-        back = applied(tesla, name_changes(tesla, NAME, LAN_IP, previous=NAME))
-        self.assertNotIn('rebind_domain', back)
-        self.assertIn(f"dhcp.dashplay.ip='{LAN_IP}'", back)
-        self.assertEqual(name_changes(back, NAME, LAN_IP), [])
-
-    def test_another_programs_whitelist_entries_are_left_alone(self):
-        other = DHCP + "dhcp.cfg01411c.rebind_domain='/other.example/'\n"
-        tesla = applied(other, name_changes(other, NAME, None, rebind=True))
-        self.assertIn("'/other.example/'", tesla)
-        back = applied(tesla, name_changes(tesla, NAME, LAN_IP, previous=NAME))
-        self.assertNotIn(f'/{NAME}/', back)
-        self.assertIn("'/other.example/'", back)
-
-    def test_the_lan_address_by_default(self):
-        changes = name_changes(DHCP, NAME, LAN_IP)
-        after = applied(DHCP, changes)
-        self.assertIn(f"dhcp.dashplay.ip='{LAN_IP}'", after)
-        self.assertNotIn("dashplay6", after)
-        self.assertNotIn("rebind_domain", after, 'other modes do not touch the rebind whitelist')
-        self.assertEqual(name_changes(after, NAME, LAN_IP), [], "nothing to do when current")
-
-    def test_records_of_older_versions_are_removed(self):
-        # 2026.10.x wrote a dashplay6 (public IPv6) record and a local-only server entry; both go.
-        old = DHCP + f"dhcp.dashplay6=domain\ndhcp.dashplay6.name='{NAME}'\ndhcp.dashplay6.ip='{PUBLIC}'\n" \
-            f"dhcp.cfg01411c.server='/{NAME}/'\n"
-        after = applied(old, name_changes(old, NAME, LAN_IP))
-        self.assertNotIn("dashplay6", after)
-        self.assertNotIn(f"/{NAME}/", after)
-        self.assertIn(f"dhcp.dashplay.ip='{LAN_IP}'", after)
-
-
-
-
+    def test_obsolete_options_are_dropped_and_the_seven_keys_kept(self):
+        old = ("dashplay.main=dashplay\ndashplay.main.enabled='1'\ndashplay.main.wifi='auto'\n"
+               "dashplay.main.tesla_mode='1'\ndashplay.main.answer_tesla_checks='0'\ndashplay.main.settings_port='18080'\n"
+               "dashplay.main.bluetooth_service='/usr/bin/python3 /opt/dashplay/board_zte_f50.py'\n"
+               "dashplay.main.duckdns_domain='mycar'\ndashplay.main.idle_release='0'\n")
+        changes = obsolete_options(old)
+        self.assertEqual({c[1] for c in changes if c[0] == "delete"},
+                         {"dashplay.main.wifi", "dashplay.main.tesla_mode", "dashplay.main.answer_tesla_checks",
+                          "dashplay.main.settings_port", "dashplay.main.bluetooth_service"})
+        self.assertEqual(changes[-1], ["commit", "dashplay"])
+        config = read_config(old)
+        self.assertEqual(set(config), set(DEFAULTS))
+        self.assertEqual((config["duckdns_domain"], config["idle_release"]), ("mycar", "0"))
+        self.assertFalse(set(DEFAULTS) & set(OBSOLETE_OPTIONS))
 
 
 # `uci -q show network` and `ip -4 -o addr show` of the F50 (2026-10-14), without its Tailscale line.
@@ -298,143 +247,41 @@ ADDRESSES = """1: lo    inet 127.0.0.1/8 scope host lo
 
 
 class SharedLanTests(unittest.TestCase):
-    """uci dashplay.main.shared_lan: the LAN moves to 100.96.0.1/24 for browsers refusing private addresses (Tesla)."""
+    """The LAN is 100.96.0.1/24 from install time (D1); the service only warns (lan_warning, shared_lan_conflict)."""
 
-    def test_on_moves_the_lan_and_remembers_its_address(self):
-        changes, remember, why = shared_lan_changes(NETWORK, "lan", True)
-        after = applied(NETWORK, changes)
-        self.assertEqual(why, "")
-        self.assertIn("network.lan.ipaddr='100.96.0.1'", after)
-        self.assertIn("network.lan.netmask='255.255.255.0'", after)
-        self.assertEqual(remember, {"ipaddr": "192.168.77.1", "netmask": "255.255.255.0"})
-        self.assertEqual(shared_lan_changes(after, "lan", True, remember)[0], [], "nothing to do when current")
-        self.assertIn("network.wan.proto='dhcp'", after, "other interfaces untouched")
+    def test_the_lan_outside_the_shared_space_is_a_warning_not_a_move(self):
+        self.assertEqual(lan_warning(ipaddress.IPv4Interface("100.96.0.1/24")), "")
+        self.assertEqual(lan_warning(ipaddress.IPv4Interface("100.97.0.1/24")), "")
+        self.assertIn("192.168.77.1/24", lan_warning(ipaddress.IPv4Interface("192.168.77.1/24")))
+        self.assertIn("100.96.0.1/24", lan_warning(ipaddress.IPv4Interface("192.168.77.1/24")))
+        self.assertEqual(lan_warning(None), "")
+        self.assertFalse(hasattr(supervisor_openwrt, "apply_shared_lan"), "no run-time LAN move any more")
 
-    def test_off_puts_the_address_back_once(self):
-        changes, remember, _ = shared_lan_changes(NETWORK, "lan", True)
-        moved = applied(NETWORK, changes)
-        back_changes, kept, _ = shared_lan_changes(moved, "lan", False, remember)
-        back = applied(moved, back_changes)
-        self.assertIn("network.lan.ipaddr='192.168.77.1'", back)
-        self.assertIsNone(kept)
-        self.assertEqual(shared_lan_changes(back, "lan", False, None)[0], [], "off and nothing remembered: no change")
+    def test_tailscale_or_an_overlapping_interface_warns(self):
+        tailscale = ADDRESSES + "40: tailscale0    inet 100.64.5.6/32 scope global tailscale0\n"
+        drop = 'chain ts-input { iifname != "tailscale0" ip saddr 100.64.0.0/10 counter packets 0 bytes 0 drop }\n'
+        self.assertIn("Tailscale", shared_lan_conflict(tailscale, "br-lan", drop))
+        self.assertIn("Tailscale", shared_lan_conflict(tailscale, "br-lan", None), "unreadable ruleset: assume the worst")
+        self.assertEqual(shared_lan_conflict(tailscale, "br-lan", "table inet fw4 {}\n"), "", "netfilter-mode=off")
+        mifi = ADDRESSES + "41: usb0    inet 100.96.0.50/24 scope global usb0\n"
+        self.assertIn("usb0", shared_lan_conflict(mifi, "br-lan", ""))
+        own = ADDRESSES.replace("192.168.77.1/24", "100.96.0.1/24")
+        self.assertEqual(shared_lan_conflict(own, "br-lan", ""), "", "the LAN itself is no conflict")
 
-    def test_an_address_with_prefix_length_comes_back_without_netmask(self):
-        cidr = "network.lan=interface\nnetwork.lan.proto='static'\nnetwork.lan.ipaddr='192.168.1.1/24'\n"
-        changes, remember, _ = shared_lan_changes(cidr, "lan", True)
-        moved = applied(cidr, changes)
-        back = applied(moved, shared_lan_changes(moved, "lan", False, remember)[0])
-        self.assertIn("network.lan.ipaddr='192.168.1.1/24'", back)
-        self.assertNotIn("netmask", back)
-
-    def test_an_address_changed_by_hand_since_is_left_alone(self):
-        moved = applied(NETWORK, shared_lan_changes(NETWORK, "lan", True)[0])
-        by_hand = moved.replace("100.96.0.1", "10.10.0.1")
-        changes, kept, _ = shared_lan_changes(by_hand, "lan", False, {"ipaddr": "192.168.77.1", "netmask": "255.255.255.0"})
-        self.assertEqual((changes, kept), ([], None))
-
-    def test_a_lan_without_one_static_address_is_not_changed(self):
-        for uci in (NETWORK.replace("proto='static'", "proto='dhcp'"),
-                    NETWORK.replace("ipaddr='192.168.77.1'", "ipaddr='192.168.77.1/24' '192.168.78.1/24'")):
-            changes, _, why = shared_lan_changes(uci, "lan", True)
-            self.assertEqual(changes, [])
-            self.assertTrue(why)
-
-    def test_tailscale_or_an_overlapping_interface_refuses(self):
-        self.assertEqual(shared_lan_conflict(ADDRESSES, "br-lan"), "")
-        with_tailscale = ADDRESSES + "37: tailscale0    inet 100.102.205.24/32 scope global tailscale0\n"
-        drop = ('\t\tiifname != "tailscale0*" ip saddr 100.64.0.0/10 counter packets 0 bytes 0 drop\n')   # F50, 2026-10-14
-        self.assertIn("netfilter-mode=off", shared_lan_conflict(with_tailscale, "br-lan", "table ip ts-filter {\n" + drop))
-        self.assertIn("Tailscale", shared_lan_conflict(with_tailscale, "br-lan", None), "rules unreadable: assume the drop")
-        self.assertEqual(shared_lan_conflict(with_tailscale, "br-lan", "table inet fw4 {\n}\n"), "",
-                         "Tailscale with --netfilter-mode=off adds no drop")
-        self.assertEqual(shared_lan_conflict(ADDRESSES, "br-lan", "table ip ts-filter {\n" + drop), "",
-                         "rules left behind without Tailscale running")
-        self.assertTrue(shared_lan_conflict(ADDRESSES.replace("10.123.116.156/8", "100.96.0.7/22"), "br-lan"))
-        moved = ADDRESSES.replace("192.168.77.1/24 brd 192.168.77.255", "100.96.0.1/24 brd 100.96.0.255")
-        self.assertEqual(shared_lan_conflict(moved, "br-lan"), "", "the LAN itself already there is fine")
-
-    def test_runtime_overlap_appears_and_clears_without_changing_network(self):
-        from types import SimpleNamespace
-        status = {"warning": "other warning"}
-        address = [ADDRESSES]
-        calls = []
-        def run(args, **kwargs):
-            calls.append(args)
-            return SimpleNamespace(returncode=0, stdout=address[0] if args[0] == "ip" else "")
-        with tempfile.TemporaryDirectory() as tmp, patch.object(supervisor_openwrt.subprocess, "run", run):
+    def test_the_warning_file_is_written_only_on_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "network-status.json"
-            refresh = supervisor_openwrt.refresh_network_warning
-            refresh(True, "br-lan", status, "other warning", path)
-            self.assertEqual(status["warning"], "other warning")
-            address[0] = ADDRESSES.replace("10.123.116.156/8", "100.96.0.7/24")
-            refresh(True, "br-lan", status, "other warning", path)
-            self.assertIn("冲突", status["warning"])
-            self.assertEqual(json.loads(path.read_text())["warning"], status["warning"])
-            address[0] = ADDRESSES
-            refresh(True, "br-lan", status, "other warning", path)
-            self.assertEqual(status["warning"], "other warning")
-            self.assertTrue(all(c[0] in ("ip", "nft") for c in calls))
-
-    def test_apply_changes_uci_reloads_the_network_and_puts_it_back(self):
-        uci = {"network": NETWORK}
-        calls = []
-
-        def run(args, **kwargs):
-            calls.append(args)
-            out = ""
-            if args[:3] == ["uci", "-q", "show"]:
-                out = uci["network"]
-            elif args[:4] == ["ip", "-4", "-o", "addr"]:
-                out = ADDRESSES
-            elif args[:2] == ["nft", "list"]:
-                out = "table inet fw4 {\n}\n"
-            elif args[:4] == ["ubus", "call", "hostapd.phy0-ap0", "get_clients"]:
-                out = json.dumps({"freq": 5180, "clients": {"02:00:00:00:00:a1": {"auth": True}, "02:00:00:00:00:a2": {}}})
-            elif args[0] == "uci" and args[1] != "commit":
-                uci["network"] = applied(uci["network"], [args[1:]])
-            return supervisor_openwrt.subprocess.CompletedProcess(args, 0, out, "")
-
-        network = {"mode": "ap", "network": "lan", "device": "br-lan", "ifname": "phy0-ap0"}
-        said = []
-        with tempfile.TemporaryDirectory() as tmp, patch.object(supervisor_openwrt.subprocess, "run", run), \
-                patch.object(supervisor_openwrt, "ROLLBACK_PENDING", Path(tmp) / "snapshot-files"):
-            state = Path(tmp)
-            self.assertEqual(apply_shared_lan(True, network, state, said.append), (True, ""))
-            self.assertIn("network.lan.ipaddr='100.96.0.1'", uci["network"])
-            self.assertEqual(json.loads((state / "lan-before.json").read_text())["ipaddr"], "192.168.77.1")
-            self.assertIn(["/etc/init.d/network", "reload"], calls)
-            kicked = [json.loads(c[4])["addr"] for c in calls if c[:4] == ["ubus", "call", "hostapd.phy0-ap0", "del_client"]]
-            self.assertEqual(sorted(kicked), ["02:00:00:00:00:a1", "02:00:00:00:00:a2"],
-                             "every station rejoins for an address in the new LAN")
-            self.assertGreater(calls.index(["ubus", "call", "hostapd.phy0-ap0", "get_clients"]),
-                               calls.index(["/etc/init.d/network", "reload"]), "after the LAN has its new address")
-            self.assertEqual(apply_shared_lan(True, network, state, said.append), (False, ""), "already there")
-            self.assertEqual(apply_shared_lan(False, network, state, said.append), (True, ""))
-            self.assertIn("network.lan.ipaddr='192.168.77.1'", uci["network"])
-            self.assertFalse((state / "lan-before.json").exists())
-            changed, warning = apply_shared_lan(True, dict(network, mode="sta"), state, said.append)
-            self.assertFalse(changed)
-            self.assertIn("路由器自己的 WiFi", warning)
-            self.assertIn("network.lan.ipaddr='192.168.77.1'", uci["network"])
-
-
-    def test_waits_while_a_luci_apply_awaits_its_confirm(self):
-        import threading
-        with tempfile.TemporaryDirectory() as tmp, \
-                patch.object(supervisor_openwrt, "ROLLBACK_PENDING", Path(tmp) / "snapshot-files"):
-            snapshot = Path(tmp) / "snapshot-files"
-            snapshot.mkdir()
-            (snapshot / "dashplay").write_text("old")
-            stopped = threading.Event()
-            done = threading.Event()
-            worker = threading.Thread(target=lambda: (supervisor_openwrt.wait_for_confirm(stopped, 30), done.set()))
-            worker.start()
-            self.assertFalse(done.wait(1.5), "waits while the snapshot is there")
-            (snapshot / "dashplay").unlink()   # confirmed: rpcd purges the snapshot
-            self.assertTrue(done.wait(3))
-            worker.join()
-            supervisor_openwrt.wait_for_confirm(stopped, 30)   # no snapshot at all: at once
+            status = {}
+            with patch.object(supervisor_openwrt.subprocess, "run") as run:
+                run.return_value = supervisor_openwrt.subprocess.CompletedProcess([], 0, ADDRESSES, "")
+                supervisor_openwrt.refresh_network_warning("br-lan", status, "", path)
+                first = path.stat().st_mtime_ns
+                time.sleep(0.01)
+                supervisor_openwrt.refresh_network_warning("br-lan", status, "", path)
+                self.assertEqual(path.stat().st_mtime_ns, first, "same text: not rewritten")
+                supervisor_openwrt.refresh_network_warning("br-lan", status, "LAN wrong", path)
+                self.assertNotEqual(path.stat().st_mtime_ns, first)
+            self.assertEqual(json.loads(path.read_text())["warning"], "LAN wrong")
 
 
 class ConfigTests(unittest.TestCase):
@@ -442,31 +289,33 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(read_config("")["idle_release"], "300")
         self.assertEqual(read_config("dashplay.main.idle_release='0'\n")["idle_release"], "0")
 
+    def test_seven_keys_and_constants(self):
+        self.assertEqual(sorted(DEFAULTS), ["duckdns_domain", "duckdns_token", "enabled", "idle_release", "update_check",
+                                            "update_mirror", "viewer_port"])
+        self.assertEqual(SETTINGS_PORT, 18080)
+        self.assertEqual(str(supervisor_openwrt.SHARED_LAN), "100.96.0.1/24")
+        self.assertEqual(supervisor_openwrt.JAVA, "/usr/lib/dashplay-jre/bin/java")
 
-    def test_the_shared_lan_is_off_by_default(self):
-        self.assertEqual(read_config("")["shared_lan"], "0")
+    def test_the_name_is_the_duckdns_one_or_the_local_one(self):
+        self.assertEqual(box_name(None), "autoplay.lan")
+        self.assertEqual(box_name({"domain": "mycar", "token": "x"}), "mycar.duckdns.org")
 
-    def test_tesla_mode_is_off_by_default(self):
-        self.assertEqual(read_config("")["tesla_mode"], "0")
+    def test_the_receiver_always_runs_in_tesla_mode(self):
+        network = {"ssid": "Car-5G", "key": "k", "security": "wpa2", "channel": 149, "device": "br-lan",
+                   "address": ipaddress.IPv4Interface("100.96.0.1/24")}
+        command = receiver_command(Path("/opt/dashplay"), network, Path("/var/run/dashplay/handoff.json"), 18443, 300)
+        self.assertIn("--tesla", command)
+        self.assertNotIn("--car-music", command)
+        self.assertNotIn("--no-wireless", command)
+        self.assertEqual(command[command.index("--settings-port") + 1], "18080")
+        self.assertEqual(command[command.index("--java") + 1], supervisor_openwrt.JAVA)
+        self.assertIn("--no-wireless", receiver_command(Path("/x"), network, Path("/h"), 18443, 300, wireless=False))
+        self.assertIn("--bind-wait", receiver_command(Path("/x"), network, Path("/h"), 18443, 300, wait=True))
 
-    def test_the_car_bluetooth_switches_reach_the_receiver_on_their_own(self):
-        self.assertEqual(car_audio_args(read_config("")), [])
-        self.assertEqual(car_audio_args(read_config("dashplay.main.car_music='1'\n")), ["--car-music"])
-        self.assertEqual(car_audio_args(read_config("dashplay.main.car_voice='1'\n")), ["--car-voice"])
-        self.assertEqual(car_audio_args(read_config("dashplay.main.car_music='1'\ndashplay.main.car_voice='1'\n")),
-                         ["--car-music", "--car-voice"])
-
-    def test_tesla_mode_is_all_of_them(self):
-        self.assertEqual(car_audio_args(read_config("dashplay.main.tesla_mode='1'\ndashplay.main.car_music='0'\n")),
-                         ["--tesla"])
-
-    def test_uci_options_override_defaults(self):
-        config = read_config("dashplay.main=dashplay\ndashplay.main.wifi='wwan'\ndashplay.main.settings_port='18090'\n")
-        self.assertEqual((config["wifi"], config["settings_port"], config["java"]),
-                         ("wwan", "18090", "/usr/lib/dashplay-jre/bin/java"))
-        self.assertEqual(read_config("")["wifi"], "auto")
-
-
+    def test_uci_options_override_defaults_and_unknown_keys_are_ignored(self):
+        config = read_config("dashplay.main=dashplay\ndashplay.main.viewer_port='19000'\ndashplay.main.wifi='wwan'\n")
+        self.assertEqual(config["viewer_port"], "19000")
+        self.assertNotIn("wifi", config)
 
 
 class ManagedPageTests(unittest.TestCase):
@@ -542,9 +391,9 @@ class ManagedPageTests(unittest.TestCase):
         self.assertIn("正在升级", html)
         self.assertNotIn("value=install", html)
 
-    def test_firewall_warning_is_shown(self):
-        self.status["warning"] = "防火墙区域拒绝入站连接"
-        self.assertIn("防火墙区域拒绝入站连接", self.page.render(""))
+    def test_a_network_warning_is_shown(self):
+        self.status["warning"] = "局域网地址是 192.168.77.1/24"
+        self.assertIn("局域网地址是 192.168.77.1/24", self.page.render(""))
 
 
 if __name__ == "__main__":

@@ -47,9 +47,11 @@ endef
 # state/ and identity/ are created by postinst and never owned by the package, so an upgrade or removal
 # keeps pairings, certificates and the MFi identity.
 define Package/dashplay/install
-	$(INSTALL_DIR) $(1)/opt/dashplay $(1)/etc/init.d $(1)/etc/config $(1)/usr/libexec
+	$(INSTALL_DIR) $(1)/opt/dashplay $(1)/etc/init.d $(1)/etc/config $(1)/usr/libexec $(1)/etc/uci-defaults
 	cd $(PKG_BUILD_DIR)/bundle && tar -cf - --exclude=./state --exclude=./identity . | tar -xf - -C $(1)/opt/dashplay
 	$(INSTALL_BIN) ./files/dashplay.init $(1)/etc/init.d/dashplay
+	# Tesla constants at install time: LAN 100.96.0.1/24, old options and DNS records dropped (D1, D2, D4).
+	$(INSTALL_BIN) ./files/90-dashplay-tesla $(1)/etc/uci-defaults/90-dashplay-tesla
 	# Online update: LuCI's check / start command (update.py launch runs the update as a procd service of its own).
 	$(INSTALL_BIN) ./files/dashplay-update $(1)/usr/libexec/dashplay-update
 	$(INSTALL_CONF) ./files/dashplay.config $(1)/etc/config/dashplay
@@ -76,13 +78,14 @@ define Package/dashplay/prerm
 # Files the running program made beside the packaged ones; state/ and identity/ stay.
 rm -f /opt/dashplay/playport/web/dist/receiver-access.js /opt/dashplay/playport/web/dist/receiver-access.json
 find /opt/dashplay -name __pycache__ -type d -prune -exec rm -rf {} +
-# The name's records (uci dashplay.main.public_ipv6 adds "dashplay6" and, alone, a local-only entry).
-name=$$(uci -q get dhcp.dashplay.name || uci -q get dhcp.dashplay6.name)
+# Records older releases kept for the own name (the service's own ones are restored by its stop).
 changed=
 for section in dashplay dashplay6; do
 	[ "$$(uci -q get dhcp.$$section)" = domain ] && uci delete dhcp.$$section && changed=1
 done
-[ -n "$$name" ] && uci -q del_list dhcp.@dnsmasq[0].server="/$$name/" && changed=1
+for entry in $$(uci -q get dhcp.@dnsmasq[0].rebind_domain); do
+	case "$$entry" in /*.duckdns.org/|/dashplay.lan/|/autoplay.lan/) uci -q del_list dhcp.@dnsmasq[0].rebind_domain="$$entry" && changed=1 ;; esac
+done
 if [ -n "$$changed" ]; then
 	uci commit dhcp || exit 1
 	# Reloading a stopped dnsmasq can start it and wait indefinitely for netifd/procd locks.
@@ -99,6 +102,7 @@ except (OSError, ValueError, subprocess.SubprocessError):
     print('DashPlay DNS records removed from configuration; DNS reload unavailable, apply on next service restart.')
 PY
 fi
+# The LAN stays at 100.96.0.1/24 (set by uci-defaults at install): put it back by hand if you want the old one.
 exit 0
 endef
 

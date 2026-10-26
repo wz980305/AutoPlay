@@ -10,6 +10,8 @@ from pathlib import Path
 import tempfile
 
 MDNS_NAME = "dashplay.local"
+# The name the head unit opens without a DuckDNS one, answered by the box's own dnsmasq (tesla_openwrt.OfflineChecks).
+LOCAL_NAME = "autoplay.lan"
 
 # Tesla's browser opens no private address (10/8, 172.16/12, 192.168/16), by name or not, and its Wi-Fi does
 # not use IPv6 there; the shared address space 100.64.0.0/10 (RFC 6598) is not private, and a LAN numbered

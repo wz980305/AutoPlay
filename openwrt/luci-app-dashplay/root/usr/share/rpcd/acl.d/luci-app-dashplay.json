@@ -11,8 +11,7 @@
         ]
       },
       "uci": [
-        "dashplay",
-        "wireless"
+        "dashplay"
       ],
       "file": {
         "/var/run/dashplay/network-status.json": [
@@ -22,6 +21,9 @@
           "read"
         ],
         "/opt/dashplay/state/update-status.json": [
+          "read"
+        ],
+        "/opt/dashplay/state/own-domain.json": [
           "read"
         ]
       }

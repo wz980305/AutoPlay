@@ -4,9 +4,9 @@
     python3 f50-install.py check    WORK            tools, pinned downloads, free space
     python3 f50-install.py flash    WORK            full backup and Root in ONE download-mode session
     python3 f50-install.py openwrt  WORK            OpenWrt on the SD card, Android B kept
-    python3 f50-install.py dashplay WORK            DashPlay packages and Bluetooth
+    python3 f50-install.py dashplay WORK            DashPlay packages and Bluetooth (the LAN becomes 100.96.0.1)
     python3 f50-install.py identity WORK [DIR]      CarPlay identity (DIR, or from DiPlay's release) onto the box
-    python3 f50-install.py tesla    WORK --sim yes|no [--cn-149]
+    python3 f50-install.py tesla    WORK [--country CC --channel N]   checks, optional Wi-Fi country/channel
 
 WORK is the install directory of the skill (skills/dashplay-install/SKILL.md); this stage's files go to WORK/f50.
 Run it with the Python environment the skill sets up (WORK/venv, the pinned requirements-f50.txt). On Windows the F50 in
@@ -102,9 +102,9 @@ STAGES = {
     'check': ('F50 检查工具并下载', 180, None),
     'flash': ('F50 备份并 Root', 480, '只在提示「断开 F50 的全部电源」时拔一次 USB 线；其余时间不要拔线、不要断电'),
     'openwrt': ('F50 装 OpenWrt 到 SD 卡', 600, '不要拔线、不要断电、不要拔 SD 卡：正在写 SD 卡和启动分区'),
-    'dashplay': ('F50 装 DashPlay 和蓝牙', 300, '尽量不要断电：正在安装软件包；中断了重新运行这一步即可'),
+    'dashplay': ('F50 装 DashPlay 和蓝牙', 420, '尽量不要断电：正在安装软件包；中断了重新运行这一步即可'),
     'identity': ('F50 放认证文件', 60, None),
-    'tesla': ('F50 特斯拉模式', 120, None),
+    'tesla': ('F50 特斯拉检查', 120, None),
 }
 
 
@@ -515,7 +515,7 @@ def openwrt(w, args):
 
 def dashplay(w, args):
     w.needs('openwrt')
-    host = w.state().get('tesla', {}).get('host', OPENWRT)
+    host = w.state().get('dashplay', {}).get('host', OPENWRT)   # a rerun after the LAN moved
     env = w.ssh(host, '. /etc/openwrt_release; echo "$DISTRIB_RELEASE"; cat /etc/apk/arch; '
                       "df -k / | awk 'NR==2{print $4}'; awk '/MemTotal/{print $2}' /proc/meminfo")
     release, arch, free_kb, mem_kb = env.split()[:4]
@@ -547,12 +547,26 @@ def dashplay(w, args):
     w.ssh(host, 'rm -rf /tmp/dashplay-install && mkdir -m 700 /tmp/dashplay-install')
     for name, path in files.items():
         w.push(host, path, f'/tmp/dashplay-install/{name}')
-    w.ssh(host, 'cd /tmp/dashplay-install && apk add --allow-untrusted dashplay-jre-*.apk dashplay-2*.apk luci-*.apk', timeout=1800)
+    # Installing moves the LAN to 100.96.0.1/24 (the package's uci-defaults: a Tesla's browser opens no private
+    # address), which drops this SSH session: run apk apart from it and find the box again on the new address.
+    w.ssh(host, 'cd /tmp/dashplay-install && (apk add --allow-untrusted dashplay-jre-*.apk dashplay-2*.apk luci-*.apk '
+                '> /tmp/dashplay-install.log 2>&1 </dev/null &) ; echo started', timeout=60)
+    say(f'installing; the box moves to {TESLA_LAN} (a few minutes)')
+    if host != TESLA_LAN and not wait_port(TESLA_LAN, 22, 600):
+        action('拔下 F50 的 USB 线再插回电脑（让电脑重新取地址），然后等待。')
+        require(wait_port(TESLA_LAN, 22, 300), f'box not reachable at {TESLA_LAN}: reconnect the computer to it')
+    host = TESLA_LAN
+    deadline = time.monotonic() + 600
+    while time.monotonic() < deadline:
+        if 'dashplay' in w.ssh(host, "apk list -I dashplay 2>/dev/null | awk '$1 ~ /^dashplay-[0-9]/'", check=False):
+            break
+        time.sleep(5)
+    else:
+        raise Stop('the dashplay package did not install: see /tmp/dashplay-install.log on the box')
+    require(f'inet {TESLA_LAN}/24' in w.ssh(host, 'ip -4 addr show br-lan'), f'br-lan is not {TESLA_LAN}/24')
     # F50 Bluetooth: a private BlueZ beside the 5.4 kernel; the system bluez-daemon would bring 6.12 modules
     w.ssh(host, 'python3 /opt/dashplay/board_zte_f50.py --setup', timeout=900)
-    w.ssh(host, "uci set dashplay.main.bluetooth_service='/usr/bin/python3 /opt/dashplay/board_zte_f50.py' && "
-                "uci set dashplay.main.dbus_address='unix:path=/var/run/dashplay/bluetooth/system_bus_socket' && "
-                'uci commit dashplay && : > /var/run/dashplay/supervisor.log 2>/dev/null; /etc/init.d/dashplay restart')
+    w.ssh(host, ': > /var/run/dashplay/supervisor.log 2>/dev/null; /etc/init.d/dashplay restart')
     deadline = time.monotonic() + 150
     log = ''
     while time.monotonic() < deadline:
@@ -563,7 +577,7 @@ def dashplay(w, args):
     require('bluetooth powered' in log, 'Bluetooth did not power on (wireless CarPlay needs it): see /var/run/dashplay/supervisor.log')
     # apk 3's "info -v" prints the description; the installed package's full name is the first field of "list -I"
     version = w.ssh(host, "apk list -I dashplay 2>/dev/null | awk '$1 ~ /^dashplay-[0-9]/ {print $1; exit}'").strip()
-    w.done('dashplay', version=version)
+    w.done('dashplay', version=version, host=host)
     say(f'{version} running, Bluetooth on; settings page http://{host}:18080/')
 
 
@@ -600,7 +614,7 @@ def fetch_identity(out):
 
 def identity(w, args):
     w.needs('dashplay')
-    host = w.state().get('tesla', {}).get('host', OPENWRT)
+    host = w.state().get('dashplay', {}).get('host', TESLA_LAN)
     source = Path(args.dir) if args.dir else w.root / 'identity-private'
     if not (source / 'identity.pk8').exists():
         require(not args.dir, f'no identity.pk8 in {source}')
@@ -618,32 +632,14 @@ def identity(w, args):
     w.done('identity')
 
 
-TESLA_SCRIPT = '''#!/bin/sh
-# Runs on the box, apart from the SSH session: the LAN moves to 100.96.0.1 and the session drops.
-{sim}uci set dashplay.main.tesla_mode=1
-uci commit dashplay
-/etc/init.d/dashplay restart
-'''
-
-
 def tesla(w, args):
+    """Tesla mode is the package's only mode (tesla_only_box_delta.md D4, D16): this stage only checks the box and,
+    when asked, sets the Wi-Fi country and channel (a Tesla sees 5 GHz channels 36-48 and 149-165 only; CN: 149).
+    The old SIM question is gone: the checks are answered whether or not a SIM is in (2026-10-25 semantics)."""
     w.needs('dashplay')
-    sim = args.sim == 'yes'
-    host = w.state().get('tesla', {}).get('host', OPENWRT)
-    if host != TESLA_LAN:
-        script = TESLA_SCRIPT.format(sim='uci set dashplay.main.answer_tesla_checks=0\n' if sim else '')
-        w.ssh(host, 'cat > /tmp/dashplay-tesla.sh', stdin=script.encode())
-        w.ssh(host, '(sh /tmp/dashplay-tesla.sh > /tmp/dashplay-tesla.log 2>&1 </dev/null &) ; echo started')
-        say(f'Tesla mode on; the box moves to {TESLA_LAN} (about 30 s)')
-        if not wait_port(TESLA_LAN, 22, 120):
-            action('拔下 F50 的 USB 线再插回电脑（让电脑重新取地址），然后等待。')
-            require(wait_port(TESLA_LAN, 22, 300), f'box not reachable at {TESLA_LAN}: reconnect the computer to it')
-        w.done('tesla', host=TESLA_LAN)
     host = TESLA_LAN
+    require(wait_port(host, 22, 60), f'box not reachable at {host}')
     require(f'inet {TESLA_LAN}/24' in w.ssh(host, 'ip -4 addr show br-lan'), f'br-lan is not {TESLA_LAN}/24')
-    if sim:
-        require(re.search(r'Address:\s*\d', w.ssh(host, 'nslookup duckdns.org 127.0.0.1', check=False).split('Name:', 1)[-1]),
-                'no upstream DNS through the box (check answer_tesla_checks and the SIM card)')
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
         count = w.ssh(host, "for p in $(pgrep -f run-receiver.py); do tr '\\0' ' ' < /proc/$p/cmdline; echo; done | grep -c -- '--tesla'",
@@ -652,15 +648,22 @@ def tesla(w, args):
             break
         time.sleep(5)
     else:
-        raise Stop('the receiver did not restart in Tesla mode: see /var/run/dashplay/supervisor.log')
+        raise Stop('the receiver is not running in Tesla mode: see /var/run/dashplay/supervisor.log')
     radio = w.ssh(host, "uci show wireless | grep -E 'country|channel'")
-    if args.cn_149:
+    if args.channel or args.country:
         name = re.search(r'wireless\.(\w+)\.channel=', radio)
         require(name, 'no radio found')
-        w.ssh(host, f'uci set wireless.{name.group(1)}.country=CN; uci set wireless.{name.group(1)}.channel=149; '
-                    'uci commit wireless; (wifi reload >/dev/null 2>&1 &)')
+        changes = []
+        if args.country:
+            require(re.fullmatch(r'[A-Z]{2}', args.country), '--country takes a two-letter code such as CN')
+            changes.append(f'uci set wireless.{name.group(1)}.country={args.country}')
+        if args.channel:
+            require(args.channel in (36, 40, 44, 48, 149, 153, 157, 161, 165), '--channel: a Tesla sees 36-48 and 149-165 only')
+            changes.append(f'uci set wireless.{name.group(1)}.channel={args.channel}')
+        w.ssh(host, '; '.join(changes) + '; uci commit wireless; (wifi reload >/dev/null 2>&1 &)')
         time.sleep(15)
         radio = w.ssh(host, "uci show wireless | grep -E 'country|channel'")
+    w.done('tesla', host=host)
     say('Wi-Fi: ' + ' '.join(radio.split()))
     say(f'in the car: https://{TESLA_LAN}:18443/ (or the own name once set up)')
 
@@ -674,8 +677,8 @@ def main():
         if name == 'identity':
             q.add_argument('dir', nargs='?')
         if name == 'tesla':
-            q.add_argument('--sim', choices=('yes', 'no'), required=True)
-            q.add_argument('--cn-149', action='store_true', help='CN, channel 149 (only where that is allowed)')
+            q.add_argument('--country', help='Wi-Fi country code, e.g. CN')
+            q.add_argument('--channel', type=int, help='5 GHz channel the Tesla sees: 36-48 or 149-165 (CN: 149)')
     args = p.parse_args()
     global PROGRESS
     try:

@@ -1,0 +1,52 @@
+#!/bin/sh
+# uci-defaults of the dashplay package (runs once at install and after every upgrade; OpenWrt deletes it when
+# it exits 0). Tesla-only constants (tesla_only_box_delta.md D1, D2, D4):
+#  - the LAN is 100.96.0.1/24: a Tesla's browser opens no private address, by name or not, and 100.64.0.0/10
+#    (RFC 6598) is not private. Set once here; the service never moves it at run time (it only warns when it
+#    is elsewhere). The first install drops an SSH session on the old address, as the old `tesla` stage did.
+#    Uninstalling does not put the previous address back.
+#  - settings of older releases that are constants now are dropped from dashplay.main.
+#  - the DNS records older releases kept for the own name (dhcp.dashplay, dhcp.dashplay6, a local-only server
+#    entry, the rebind_domain whitelist) go: the name is answered by the service's own address= record.
+changed=
+if [ "$(uci -q get network.lan.proto)" = static ]; then
+	case "$(uci -q get network.lan.ipaddr)/$(uci -q get network.lan.netmask)" in
+		100.96.0.1/255.255.255.0|100.96.0.1/24/) ;;
+		*)
+			uci set network.lan.ipaddr='100.96.0.1'
+			uci set network.lan.netmask='255.255.255.0'
+			uci commit network
+			changed=network
+			;;
+	esac
+fi
+
+for option in wifi settings_port java name bluetooth_service dbus_address public_ipv6 shared_lan car_music car_voice \
+		tesla_mode answer_tesla_checks external_ssid external_key external_security external_channel external_network; do
+	[ -n "$(uci -q get dashplay.main.$option)" ] && uci -q delete dashplay.main.$option && changed="$changed dashplay"
+done
+case "$changed" in *dashplay*) uci commit dashplay ;; esac
+
+dns_changed=
+for section in dashplay dashplay6; do
+	[ "$(uci -q get dhcp.$section)" = domain ] && uci delete dhcp.$section && dns_changed=1
+done
+for entry in $(uci -q get dhcp.@dnsmasq[0].server); do
+	case "$entry" in /*.duckdns.org/|/dashplay.lan/|/autoplay.lan/) uci -q del_list dhcp.@dnsmasq[0].server="$entry" && dns_changed=1 ;; esac
+done
+for entry in $(uci -q get dhcp.@dnsmasq[0].rebind_domain); do
+	case "$entry" in /*.duckdns.org/|/dashplay.lan/|/autoplay.lan/) uci -q del_list dhcp.@dnsmasq[0].rebind_domain="$entry" && dns_changed=1 ;; esac
+done
+[ -n "$dns_changed" ] && uci commit dhcp
+
+case "$changed" in
+	network*)
+		# Apply in the background: this script may run inside an SSH session on the old address.
+		( sleep 2; /etc/init.d/network reload; [ -n "$dns_changed" ] && /etc/init.d/dnsmasq reload ) >/dev/null 2>&1 </dev/null &
+		echo "dashplay: LAN moved to 100.96.0.1/24 (Tesla); reconnect to http://100.96.0.1/"
+		;;
+	*)
+		[ -n "$dns_changed" ] && ( /etc/init.d/dnsmasq reload >/dev/null 2>&1 </dev/null & )
+		;;
+esac
+exit 0

@@ -6,8 +6,11 @@ msgstr ""
 msgid "DashPlay"
 msgstr "DashPlay"
 
-msgid "CarPlay in the car's web browser. Set up Wi-Fi under Network → Wireless as usual; DashPlay hands one of these networks to the iPhone over Bluetooth, and the head unit opens the CarPlay page on the same network."
-msgstr "在车机浏览器里用 CarPlay。WiFi 照常在「网络 → 无线」里设置；DashPlay 经蓝牙把其中一个 WiFi 交给 iPhone，车机连同一个 WiFi 打开 CarPlay 画面。"
+msgid "CarPlay in the Tesla's web browser. The box's Wi-Fi (Network → Wireless) is handed to the iPhone over Bluetooth; the Tesla joins the same Wi-Fi and opens the CarPlay page."
+msgstr "在特斯拉的浏览器里用 CarPlay。盒子的 Wi-Fi（「网络 → 无线」）经蓝牙交给 iPhone；特斯拉连同一个 Wi-Fi 打开 CarPlay 画面。"
+
+msgid "Overview"
+msgstr "概览"
 
 msgid "Status"
 msgstr "状态"
@@ -18,92 +21,56 @@ msgstr "运行中"
 msgid "Not running"
 msgstr "未运行"
 
+msgid "Network warning"
+msgstr "网络提示"
+
 msgid "Open"
 msgstr "打开"
 
-msgid "DashPlay settings (add iPhone)"
-msgstr "DashPlay 设置（添加 iPhone）"
+msgid "Add iPhone"
+msgstr "添加 iPhone"
 
 msgid "CarPlay screen"
 msgstr "CarPlay 画面"
 
+msgid "Network"
+msgstr "网络"
+
+msgid "iPhone"
+msgstr "iPhone"
+
+msgid "Own address"
+msgstr "自己的网址"
+
+msgid "Program update"
+msgstr "程序更新"
+
 msgid "Enable"
 msgstr "启用"
 
-msgid "Wi-Fi handed to the iPhone"
-msgstr "交给 iPhone 的 WiFi"
+msgid "Addresses"
+msgstr "地址"
 
-msgid "The iPhone joins this network for wireless CarPlay. The router's own access point works best; a network the router joins as a client must be in a firewall zone that accepts input."
-msgstr "无线 CarPlay 时 iPhone 连这个 WiFi。最好用路由器自己的热点；路由器作为客户端连接的网络，必须在允许入站的防火墙区域里。"
+msgid "The box's LAN is %s (set at install: a Tesla's browser opens no private address). The first access point under Network → Wireless is handed to the iPhone, 5 GHz first; the Tesla sees 5 GHz channels 36–48 and 149–165 only (CN: 149). In the Tesla's Wi-Fi settings turn on \"Remain connected in Drive\", else the picture stops out of Park. Settings page: %s"
+msgstr "盒子的局域网是 %s（安装时设定：特斯拉的浏览器打不开私有地址）。「网络 → 无线」里的第一个热点交给 iPhone，优先 5 GHz；特斯拉只认 5 GHz 的 36–48 和 149–165 信道（国内用 149）。在特斯拉的 Wi-Fi 设置里打开「行驶中保持连接」，否则出 P 挡画面会停。设置页：%s"
 
-msgid "Automatic (first access point, 5 GHz first)"
-msgstr "自动（第一个热点，优先 5 GHz）"
+msgid "CarPlay screen port"
+msgstr "CarPlay 画面端口"
 
-msgid "access point"
-msgstr "热点"
+msgid "The HTTPS port of the CarPlay page. Empty is 18443, or the port an older install saved; a change takes about a minute and interrupts CarPlay briefly. It must differ from 18080, 80, 443 and 7000."
+msgstr "CarPlay 画面的 HTTPS 端口。留空为 18443，或旧版保存过的端口；修改约 1 分钟生效，CarPlay 会短暂中断。不能与 18080、80、443、7000 相同。"
 
-msgid "client"
-msgstr "客户端"
+msgid "Diagnostics"
+msgstr "诊断"
 
-msgid "Another router's Wi-Fi (enter below)"
-msgstr "另一台路由器的 WiFi（在下面填写）"
+msgid "Download diagnostics from the DashPlay settings page. Saving changes here restarts the service and interrupts CarPlay briefly."
+msgstr "诊断记录在 DashPlay 设置页下载。在这里保存修改会重启服务，CarPlay 会短暂中断。"
 
-msgid "Other router: Wi-Fi name"
-msgstr "另一台路由器：WiFi 名称"
+msgid "Adding an iPhone"
+msgstr "添加 iPhone"
 
-msgid "Set the other router up as an access point bridged into this router's LAN (no DHCP of its own, its LAN port or USB tethering in the bridge), so that phones and the head unit get their addresses from this router. Give its Wi-Fi a fixed channel."
-msgstr "把另一台路由器设成桥接进本路由器局域网的无线接入点（关掉它自己的 DHCP，把它连本机的网口或 USB 共享网卡放进桥里），让手机和车机从本路由器拿地址。它的 WiFi 要设成固定信道。"
-
-msgid "Other router: password type"
-msgstr "另一台路由器：加密方式"
-
-msgid "WPA2 personal (also WPA2/WPA3 mixed)"
-msgstr "WPA2 个人（WPA2/WPA3 混合也选这个）"
-
-msgid "WPA3 personal only"
-msgstr "仅 WPA3 个人"
-
-msgid "None (open)"
-msgstr "不加密"
-
-msgid "Other router: Wi-Fi password"
-msgstr "另一台路由器：WiFi 密码"
-
-msgid "Other router: Wi-Fi channel"
-msgstr "另一台路由器：WiFi 信道"
-
-msgid "The channel the other router actually uses, e.g. 149 or 6. Set a fixed one there, then check its status page or a phone's Wi-Fi details: some routers move the primary channel within the band (36 became 40 in a test). The iPhone is told this channel."
-msgstr "另一台路由器实际在用的信道，例如 149 或 6。先在那边设成固定信道，再到它的状态页或手机的 WiFi 详情里看实际信道：有的路由器会在频段内换主信道（实测设 36 变成了 40）。会告诉 iPhone 这个信道。"
-
-msgid "Other router: bridged into network"
-msgstr "另一台路由器：桥接进的网络"
-
-msgid "The interface of this router the other router is bridged into; DashPlay serves the CarPlay page on its address."
-msgstr "另一台路由器桥接进本路由器的哪个接口；DashPlay 在这个接口的地址上提供 CarPlay 画面。"
-
-msgid "Settings page port"
-msgstr "设置页端口"
-
-msgid "Address name"
-msgstr "访问名称"
-
-msgid "The head unit opens the CarPlay page by this name, which the router answers on its own Wi-Fi; the page's certificate is made for it. On the router's access point the head unit opens %s"
-msgstr "车机用这个名字打开 CarPlay 画面，名字由路由器在自己的 WiFi 里解析，画面的证书也是为它签的。车机连上路由器热点后打开 %s"
-
-msgid "Public IPv6 address for the name"
-msgstr "访问名称指向公网 IPv6"
-
-msgid "Some head units refuse to open a LAN address. The name can also point at this router's own public IPv6 address: the head unit then sees a public address, while the picture still comes straight over the Wi-Fi. Needs a public IPv6 address on the router and IPv6 handed on to its Wi-Fi. \"Only\" helps to check that it works; the DashPlay settings page then opens by the LAN address, not by the name."
-msgstr "有的车机不让打开局域网地址。访问名称可以同时指向本路由器自己的公网 IPv6 地址：车机看到的是公网地址，画面仍然直接走 WiFi，不经过外网、不耗流量。需要路由器有公网 IPv6，并把 IPv6 分给 WiFi 里的设备。「只用」便于确认这条路是否通；这时 DashPlay 设置页要用局域网地址打开，不能用访问名称。"
-
-msgid "No (LAN address only)"
-msgstr "不用（只用局域网地址）"
-
-msgid "Also (beside the LAN address)"
-msgstr "同时（与局域网地址并存）"
-
-msgid "Only (instead of the LAN address)"
-msgstr "只用（不给局域网地址）"
+msgid "Open the settings page on the Tesla or another device (not on the iPhone being added: it must stay in Settings → Bluetooth) and tap \"Add iPhone\". Pair the iPhone with the Tesla over Bluetooth as well and pick it as the media source: music, calls and Siri go over the car's own Bluetooth; the CarPlay page shows the screen and plays navigation prompts."
+msgstr "在特斯拉或另一台设备上打开设置页（不要在要添加的那部 iPhone 上：它要停在「设置 → 蓝牙」），点「添加 iPhone」。iPhone 也要用蓝牙连上特斯拉并选为媒体来源：音乐、通话和 Siri 走车机蓝牙；CarPlay 画面显示屏幕并播放导航提示。"
 
 msgid "Release the iPhone after (seconds)"
 msgstr "无人观看多久后释放 iPhone（秒）"
@@ -114,95 +81,14 @@ msgstr "没有任何网页在看画面超过这个时间，就结束无线 CarPl
 msgid "Own name (DuckDNS sub-domain)"
 msgstr "自己的域名（DuckDNS 子域名）"
 
-msgid "Only needed when the head unit's browser blocks the certificate warning with no way to continue. Sign up for free at duckdns.org, add a sub-domain and enter it with the token shown there. The address name then becomes that name (e.g. mycar.duckdns.org): DashPlay points it at this router and obtains a free Let's Encrypt certificate, renewed automatically, so the head unit opens the page without a warning. No port needs to be opened; the router needs internet access."
-msgstr "只在车机浏览器拦截证书警告、没有「继续访问」时需要。在 duckdns.org 免费注册并建一个子域名，把子域名和页面上的 token 填在这里。访问名称会变成这个域名（如 mycar.duckdns.org）：DashPlay 把它指向本路由器，并申请免费的 Let’s Encrypt 正式证书、到期前自动续签，车机打开时不再有证书警告。不需要开放任何端口，路由器要能上网。"
+msgid "The address the Tesla opens. Sign up for free at duckdns.org, add a sub-domain and enter it with the token shown there. The name becomes that name (e.g. mycar.duckdns.org): DashPlay points it at this box and obtains a free Let's Encrypt certificate, renewed automatically over the SIM, so the Tesla opens https://mycar.duckdns.org:18443/ without a warning. Without a name the Tesla opens https://autoplay.lan:18443/ with the box's own certificate; whether its warning page offers \"continue\" is not verified."
+msgstr "特斯拉打开的地址。在 duckdns.org 免费注册，添加一个子域名，把它和页面上显示的 token 填在这里。地址就变成这个名字（如 mycar.duckdns.org）：DashPlay 把它指向这台盒子，并经 SIM 卡自动申请、续签免费的 Let's Encrypt 证书，特斯拉打开 https://mycar.duckdns.org:18443/ 不会有警告。不填时特斯拉打开 https://autoplay.lan:18443/，用盒子自带证书；它的警告页有没有「继续」尚未验证。"
 
 msgid "DuckDNS token"
 msgstr "DuckDNS token"
 
-msgid "General"
-msgstr "常规"
-
-msgid "When the head unit cannot open the page"
-msgstr "车机打不开画面时"
-
-msgid "Usually not needed"
-msgstr "一般用不到"
-
-msgid "Try in this order: 1. The head unit warns that the certificate is not trusted: tap continue. 2. It offers no way to continue: install the DashPlay CA certificate on the head unit (DashPlay settings page, \"Download the box CA certificate\"), or, when it cannot install one, set an own name below. 3. It refuses to open a LAN address such as 192.168.x.x, even by name (Tesla does): turn on \"Head unit refuses every LAN address\" below, or, when the router and the head unit have IPv6, set \"Public IPv6 address for the name\" to \"Also\"."
-msgstr "按顺序试：① 车机提示证书不安全：点「继续访问」即可。② 没有「继续访问」：在车机上装 DashPlay 的 CA 证书（DashPlay 设置页「下载盒子 CA 证书」）；车机不让装，就在下面设置「自己的域名」。③ 车机不让打开 192.168.x.x 这类局域网地址（用名称也不行，特斯拉就是这样）：勾选下面的「车机不让开任何局域网地址」；或者在路由器和车机都有 IPv6 时，把「访问名称指向公网 IPv6」选为「同时」。"
-
-msgid "Head unit refuses every LAN address (e.g. Tesla)"
-msgstr "车机不让开任何局域网地址（如特斯拉）"
-
-msgid "Tesla's browser opens no LAN address such as 192.168.x.x, not even by name. Turned on, the router's own Wi-Fi network moves to %s (devices get 100.96.0.x): that range is not a private one, so such browsers open it, and the address name and own name follow. Afterwards open this admin page at %s and reconnect the head unit and phones to the Wi-Fi. Turning it off puts the previous address back."
-msgstr "特斯拉的浏览器不让打开 192.168.x.x 这类局域网地址，用名称也不行。勾选后，路由器自己 WiFi 的网段改成 %s（设备拿到 100.96.0.x）：这段地址不算局域网地址，这类浏览器就能打开；访问名称和自己的域名会自动跟着改。改完请用 %s 打开本后台，车机和手机重新连一次 WiFi。取消勾选会改回原来的地址。"
-
-msgid "Tesla mode"
-msgstr "特斯拉模式"
-
-msgid "For a Tesla. The router's Wi-Fi network moves to %s, which the Tesla browser opens (it refuses LAN addresses such as 192.168.x.x); music, calls and Siri are left to the car (both switches below, turned on); the fullscreen button works in the Tesla browser. Pair the iPhone with the Tesla over Bluetooth and pick it as the media source. In the Tesla's Wi-Fi settings turn on \"Remain connected in Drive\", else the picture stops out of Park. Afterwards open this admin page at %s and reconnect the car and phones to the Wi-Fi. Turning it off puts the previous address back."
-msgstr "给特斯拉用。路由器 WiFi 的网段改成 %s，特斯拉浏览器才能打开（它不让开 192.168.x.x 这类局域网地址）；音乐、通话和 Siri 交给车（相当于勾上下面两项）；全屏按钮在特斯拉浏览器里可用。iPhone 用蓝牙连特斯拉，并在特斯拉里把媒体来源选成这部 iPhone。在特斯拉的 WiFi 设置里打开「行驶中保持连接」，否则出 P 挡画面就停。改完请用 %s 打开本后台，车和手机重新连一次 WiFi。取消勾选会改回原来的地址。"
-
-msgid "Music over the car's Bluetooth"
-msgstr "音乐走车机蓝牙"
-
-msgid "Pair the iPhone with the car over Bluetooth and pick it as the media source: the steering wheel, media card and volume then work as with any phone. The CarPlay page shows the screen and plays navigation prompts, louder. If music ever comes without sound, choose the car as audio output in the iPhone's Control Center."
-msgstr "iPhone 用蓝牙连车机，并在车机里把媒体来源选成这部 iPhone：方向盘切歌、媒体卡片、音量就和普通手机一样用。CarPlay 网页负责画面和导航播报（播报会放大）。偶尔放歌没声音时，在 iPhone 控制中心把音频输出选成车机。"
-
-msgid "Calls and Siri over the car's Bluetooth"
-msgstr "通话与 Siri 走车机蓝牙"
-
-msgid "Calls and Siri use the car's own microphone and speakers through its Bluetooth (the iPhone must be paired with the car), not the CarPlay page. Worth a try when calls through the page echo."
-msgstr "通话和 Siri 用车机自己的麦克风和喇叭（iPhone 要先用蓝牙连上车机），不经过 CarPlay 网页。网页通话有回声时可以试试。"
-
-msgid "Network warning"
-msgstr "网络提示"
-
-msgid "Network check unavailable (service starting or stopped)."
-msgstr "网络检查暂不可用（服务启动中或已停止）。"
-
-msgid "Car"
-msgstr "车"
-
-msgid "Network"
-msgstr "网络"
-
-msgid "Car internet"
-msgstr "车机上网"
-
-msgid "iPhone"
-msgstr "iPhone"
-
-msgid "Sound"
-msgstr "声音"
-
-msgid "Own address"
-msgstr "自己的网址"
-
-msgid "Diagnostics"
-msgstr "诊断"
-
-msgid "Tesla offline checks"
-msgstr "特斯拉离线联网检查"
-
-msgid "Automatic (recommended)"
-msgstr "自动（推荐）"
-
-msgid "Enable only without upstream"
-msgstr "仅无上游时启用"
-
-msgid "Off (use upstream)"
-msgstr "关闭（使用上游）"
-
-msgid "Download diagnostics from the DashPlay settings page. Changes take about one minute and interrupt CarPlay briefly."
-msgstr "在 DashPlay 设置页下载诊断记录。修改后约 1 分钟生效，期间 CarPlay 会断一下。"
-
-msgid "Without a working SIM uplink, answer Tesla connectivity checks so it accepts this Wi-Fi. Tesla music and maps then have no internet; CarPlay still works. To keep Tesla apps online, insert a working SIM. The current F50 driver cannot join a phone hotspot while keeping its own hotspot. Automatic probes the WAN path and restores the original DNS and DHCP when it returns. This release needs an in-car retest, including loss of SIM signal."
-msgstr "没有可用的 SIM 上网时，替特斯拉回答联网检查，让它接受此 WiFi。特斯拉自带音乐和地图不能联网，CarPlay 正常。要让车机上网，请插可上网的 SIM 卡；F50 当前驱动不能一边连手机热点一边开热点。自动模式探测上游，恢复后还原 DNS 和 DHCP。本轮正式功能待实车复测，包括有卡但没信号的情况。"
-
-msgid "Program update"
-msgstr "程序更新"
+msgid "Certificate"
+msgstr "证书"
 
 msgid "Loading…"
 msgstr "正在读取…"
@@ -218,6 +104,30 @@ msgstr "下载镜像"
 
 msgid "Tried when GitHub cannot be reached. Releases are signed, so a mirror cannot change what is installed. Empty: the built-in mirror; \"none\": GitHub only."
 msgstr "连不上 GitHub 时改用这个地址前缀下载。发布带签名，镜像改不了装进来的内容。留空用内置的镜像；填 none 只用 GitHub。"
+
+msgid "Network check unavailable (service starting or stopped)."
+msgstr "网络检查暂不可用（服务启动中或已停止）。"
+
+msgid "No own name set."
+msgstr "没有设置自己的网址。"
+
+msgid "certificate installed"
+msgstr "证书已装好"
+
+msgid "obtaining the certificate (a few minutes online)"
+msgstr "正在申请证书（联网后几分钟）"
+
+msgid "renewing the certificate"
+msgstr "正在续签证书"
+
+msgid "not obtained yet: check the SIM, the sub-domain and the token; retried every hour"
+msgstr "还没申请到：检查 SIM 卡、子域名和 token；每小时重试"
+
+msgid "waiting for the internet"
+msgstr "等待联网"
+
+msgid "DuckDNS record update failed, retrying"
+msgstr "更新 DuckDNS 解析失败，继续重试"
 
 msgid "Updating:"
 msgstr "正在升级："
@@ -243,8 +153,8 @@ msgstr "（当前 %s）"
 msgid "an older version"
 msgstr "较旧版本"
 
-msgid "This version changes the system: update with the firmware image as the installation guide describes."
-msgstr "这一版改了系统，不能在线升级：请按装机说明用刷机包升级。"
+msgid "This version changes the system: reinstall as the installation guide describes."
+msgstr "这一版改了系统：请按装机说明重新安装。"
 
 msgid "Up to date:"
 msgstr "已是最新："

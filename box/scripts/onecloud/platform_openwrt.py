@@ -94,16 +94,13 @@ def wifi_networks(status):
     return sorted(found, key=lambda n: (not n["up"], n["mode"] != "ap", rank.get(n["band"], 3)))
 
 
-def pick_network(networks, wanted="auto", live=True):
-    """The network to hand the iPhone: the named uci section, or the first usable access point (5 GHz
-    preferred), else a client network. Returns (network, reason when none fits)."""
-    candidates = [n for n in networks if n["mode"] in ("ap", "sta")]
-    if wanted and wanted != "auto":
-        candidates = [n for n in candidates if n["section"] == wanted]
-        if not candidates:   # ubus leaves a disabled wifi-iface out altogether
-            return None, f"Wi-Fi section {wanted} not found or switched off"
+def pick_network(networks, live=True):
+    """The network to hand the iPhone: the first usable access point (5 GHz preferred). The F50 cannot be a
+    client and an access point at once, so client networks are never candidates (tesla_only_box_delta.md D10).
+    Returns (network, reason when none fits)."""
+    candidates = [n for n in networks if n["mode"] == "ap"]
     if not candidates:
-        return None, "no Wi-Fi network is switched on (access point or client)"
+        return None, "no Wi-Fi network is switched on (access point)"
     usable = [n for n in candidates if handoff_security(n["encryption"]) and n["ssid"]]
     if not usable:
         return None, "no Wi-Fi network with a password type the iPhone accepts (open, WPA2 or WPA3 personal)"
@@ -126,22 +123,6 @@ def interface_address(status):
     first = addresses[0]
     return status.get("l3_device") or status.get("device"), ipaddress.IPv4Interface(
         f"{first['address']}/{first.get('mask', 32)}")
-
-
-def zone_input(uci_firewall, network):
-    """`uci show firewall` -> the input policy of the zone that holds `network` (None when no zone does)."""
-    zones, kinds = {}, {}
-    for line in (uci_firewall or "").splitlines():
-        match = re.match(r"^firewall\.([^.=]+)=(\w+)$", line)
-        if match:
-            kinds[match.group(1)] = match.group(2)
-        match = re.match(r"^firewall\.([^.=]+)\.(\w+)='?(.*?)'?$", line)
-        if match:
-            zones.setdefault(match.group(1), {})[match.group(2)] = match.group(3)
-    for name, zone in zones.items():
-        if kinds.get(name) == "zone" and network in re.split(r"'?\s+'?", zone.get("network", "")):
-            return zone.get("input", "").upper() or None
-    return None
 
 
 def hottest(zones=Path("/sys/class/thermal")):
@@ -236,11 +217,11 @@ class OpenWrtPlatform:
         subprocess.run(["bluetoothctl", "system-alias", BLUETOOTH_NAME], capture_output=True, timeout=10)
         return True
 
-    def handoff(self, wanted="auto", live=True):
+    def handoff(self, live=True):
         """(network dict with channel, address and device, reason when not ready).
         live=False: what the configuration says before the radio is up (the access point's configured
         channel, the LAN address), so that the receiver can start while the Wi-Fi comes up."""
-        network, reason = pick_network(wifi_networks(_ubus("network.wireless")), wanted, live)
+        network, reason = pick_network(wifi_networks(_ubus("network.wireless")), live)
         if not network:
             return None, reason
         device, address = interface_address(_ubus(f"network.interface.{network['network']}"))
@@ -258,11 +239,6 @@ class OpenWrtPlatform:
     def interface_network(name):
         """The IPv4 address of netifd interface `name` (e.g. the LAN), or None."""
         return interface_address(_ubus(f"network.interface.{name}"))[1]
-
-    @staticmethod
-    def zone_input(network):
-        out = subprocess.run(["uci", "-q", "show", "firewall"], capture_output=True, text=True, timeout=5).stdout
-        return zone_input(out, network)
 
     def diagnostics(self):
         data = {}

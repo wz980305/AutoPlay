@@ -1,8 +1,10 @@
-"""F50 offline Tesla checks. Own only selected DNS/DHCP fields and one nft table.
+"""F50 Tesla connectivity checks, answered for as long as the box runs. Own only selected DNS/DHCP fields and
+one nft table.
 
-A separate LAN address routes port 80 to SettingsPage without changing uhttpd.
-The original UCI values are journalled before changes, restored on exit/restart
-or WAN recovery. No Wi-Fi concurrency on the F50's current driver.
+A separate LAN address routes port 80 to SettingsPage without changing uhttpd. The original UCI values are
+journalled before changes and restored on exit/restart. Since 2026-10-25 the LAN never flips with the SIM's
+signal (tesla_only_box_delta.md D4, R3): only the upstream probe's status text changes. The own name
+(DuckDNS or autoplay.lan) is answered here too, by one address= record (D2).
 """
 import ipaddress
 import json
@@ -182,24 +184,22 @@ class OfflineChecks:
         self.probe_thread = None
         self.upstream = None
 
-    def update(self, config, network, status, online=None):
-        choice = config.get('answer_tesla_checks', 'auto')
-        eligible = config.get('tesla_mode') == '1' and network['mode'] in ('ap', 'external')
-        # The LAN (check answers, DHCP gateway/DNS, 80 redirect, 100.96) stays for the whole Tesla mode;
-        # only the upstream comes and goes. The Tesla's page, lease and CarPlay never change (2026-10-25).
-        wanted = eligible and choice != '0'
-        self.wanted = wanted
+    def start(self, network, own_name, port, status):
+        """Answer the checks from now on (always wanted: D4). CarPlay must keep running even if the Tesla
+        plumbing cannot be built, so a failure only becomes a status reason (reliability work 6c)."""
+        self.wanted = True
         try:
-            if self.active != wanted:
-                if wanted:
-                    self.enable(network, config['name'], int(config['settings_port']))
-                else:
-                    self.restore()
-        except Exception as error:   # CarPlay must keep running even if the Tesla plumbing cannot be built
+            if not self.active:
+                self.enable(network, own_name, int(port))
+        except Exception as error:
             self.active = False
             status['tesla_error'] = type(error).__name__ + ': ' + str(error)
         else:
             status.pop('tesla_error', None)
+        self.refresh(status)
+
+    def refresh(self, status, online=None):
+        """The status fields: whether the checks are answered, the query log, and the upstream probe's verdict."""
         status['tesla_offline'] = self.active
         if self.active:
             self.start_query_log()  # a failed logger retries without interrupting CarPlay

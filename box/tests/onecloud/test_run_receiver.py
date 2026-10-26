@@ -25,7 +25,7 @@ class BrowserAccessTest(unittest.TestCase):
             dist = root / "playport/web/dist"
             dist.mkdir(parents=True)
             (dist / "receiver-access.js").write_text("localStorage.setItem('playport-token','old');\n")
-            run_receiver.write_browser_access(root, "0123456789abcdef0123456789abcdef", 18080)
+            run_receiver.write_browser_access(root, "0123456789abcdef0123456789abcdef", 18080, tesla=False)
             self.assertFalse((dist / "receiver-access.js").exists())
             access = dist / "receiver-access.json"
             self.assertEqual(json.loads(access.read_text()),
@@ -41,14 +41,10 @@ class BrowserAccessTest(unittest.TestCase):
             access = json.loads((root / "playport/web/dist/receiver-access.json").read_text())
             return {key: value for key, value in access.items() if key not in ("token", "settingsPort")}
 
-    def test_music_over_the_car_bluetooth_reaches_the_page_alone(self):
-        self.assertEqual(self.page_flags(car_music=True), {"carMusic": True})
-
-    def test_tesla_mode_brings_the_car_music_with_it(self):
-        self.assertEqual(self.page_flags(tesla=True), {"carMusic": True, "tesla": True})
-
-    def test_tesla_browser_can_leave_audio_in_the_webpage(self):
-        self.assertEqual(self.page_flags(tesla_browser=True), {"tesla": True, "carMusic": False})
+    def test_tesla_mode_is_the_default_and_brings_the_car_music_with_it(self):
+        # D8: the box is Tesla-only; the page reads both flags from receiver-access.json until its own trim.
+        self.assertEqual(self.page_flags(), {"carMusic": True, "tesla": True})
+        self.assertEqual(self.page_flags(tesla=False), {}, "a lab receiver without the flag")
 
     def test_rejects_an_unexpected_token(self):
         with tempfile.TemporaryDirectory() as directory:
