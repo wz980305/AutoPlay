@@ -1,19 +1,17 @@
 """Drive diagnostics that survive a power cut: one JSON line every 10 s in state/diag/, and the
 full logs of each boot in state/logs/ (LogMirror).
 
-In the car the box is simply switched off, and Armbian keeps /var/log in RAM, so the journal of a
-drive was lost (2026-10-11: the boots of a laggy test drive kept 3 s each). This log is written
-straight to the eMMC and fsynced. Each line holds the box side (Wi-Fi link, USB dongle resets, load,
-temperature, memory) and the noteworthy receiver log lines since the previous line, including the
-viewer's own playback numbers ("viewer stats"). Two files of at most MAX_BYTES each are kept.
+In the car the box is simply switched off, and OpenWrt keeps /var/run in RAM, so the logs of a drive
+were lost (2026-10-11: the boots of a laggy test drive kept 3 s each). This log is written to the SD
+card and fsynced. Each line holds the box side (load, temperature, memory, stations) and the noteworthy
+receiver log lines since the previous line, including the viewer's own playback numbers ("viewer stats").
+Two files of at most MAX_BYTES each are kept.
 """
 import json
 import os
 from pathlib import Path
 import re
 import shutil
-import socket
-import struct
 import subprocess
 import threading
 import time
@@ -75,18 +73,16 @@ MIRROR_INTERVAL = 5
 
 
 class LogMirror:
-    """Full logs that survive a power cut: every /run/dashplay/*.log and this boot's journal (kernel,
-    hostapd, wpa_supplicant, bluetoothd, the supervisor) appended to root/<boot>/ and fsynced every few
-    seconds. Offsets and the journal cursor are kept beside them, so a supervisor restart within the
-    same boot neither repeats nor skips lines (2026-10-12: every drive's journal was lost on power-off).
+    """Full logs that survive a power cut: every /var/run/dashplay/*.log (the supervisor, the receiver, the
+    Bluetooth helper) appended to root/<boot>/ and fsynced every few seconds. Offsets are kept beside them, so
+    a supervisor restart within the same boot neither repeats nor skips lines (2026-10-12: every drive's logs
+    were lost on power-off).
     """
 
-    def __init__(self, root: Path, run: Path, boot_id: str, journal=True):
-        """journal: also this boot's systemd journal (OpenWrt has none: only run/*.log are kept)."""
-        self.root, self.run, self.journal = root, run, journal
+    def __init__(self, root: Path, run: Path, boot_id: str):
+        self.root, self.run = root, run
         self.directory = root / boot_id[:8]
         self.state_file = self.directory / ".offsets.json"
-        self.cursor = self.directory / ".journal-cursor"
 
     def prune(self):
         boots = sorted((d for d in self.root.iterdir() if d.is_dir() and d != self.directory),
@@ -136,10 +132,6 @@ class LogMirror:
                     self.append(key, data[:end], handles)
                     offset += end
             offsets[key] = (stat.st_ino, offset)
-        journal = self.journal and subprocess.run(["journalctl", "-b", "-o", "short-monotonic", "--no-pager", "-q",
-                                                   f"--cursor-file={self.cursor}"], capture_output=True, timeout=20).stdout
-        if journal:
-            self.append("journal.log", journal, handles)
         for fd in handles.values():
             os.fsync(fd)
         self.state_file.write_text(json.dumps(offsets))
@@ -183,8 +175,8 @@ def net_counters():
 
 
 def ping_stats(address, count=5):
-    """A short burst: {min, avg, max, loss %}. Gateway versus phone shows whether the car hotspot's
-    forwarding between its clients (or the phone's power save) adds the delay, or the radio link itself."""
+    """A short burst: {min, avg, max, loss %}. The gateway (the SIM's WAN) versus the phone shows whether
+    the phone's power save adds the delay, or the radio link itself."""
     try:
         out = subprocess.run(["ping", "-c", str(count), "-i", "0.1", "-W", "1", "-q", address],
                              capture_output=True, text=True, timeout=count + 3).stdout
@@ -230,9 +222,8 @@ def local_networks():
 
 
 def ping_targets(state: Path, networks=None):
-    """The default gateway (the car hotspot in station mode) and the phone's address on a network the
-    box is on now: the phones remember several (box hotspot, car hotspot), and the first test drive
-    (2026-10-12) pinged the box-hotspot address while the iPhone was on the car hotspot."""
+    """The default gateway (the SIM's WAN, when up) and the phone's address on a network the box is on now:
+    the phones remember several, and the first test drive (2026-10-12) pinged an address on another network."""
     import ipaddress
     networks = local_networks() if networks is None else networks
     targets = {}
@@ -255,51 +246,6 @@ def ping_targets(state: Path, networks=None):
     return targets
 
 
-GAP_BUCKETS_MS = (10, 50, 150, 500)   # <10, 10-50, 50-150, 150-500, >=500 ms
-
-
-def phone_traffic(interface, address, seconds=4.0):
-    """What arrives from the phone in a few seconds, when the car hotspot relays it: packets, kbit/s,
-    repeated TCP segments (the phone retransmitting: the hotspot lost them or our ACKs) and the gaps
-    between packets. Arrivals bunched every ~100 ms point at power-save buffering (the phone's or the
-    hotspot's), steady but few at a rate limit, many repeats at losses."""
-    try:
-        sock = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(0x0800))
-        sock.bind((interface, 0))
-    except OSError:
-        return None
-    sock.settimeout(0.2)
-    source = socket.inet_aton(address)
-    arrivals, total, repeats, seen = [], 0, 0, set()
-    end = time.monotonic() + seconds
-    try:
-        while time.monotonic() < end:
-            try:
-                frame = sock.recv(4096)
-            except socket.timeout:
-                continue
-            if len(frame) < 34 or frame[26:30] != source:
-                continue
-            arrivals.append(time.monotonic())
-            total += len(frame)
-            header = (frame[14] & 0x0F) * 4
-            if frame[23] == 6 and len(frame) >= 14 + header + 20:
-                tcp = frame[14 + header:]
-                payload = struct.unpack("!H", frame[16:18])[0] - header - (tcp[12] >> 4) * 4
-                if payload > 0:
-                    key = (tcp[:4], tcp[4:8])
-                    repeats += key in seen
-                    seen.add(key)
-    finally:
-        sock.close()
-    gaps = [round((b - a) * 1000) for a, b in zip(arrivals, arrivals[1:])]
-    buckets = [0] * (len(GAP_BUCKETS_MS) + 1)
-    for gap in gaps:
-        buckets[sum(gap >= limit for limit in GAP_BUCKETS_MS)] += 1
-    return {"pkts": len(arrivals), "kbps": round(total * 8 / seconds / 1000), "tcp_repeats": repeats,
-            "max_gap_ms": max(gaps, default=None), "gaps": buckets}
-
-
 def keep(lines, limit=MAX_LINES):
     kept = [line.strip()[:300] for line in lines if KEEP.search(line)]
     return kept[-limit:]
@@ -317,8 +263,8 @@ def start(stopped, log: DiagLog, receiver_log: Path, platform, status, interval=
         while not stopped.wait(interval):
             try:
                 record = {"uptime": round(time.monotonic(), 1), "mode": status.get("mode")}
-                record.update({key: status[key] for key in ("uplink", "tesla_offline", "tesla_internet",
-                               "tesla_dns_log", "direct_phone", "phone_interface") if key in status})
+                record.update({key: status[key] for key in ("tesla_offline", "tesla_internet", "tesla_dns_log")
+                               if key in status})
                 record.update(platform.diagnostics())
                 record["net"] = net_counters()
                 if state is not None:
@@ -327,11 +273,6 @@ def start(stopped, log: DiagLog, receiver_log: Path, platform, status, interval=
                     record["ping"] = {name: ping_stats(address) for name, address in targets.items()}
                     if targets.get("phone"):
                         record["tcp"] = tcp_stats(targets["phone"])
-                        # mifi: a wireless iPhone's video is relayed by the portable Wi-Fi.
-                        relayed = status.get("mode") == "sta"
-                        phone_interface = status.get('phone_interface') or getattr(platform, 'interface', None)
-                        if relayed and int(time.monotonic()) % 30 < interval and phone_interface:
-                            record["phone_rx"] = phone_traffic(phone_interface, targets["phone"])
                 lines = keep(tail.read())
                 if lines:
                     record["log"] = lines

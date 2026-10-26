@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Run the DashPlay receiver (OneCloud, N1, OpenWrt); keep Wi-Fi credentials and tokens out of logs.
+"""Run the DashPlay receiver (OpenWrt); keep Wi-Fi credentials and tokens out of logs.
 
-Reads the Wi-Fi handed to the iPhone from a JSON file (state/hotspot.json, or --hotspot: the car
-hotspot, or on OpenWrt the network read from ubus) and uses the system Python and BlueZ/D-Bus.
+Reads the Wi-Fi handed to the iPhone from the JSON file the supervisor wrote (--hotspot: the network read
+from ubus) and uses the system Python and the board's BlueZ/D-Bus.
 """
 import argparse
 import json
@@ -85,11 +85,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--bind", required=True)
-    parser.add_argument("--phone", default="", help="legacy single phone; migrated into the phone list")
     parser.add_argument("--interface", required=True)
     parser.add_argument("--channel", type=int, required=True, help="AP channel; may not be up yet")
-    parser.add_argument("--hotspot", type=Path, help="Wi-Fi handed to the iPhone (default state/hotspot.json); "
-                        "e.g. the car's own hotspot when the box joins it as a client")
+    parser.add_argument("--hotspot", type=Path, required=True, help="JSON {ssid, passphrase} of the Wi-Fi handed to the iPhone")
     parser.add_argument("--bind-wait", type=int, default=0,
                         help="seconds the server may wait for --bind to be configured (started before the network)")
     parser.add_argument("--security", default="wpa2", choices=["open", "wpa2", "wpa3-transition", "wpa3"],
@@ -125,7 +123,7 @@ def main():
         # Missing, or cut to 0 bytes by a power loss while it was being saved (2026-10-11: the
         # receiver then failed every start); fall back to the default display.
         saved = {}
-    hotspot = json.loads((args.hotspot or root / "state/hotspot.json").read_text())
+    hotspot = json.loads(args.hotspot.read_text())
     ssid = hotspot["ssid"]
     password = "" if args.security == "open" else hotspot["passphrase"]
     viewer = args.viewer_port if 1024 <= args.viewer_port <= 65535 else 0
@@ -135,7 +133,7 @@ def main():
         "display": saved.get("display", {"width": 1280, "height": 720, "fps": 30, "uiScale": 100, "hevc": False}),
         "wireless": not args.no_wireless, "wifiSsid": ssid, "wifiPassphrase": password,
         "wifiChannel": args.channel, "wifiSecurity": args.security,
-        "bluetoothDeviceAddress": args.phone or None, "mdns": "jmdns",
+        "bluetoothDeviceAddress": None, "mdns": "jmdns",
     }
     durable_write(config_path, json.dumps(config, indent=2) + "\n")
     assert json.loads(config_path.read_text()) == config
@@ -151,7 +149,7 @@ def main():
     env = dict(os.environ, BT_BRIDGE_PYTHON="/usr/bin/python3", BT_BRIDGE_READY_WAIT="15", BT_BRIDGE_CONNECT_TIMEOUT="8",
                BT_BRIDGE_RECOVERY_STATE=str(state / "bluetooth-recovery.stamp"),
                CARPLAY_PRESENCE_HELPER=str(root / "phone-presence.py"),
-               CARPLAY_PRESENCE_INTERFACE=args.interface, CARPLAY_DEFAULT_PHONE=args.phone,
+               CARPLAY_PRESENCE_INTERFACE=args.interface, CARPLAY_DEFAULT_PHONE="",
                CARPLAY_PRESENCE_STATE=str(state / "phone-presence.json"))
     if args.web_host:
         env["CARPLAY_WEB_HOST"] = args.web_host

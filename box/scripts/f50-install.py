@@ -274,7 +274,7 @@ def check(w, args):
     shown = w.run([SPD, '--help'], check=False)
     require(SPD_VERSION in shown.stdout + shown.stderr, 'spd_dump is not the pinned build of this repository')
     for tool in ('lz4', 'ssh', 'ssh-keygen'):
-        require(shutil.which(tool), f'{tool} missing (run mac-bootstrap.sh and its export first)')
+        require(shutil.which(tool), f'{tool} missing (install the pinned tools first, see the install guide)')
     require(Path(shutil.which('lz4')).parent == TOOLS, 'lz4 is not the pinned build')
     w.run([sys.executable, '-c', 'import cryptography'], log='check.log')
     if not shutil.which('adb'):

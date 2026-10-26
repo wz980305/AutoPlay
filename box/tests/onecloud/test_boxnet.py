@@ -1,54 +1,18 @@
+"""The receiver's keystore follows the certificate of one's own (tesla_only_box_delta.md D7): wrapped while valid,
+removed when gone or run out so the receiver self-signs for the bind address again."""
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/onecloud"))
 import boxnet
 
 
 @unittest.skipUnless(shutil.which("openssl"), "needs the openssl command")
-class LeafRenewalTests(unittest.TestCase):
-    """The web certificate was reused for as long as its names stayed the same, even expired or signed by a CA
-    that no longer exists (audit 2026-10-13, A4)."""
-
-    def setUp(self):
-        tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
-        self.state = Path(tmp.name)
-
-    def leaf(self):
-        return self.state / "tls" / "leaf.crt"
-
-    def test_same_names_and_a_valid_certificate_keep_it(self):
-        self.assertTrue(boxnet.ensure_leaf(self.state, ["dashplay.lan"], ["192.168.77.1"]))
-        self.assertFalse(boxnet.ensure_leaf(self.state, ["dashplay.lan"], ["192.168.77.1"]))
-
-    def test_a_certificate_near_its_end_is_renewed(self):
-        with patch.object(boxnet, "LEAF_DAYS", 1):   # one day left: inside the renewal margin
-            self.assertTrue(boxnet.ensure_leaf(self.state, ["dashplay.lan"], ["192.168.77.1"]))
-        self.assertTrue(boxnet.ensure_leaf(self.state, ["dashplay.lan"], ["192.168.77.1"]))
-        out = subprocess.run(["openssl", "x509", "-checkend", str(300 * 86400), "-noout", "-in", str(self.leaf())])
-        self.assertEqual(out.returncode, 0, "renewed for the full term")
-
-    def test_a_new_ca_signs_a_new_certificate(self):
-        self.assertTrue(boxnet.ensure_leaf(self.state, ["dashplay.lan"], ["192.168.77.1"]))
-        for name in ("ca.key", "ca.crt"):
-            (self.state / "tls" / name).unlink()
-        self.assertTrue(boxnet.ensure_leaf(self.state, ["dashplay.lan"], ["192.168.77.1"]))
-        out = subprocess.run(["openssl", "verify", "-CAfile", str(self.state / "tls" / "ca.crt"), str(self.leaf())],
-                             capture_output=True, text=True)
-        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
-
-
-
-@unittest.skipUnless(shutil.which("openssl"), "needs the openssl command")
 class OwnCertificateTests(unittest.TestCase):
-    """A certificate of one's own (e.g. Let's Encrypt for a DuckDNS name) in state/tls/own is served while valid:
-    a car browser that refuses the local CA still opens the page (F50, 2026-10-13)."""
-
     def setUp(self):
         tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
         self.state = Path(tmp.name) / "state"; self.state.mkdir()
@@ -74,18 +38,33 @@ class OwnCertificateTests(unittest.TestCase):
                                   "-nokeys", "-clcerts", "-passin", "pass:" + boxnet.KEYSTORE_PASSWORD], capture_output=True, text=True)
         return out.stdout
 
+    def test_without_a_certificate_of_ones_own_there_is_no_keystore(self):
+        # No local CA any more: the receiver makes its own self-signed certificate when the keystore is absent.
+        self.assertFalse(boxnet.ensure_keystore(self.state))
+        self.assertFalse(boxnet.keystore_path(self.state).exists())
+        self.assertFalse((self.state / "tls" / "ca.key").exists())
+
     def test_a_valid_certificate_of_ones_own_is_served(self):
         self.own(60)
-        self.assertTrue(boxnet.ensure_leaf(self.state, ["car.example"], ["192.168.77.1"]))
+        self.assertTrue(boxnet.ensure_keystore(self.state))
         self.assertRegex(self.served(), r"subject=\s*CN\s*=\s*car\.example")
-        self.assertFalse(boxnet.ensure_leaf(self.state, ["car.example"], ["192.168.77.1"]), "the same one is kept")
+        self.assertEqual(boxnet.keystore_path(self.state).stat().st_mode & 0o777, 0o600)
+        self.assertFalse(boxnet.ensure_keystore(self.state), "the same one is kept")
         self.own(60)   # renewed by acme.sh
-        self.assertTrue(boxnet.ensure_leaf(self.state, ["car.example"], ["192.168.77.1"]))
+        self.assertTrue(boxnet.ensure_keystore(self.state), "a renewal rewrites the keystore: the receiver restarts")
 
-    def test_an_expired_one_falls_back_to_the_local_certificate(self):
-        self.own(0)
-        self.assertTrue(boxnet.ensure_leaf(self.state, ["car.example"], ["192.168.77.1"]))
-        self.assertRegex(self.served(), r"subject=\s*CN\s*=\s*DashPlay\n")
+    def test_an_expired_or_removed_certificate_removes_the_keystore(self):
+        self.own(60)
+        boxnet.ensure_keystore(self.state)
+        self.own(0)   # run out
+        self.assertTrue(boxnet.ensure_keystore(self.state))
+        self.assertFalse(boxnet.keystore_path(self.state).exists(), "no expired chain is served; the receiver self-signs")
+        self.assertFalse(boxnet.ensure_keystore(self.state), "nothing left to change")
+        self.own(60)
+        boxnet.ensure_keystore(self.state)
+        shutil.rmtree(self.state / "tls" / "own")   # the owner turned the name off (own_domain.forget_certificate)
+        self.assertTrue(boxnet.ensure_keystore(self.state))
+        self.assertFalse(boxnet.keystore_path(self.state).exists())
 
 
 if __name__ == "__main__":

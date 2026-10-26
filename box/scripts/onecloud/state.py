@@ -7,6 +7,7 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import tempfile
 
 MDNS_NAME = "dashplay.local"
 
@@ -37,13 +38,15 @@ def save_json(path, value, sync=True):
     sync=False for files on tmpfs (RUN): nothing there survives a power cut, and os.sync() flushes every
     filesystem of the box (reliability_audit #11)."""
     path = Path(path)
-    temporary = path.with_suffix(".tmp")
-    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    # A temporary file of its own per call: two threads saving the same file wrote into one .tmp and the second
+    # rename failed (DashPlay review 2026-10-12).
+    fd, temporary = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
+    os.fchmod(fd, 0o600)
     with os.fdopen(fd, "w") as out:
         json.dump(value, out)
         out.flush()
         if sync:
             os.fsync(out.fileno())
-    temporary.replace(path)
+    Path(temporary).replace(path)
     if sync:
         os.sync()   # the root fs commits only every 120 s; state must survive switching the car off

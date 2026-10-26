@@ -7,11 +7,10 @@
 
 Every release carries dashplay-update.json and its Ed25519 signature. Only a manifest signed by the key in
 update-key.pem (beside this file) counts, and every downloaded file must match it, so a mirror needs no trust.
-OpenWrt: the dashplay, luci-app-dashplay and zh-cn packages (the JRE only when its version changed) with apk,
-refusing a plan with any kernel, kmod or BlueZ package (the ZTE F50 runs a vendor 5.4 kernel); the packages of
-the installed version are fetched first to go back to. OneCloud / N1: firmware/upgrade.py with the release's
-program bundle (it keeps state/ and identity/ and restores the previous program by itself).
-Never while CarPlay is in use, and never by itself: the boxes only check (once a day) and say so.
+The dashplay, luci-app-dashplay and zh-cn packages (the JRE only when its version changed) with apk, refusing a
+plan with any kernel, kmod or BlueZ package (the ZTE F50 runs a vendor 5.4 kernel); the packages of the installed
+version are fetched first to go back to.
+Never while CarPlay is in use, and never by itself: the box only checks (once a day) and says so.
 Progress goes to state/update-status.json, which the settings page and LuCI show.
 """
 import argparse
@@ -43,16 +42,11 @@ SIGNATURE = MANIFEST + ".sig"
 KEY = Path(__file__).resolve().with_name("update-key.pem")
 OPENSSL = os.environ.get("DASHPLAY_OPENSSL", "openssl")   # OpenSSL 3 on the boxes (a Mac's own is LibreSSL)
 # Tried after GitHub itself, as a URL prefix. The signature makes any mirror safe; uci dashplay.main.update_mirror
-# (OpenWrt) or state/options.json "update_mirror" (OneCloud / N1) replaces this list, "none" for GitHub only.
+# replaces this list, "none" for GitHub only.
 MIRRORS = ("https://ghfast.top/",)
 OPENWRT_PACKAGES = ("dashplay", "luci-app-dashplay", "luci-i18n-dashplay-zh-cn")
 FORBIDDEN = re.compile(r"^(kernel|kmod-|bluez)")   # never through an online update (ZTE F50: 5.4 kernel)
 CHECK_EVERY = 24 * 3600
-# What install.sh set up on a OneCloud / N1 comes with the firmware image, and an update replaces programs only. A
-# programs-only release keeps these as in the images it links (prepare-release.sh checks), so a box whose own copies
-# differ was flashed with older images: it needs the new images, not this update (a OneCloud from 2026-10-12).
-SYSTEM_FILES = ("firmware/install.sh", "firmware/prepare-image.sh", "firmware/dashplay-firstboot.service",
-                "dashplay.service")
 BACKUP = "dashplay-update-backup.tar.gz"   # beside the program directory: the owner's data before the last update
 
 
@@ -84,18 +78,12 @@ def newer(latest, current):
     return latest is not None and (current is None or latest > current)
 
 
-def mirrors(root, openwrt):
+def mirrors(root=None, openwrt=True):
     """GitHub first, then the configured mirrors (prefixes)."""
-    if openwrt:
-        try:
-            value = run("uci", "-q", "get", "dashplay.main.update_mirror", timeout=5).stdout.strip()
-        except (OSError, subprocess.SubprocessError):
-            value = ""
-    else:
-        try:
-            value = str(json.loads((Path(root) / "state/options.json").read_text()).get("update_mirror", ""))
-        except (OSError, ValueError, AttributeError):
-            value = ""
+    try:
+        value = run("uci", "-q", "get", "dashplay.main.update_mirror", timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        value = ""
     if value == "none":
         return ()
     return tuple(value.split()) if value else MIRRORS
@@ -178,12 +166,6 @@ def program_matches(root, files):
                                for path, digest in files.items())
 
 
-def system_matches(root, files):
-    """The box's system files are the ones this release was made for (OneCloud / N1)."""
-    return all((Path(root) / path).is_file() and file_sha256(Path(root) / path) == files[path]
-               for path in SYSTEM_FILES if path in files)
-
-
 def apk_version(name, listing=None):
     """'2026.10.19.1-r1' for an installed dashplay-2026.10.19.1-r1, or None. From the list of every installed
     package: `apk info -v NAME` prints the description instead (apk 3, OpenWrt 25.12)."""
@@ -203,14 +185,9 @@ def bundled_version(root):
         return None
 
 
-def current_version(root, openwrt):
-    if openwrt:
-        full = apk_version("dashplay")
-        return full.rsplit("-r", 1)[0] if full else None
-    try:
-        return bundled_version(root) or json.loads((Path(root) / "state/update.json").read_text()).get("version")
-    except (OSError, ValueError, AttributeError):
-        return None
+def current_version(root=None, openwrt=True):
+    full = apk_version("dashplay")
+    return full.rsplit("-r", 1)[0] if full else None
 
 
 def save(path, value):
@@ -231,14 +208,7 @@ def compare(root, openwrt, manifest):
     """What the page shows about the installed program and this release."""
     current = current_version(root, openwrt)
     online, reason = bool(manifest.get("online")), "" if manifest.get("online") else "这一版改了系统"
-    if openwrt:
-        available = newer(manifest["version"], current)
-    else:   # a box flashed from an image knows no version: its files tell
-        files = manifest.get("debian", {}).get("files", {})
-        available = not program_matches(root, files)
-        current = manifest["version"] if not available else current
-        if online and not system_matches(root, files):
-            online, reason = False, "这台盒子的系统比这一版要求的旧"
+    available = newer(manifest["version"], current)
     return {"current": current, "latest": manifest["version"], "notes": manifest.get("notes", ""),
             "available": available, "online": online, "reason": reason}
 
@@ -325,9 +295,9 @@ def backup(root, openwrt):
             if (root / name).exists():
                 out.add(root / name, arcname=name,
                         filter=lambda info: None if re.match(r"state/(logs|diag)(/|$)", info.name) else info)
-        for config in ("/etc/config/dashplay", str(root / "service.json")):
-            if Path(config).exists():
-                out.add(config, arcname="config/" + Path(config).name)
+        config = Path("/etc/config/dashplay")
+        if config.exists():
+            out.add(config, arcname="config/" + config.name)
     os.chmod(target.with_suffix(".tmp"), 0o600)
     os.replace(target.with_suffix(".tmp"), target)
     return target
@@ -373,25 +343,6 @@ def install_openwrt(root, manifest, status, work):
                       "新版本没有正常启动，退回也没有成功：请按说明用电脑恢复（数据备份在 /opt/" + BACKUP + "）")
 
 
-def install_debian(root, manifest, status, work):
-    entry = manifest["debian"]["bundle"]
-    status("downloading", f"正在下载 {manifest['version']}（{entry['size'] // 1048576} MB）")
-    bundle = fetch(manifest["debian"]["base"] + entry["file"], mirrors(root, False), target=Path(work) / entry["file"],
-                   sha256=entry["sha256"], size=entry["size"])
-    status("installing", "正在安装，CarPlay 和盒子热点会断开约 1 分钟")
-    upgrader = Path(root) / "firmware/upgrade.py"
-    with tarfile.open(bundle) as archive:   # the new release's upgrader, as the manual procedure does
-        member = next((m for m in archive.getmembers()
-                       if m.name.removeprefix("./") == "firmware/upgrade.py" and m.isfile()), None)
-        if member:
-            upgrader = Path(work) / "upgrade.py"
-            upgrader.write_bytes(archive.extractfile(member).read())
-    result = run(sys.executable, str(upgrader), str(bundle), timeout=900)
-    if result.returncode != 0:
-        raise UpdateError("新版本没有正常启动，已自动退回原来的程序（详见 state/upgrade.log）")
-    save(Path(root) / "state/update.json", {"version": manifest["version"], "at": int(time.time())})
-
-
 def install(root, openwrt=None, key=KEY):
     root = Path(root)
     openwrt = is_openwrt() if openwrt is None else openwrt
@@ -417,7 +368,7 @@ def install(root, openwrt=None, key=KEY):
         status("backup", "正在备份配对、证书和设置")
         saved = backup(root, openwrt)
         with tempfile.TemporaryDirectory(prefix="dashplay-update.") as work:
-            (install_openwrt if openwrt else install_debian)(root, manifest, status, work)
+            install_openwrt(root, manifest, status, work)
         status("done", f"已升级到 {manifest['version']}", version=manifest["version"], backup=str(saved))
         check(root, openwrt, key, manifest)
         return 0
@@ -435,10 +386,10 @@ def running(root):
 
 
 def launch(root, openwrt=None):
-    """Start an install apart from the dashplay service (it restarts that service, and procd or systemd would end
-    a child with it). Returns a message for the page. OpenWrt: a procd service made for this one run over ubus, not
-    an init script, since installing a package starts every init script in it (default_postinst; the F50 began an
-    update by itself when the package with one was installed, 2026-10-19)."""
+    """Start an install apart from the dashplay service (it restarts that service, and procd would end a child with
+    it). Returns a message for the page. A procd service made for this one run over ubus, not an init script, since
+    installing a package starts every init script in it (default_postinst; the F50 began an update by itself when the
+    package with one was installed, 2026-10-19)."""
     root = Path(root)
     openwrt = is_openwrt() if openwrt is None else openwrt
     if running(root):
@@ -446,15 +397,12 @@ def launch(root, openwrt=None):
     if carplay_in_use(root):
         return "正在使用 CarPlay：停车、断开后再升级"
     install = [sys.executable, str(Path(__file__).resolve()), "install", "--root", str(root)]
-    if openwrt:
-        service = {"name": "dashplay-update", "instances": {"update": {"command": install, "stdout": True, "stderr": True}}}
-        command = ["ubus", "call", "service", "set", json.dumps(service)]
-    else:
-        command = ["systemd-run", "--unit=dashplay-update", "--collect", *install]
+    service = {"name": "dashplay-update", "instances": {"update": {"command": install, "stdout": True, "stderr": True}}}
+    command = ["ubus", "call", "service", "set", json.dumps(service)]
     save(root / "state/update-status.json", {"phase": "starting", "message": "正在开始升级", "at": int(time.time())})
     try:
-        if openwrt:   # the finished run before, if any: procd would not start an unchanged instance again
-            run("ubus", "call", "service", "delete", json.dumps({"name": "dashplay-update"}), timeout=30)
+        # The finished run before, if any: procd would not start an unchanged instance again.
+        run("ubus", "call", "service", "delete", json.dumps({"name": "dashplay-update"}), timeout=30)
         out = run(*command, timeout=30)
         why = "" if out.returncode == 0 else (out.stderr or out.stdout).strip()[-200:] or f"退出码 {out.returncode}"
     except (OSError, subprocess.SubprocessError) as error:   # e.g. a version without the update service
@@ -466,9 +414,8 @@ def launch(root, openwrt=None):
     return "已开始升级，约 2–5 分钟，期间 CarPlay 会断开"
 
 
-# Plain HTTP on purpose: its Date header needs no clock, while HTTPS fails on a clock off by months. A box without a
-# battery-backed clock (OneCloud, N1) starts from its last saved time, and NTP may not get through where the update
-# check's HTTPS does; DashPlay OS on 410 sticks has no timesyncd at all (it stalled every shutdown step 30 s, 2026-10-21).
+# Plain HTTP on purpose: its Date header needs no clock, while HTTPS fails on a clock off by months. The F50 has no
+# battery-backed clock: it starts from its last saved time, and without a SIM NTP never gets through.
 CLOCK_URLS = ("http://www.baidu.com/", "http://connectivitycheck.gstatic.com/generate_204")
 CLOCK_SLACK = 600
 

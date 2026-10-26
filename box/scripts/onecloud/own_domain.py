@@ -1,27 +1,17 @@
-"""Optional: a DuckDNS name with a Let's Encrypt certificate, for car browsers that refuse the box's local CA
-and offer no way past the warning (2026-10-13: a head unit's Chromium showed ERR_CERT_AUTHORITY_INVALID with
-no "continue"). Off unless the owner enters a DuckDNS sub-domain and token: on the box in the settings page
-(state/ddns.json), on OpenWrt in LuCI (uci dashplay.main.duckdns_domain / duckdns_token).
+"""Optional: a DuckDNS name with a Let's Encrypt certificate. The only route verified on a Tesla (F50 2026-10-14):
+its browser opens https://<name>.duckdns.org:18443/ without a certificate warning (tesla_only_box_delta.md 0).
+Off unless the owner enters a DuckDNS sub-domain and token in LuCI (uci duckdns_domain / duckdns_token).
 
-- The public DuckDNS record points the name at the address the head unit opens: the box on the car hotspot or
-  portable Wi-Fi, 192.168.78.1 on the box hotspot, the router's own address on OpenWrt. DuckDNS takes a
-  private address; a DNS server that filters those ("rebind protection") will not resolve the name.
+- The public DuckDNS record points the name at the router's LAN address (100.96.0.1). DuckDNS takes a private
+  address; the box's own dnsmasq answers the name locally for the Tesla as well (tesla_openwrt.OfflineChecks).
 - The certificate comes from Let's Encrypt through acme.sh (bundled in acme/) with a DNS-01 challenge: only
-  outgoing HTTPS, nothing has to reach the box, so it works behind the car hotspot. It is installed in
-  state/tls/own/, which boxnet serves while valid; a new one loads on the next start, never mid-drive.
-  Renewed when less than RENEW_DAYS remain, whenever the box is online (box hotspot: no internet in the car,
-  so at home on the Ethernet cable).
+  outgoing HTTPS, nothing has to reach the box, so it works over the SIM. It is installed in state/tls/own/,
+  which boxnet wraps into the receiver's keystore; a new one loads on the next receiver start, never mid-drive.
+  Renewed when less than RENEW_DAYS remain, whenever the box is online.
 - The token reaches acme.sh by its environment only (not its command line); it is never logged or shown.
-- Optional, on the car hotspot or portable Wi-Fi ("ipv6": true): the record also carries the box's own public
-  IPv6 address, for car browsers that refuse a LAN address (the picture still comes straight over the Wi-Fi). The
-  head unit asks that hotspot, which asks DuckDNS, so the address is public: it is published only behind an IPv6
-  firewall (nftables, guard_rules) that lets in nothing but the Wi-Fi's own prefix and link-local addresses; a
-  box where it cannot be loaded never publishes it. OpenWrt does this differently (uci public_ipv6): the router answers the
-  name itself, so nothing is published.
 """
 import fcntl
 import hashlib
-import ipaddress
 import json
 import os
 from pathlib import Path
@@ -34,6 +24,8 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+
+from state import tesla_reaches
 
 SUFFIX = ".duckdns.org"
 DOMAIN = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
@@ -63,18 +55,6 @@ def check_token(token):
     return token
 
 
-def load(state):
-    """state/ddns.json -> {"domain": sub-domain, "token": ..., ["ipv6": True]}, or None when off or unreadable."""
-    try:
-        config = json.loads((Path(state) / "ddns.json").read_text())
-        loaded = {"domain": sub_domain(config["domain"]), "token": check_token(config["token"])}
-        if config.get("ipv6") is True:
-            loaded["ipv6"] = True
-        return loaded
-    except (OSError, ValueError, KeyError, TypeError, AttributeError):
-        return None
-
-
 def name_of(config):
     return config["domain"] + SUFFIX if config else None
 
@@ -85,90 +65,11 @@ def forget_certificate(state):
     (Path(state) / "own-domain.json").unlink(missing_ok=True)
 
 
-def update_record(config, address, ipv6=None, clear=False, timeout=15):
-    """Point the name at address (private addresses allowed) and, when given, its AAAA at ipv6. clear: drop both
-    records first (DuckDNS has no way to drop the AAAA alone). True when DuckDNS answered OK."""
-    def call(fields):
-        query = urllib.parse.urlencode(dict(fields, domains=config["domain"], token=config["token"]))
-        with urllib.request.urlopen("https://www.duckdns.org/update?" + query, timeout=timeout) as response:
-            return response.read(16).strip() == b"OK"
-    if clear and not call({"clear": "true"}):
-        return False
-    return call(dict({"ip": address}, **({"ipv6": ipv6} if ipv6 else {})))
-
-
-NFT_TABLE = "dashplay_v6"
-
-
-def public_ipv6(interface, run=subprocess.run):
-    """(address, prefix length) of the interface's public IPv6 address, a stable one before a temporary one;
-    None when it has none (the hotspot hands out no IPv6, or only ULA)."""
-    try:
-        out = run(["ip", "-6", "-j", "addr", "show", "dev", interface, "scope", "global"],
-                  capture_output=True, text=True, timeout=5)
-        links = json.loads(out.stdout or "[]")
-    except (OSError, ValueError, subprocess.SubprocessError):
-        return None
-    found = []
-    for link in links if isinstance(links, list) else []:
-        for info in link.get("addr_info", []):
-            try:
-                address = ipaddress.IPv6Address(info.get("local", ""))
-            except ValueError:
-                continue
-            if info.get("family") != "inet6" or not address.is_global or any(
-                    info.get(flag) for flag in ("deprecated", "tentative", "dadfailed")):
-                continue
-            found.append((bool(info.get("temporary")), str(address), int(info.get("prefixlen", 64))))
-    return min(found)[1:] if found else None
-
-
-def guard_rules(address, prefix_length):
-    """nftables: IPv6 into the box only from its own Wi-Fi (the address's prefix) and link-local addresses, plus
-    ICMPv6 and DHCPv6 replies; IPv4 is left alone. Replaces the table as one transaction."""
-    network = ipaddress.IPv6Network(f"{address}/{min(max(prefix_length, 48), 128)}", strict=False)
-    return (f"table inet {NFT_TABLE}\ndelete table inet {NFT_TABLE}\n"
-            f"table inet {NFT_TABLE} {{\n  chain input {{\n    type filter hook input priority filter; policy accept;\n"
-            "    meta nfproto ipv4 accept\n    iifname \"lo\" accept\n    ct state established,related accept\n"
-            "    meta l4proto ipv6-icmp accept\n    ip6 saddr fe80::/10 accept\n"
-            f"    ip6 saddr {network} accept\n    udp dport 546 accept\n    counter drop\n  }}\n}}\n")
-
-
-def nft(commands, run=subprocess.run):
-    """Run nftables commands: with the nft program, or else through libnftables, which the box images carry (as a
-    library of their other packages) without the program. False when neither is there or they were refused."""
-    if shutil.which("nft"):
-        try:
-            return run(["nft", "-f", "-"], input=commands, capture_output=True, text=True, timeout=10).returncode == 0
-        except (OSError, subprocess.SubprocessError):
-            return False
-    try:
-        import ctypes
-        lib = ctypes.CDLL("libnftables.so.1")
-    except OSError:
-        return False
-    lib.nft_ctx_new.restype = ctypes.c_void_p
-    lib.nft_ctx_free.argtypes = [ctypes.c_void_p]
-    lib.nft_ctx_buffer_output.argtypes = lib.nft_ctx_buffer_error.argtypes = [ctypes.c_void_p]
-    lib.nft_run_cmd_from_buffer.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
-    ctx = lib.nft_ctx_new(0)
-    if not ctx:
-        return False
-    try:
-        lib.nft_ctx_buffer_output(ctx); lib.nft_ctx_buffer_error(ctx)   # quiet: nothing on the service's output
-        return lib.nft_run_cmd_from_buffer(ctx, commands.encode()) == 0
-    finally:
-        lib.nft_ctx_free(ctx)
-
-
-def guard(address, prefix_length, run=subprocess.run):
-    """Load the IPv6 firewall. False when it could not be loaded: then the address is not published."""
-    return nft(guard_rules(address, prefix_length), run)
-
-
-def unguard(run=subprocess.run):
-    """Drop the IPv6 firewall (the option turned off); nothing when it is not there."""
-    nft(f"table inet {NFT_TABLE}\ndelete table inet {NFT_TABLE}\n", run)
+def update_record(config, address, timeout=15):
+    """Point the name at address (private addresses allowed). True when DuckDNS answered OK."""
+    query = urllib.parse.urlencode({"ip": address, "domains": config["domain"], "token": config["token"]})
+    with urllib.request.urlopen("https://www.duckdns.org/update?" + query, timeout=timeout) as response:
+        return response.read(16).strip() == b"OK"
 
 
 def _openssl(*args):
@@ -219,54 +120,37 @@ def read_status(state):
 
 
 class Maintainer(threading.Thread):
-    """Keeps the DuckDNS record on `address` (None: leave it) and the certificate current, until stopped.
-    interface: the Wi-Fi joined on the car hotspot or portable Wi-Fi, whose public IPv6 address the record also
-    carries when the owner asked for it (config "ipv6") and the firewall is up; looked at every minute, so a new
-    prefix (the hotspot reconnected) is followed."""
+    """Keeps the DuckDNS record on `address` (None: leave it) and the certificate current, until stopped."""
 
-    def __init__(self, root, config, address, stopped, say=print, interface=None, tesla=False):
+    def __init__(self, root, config, address, stopped, say=print, tesla=False):
         super().__init__(name="own-domain", daemon=True)
         self.root, self.state = Path(root), Path(root) / "state"
         self.config, self.name, self.address = config, name_of(config), address
-        if tesla and address:
-            from setup_wizard import tesla_reaches
-            if not tesla_reaches(address):
-                self.address = None
-                write_status(self.state, name=self.name, record="blocked", warning="特斯拉无法打开当前地址，已保留原域名记录")
-                say("DuckDNS record kept: Tesla cannot reach the current address")
-        self.stopped, self.say, self.interface = stopped, say, interface
-        self.sent, self.sent_at = None, 0.0   # (address, ipv6) last accepted by DuckDNS, and when
-
-    def ipv6(self):
-        """(address or None, state for the settings page): ok, none (no public IPv6), firewall (no nft), off."""
-        if not (self.interface and self.config.get("ipv6")):
-            return None, "off"
-        found = public_ipv6(self.interface)
-        if not found:
-            return None, "none"
-        return (found[0], "ok") if guard(*found) else (None, "firewall")
+        if tesla and address and not tesla_reaches(address):
+            # Cannot happen once the LAN is the install-time constant (D1); kept as a guard for a hand-edited LAN.
+            self.address = None
+            write_status(self.state, name=self.name, record="blocked", warning="特斯拉无法打开当前地址，已保留原域名记录")
+            say("DuckDNS record kept: Tesla cannot reach the current address")
+        self.stopped, self.say = stopped, say
+        self.sent, self.sent_at = None, 0.0   # address last accepted by DuckDNS, and when
 
     def run(self):
         next_record = next_cert = time.monotonic()
-        published = read_status(self.state).get("ipv6") or None   # an AAAA left from before must go
         while not self.stopped.is_set():
             now = time.monotonic()
             if self.address and now >= next_record:
-                ipv6, v6state = self.ipv6()
-                if (self.address, ipv6) == self.sent and now < self.sent_at + RECORD_REFRESH:
+                if self.address == self.sent and now < self.sent_at + RECORD_REFRESH:
                     ok = True   # nothing changed since DuckDNS took it
                 else:
                     try:
-                        ok = update_record(self.config, self.address, ipv6=ipv6, clear=bool(published and not ipv6))
+                        ok = update_record(self.config, self.address)
                     except (OSError, ValueError):   # no internet yet; URLError is an OSError
                         ok = False
                     if ok:
-                        self.sent, self.sent_at, published = (self.address, ipv6), now, ipv6
-                    self.say(f"duckdns {self.name} -> {self.address}{' ' + ipv6 if ipv6 else ''}: "
-                             f"{'OK' if ok else 'failed'}")
-                write_status(self.state, name=self.name, record="ok" if ok else "failed", address=self.address,
-                             ipv6=published or "", ipv6_state=v6state)
-                next_record = now + (RECORD_RETRY if not ok or v6state != "off" else RECORD_REFRESH)
+                        self.sent, self.sent_at = self.address, now
+                    self.say(f"duckdns {self.name} -> {self.address}: {'OK' if ok else 'failed'}")
+                write_status(self.state, name=self.name, record="ok" if ok else "failed", address=self.address)
+                next_record = now + (RECORD_RETRY if not ok else RECORD_REFRESH)
             if now >= next_cert:
                 next_cert = now + self.check_certificate()
             if not self.address:
@@ -355,7 +239,7 @@ class Maintainer(threading.Thread):
                         process.wait()
 
 
-def message(state, name, box_hotspot=False):
+def message(state, name):
     """The settings page's line about the name and its certificate."""
     if not name:
         return ""
@@ -367,22 +251,14 @@ def message(state, name, box_hotspot=False):
         text = f"正式证书有效期至 {until}。"
         if not serving(state):
             text += "新证书在下次开机时启用。"
-        if box_hotspot and not certificate_for(state, name, RENEW_DAYS):
-            text += "车上没有网络无法续签：请回家插上网线开机一次，盒子会自动续签。"
     else:
         text = {"issuing": "正在申请正式证书，通常几分钟；完成后下次开机启用。",
                 "retry": "正式证书暂未申请到：请确认盒子能上网、子域名和 token 正确；盒子每小时重试。",
                 }.get(status.get("phase"), "等待申请正式证书：盒子联网后自动开始。")
-        if box_hotspot:
-            text += "盒子热点方式在车上没有网络：请在家插上网线开机申请。"
     if status.get("record") == "blocked":
         text += status.get("warning", "已保留原域名记录。")
     if status.get("record") == "failed":
         text += f"更新 {name} 的解析失败，盒子会继续重试。"
-    text += {"ok": f"公网 IPv6 {status.get('ipv6')} 已登记，防火墙只让同一个 WiFi 里的设备连进盒子。",
-             "none": "连着的热点没有给盒子分配公网 IPv6，暂时只登记了局域网地址。",
-             "firewall": "盒子的防火墙没能启用，为安全起见没有登记公网 IPv6；请把诊断记录交给 AI 助手或开发者。",
-             }.get(status.get("ipv6_state"), "")
     return text
 
 

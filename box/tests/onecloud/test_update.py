@@ -129,6 +129,13 @@ class VersionTests(unittest.TestCase):
         self.assertTrue(update.newer('2026.10.19', None), 'an unknown installed version takes the release')
         self.assertFalse(update.newer('latest', '2026.10.19'), 'a malformed release is never newer')
 
+    def test_a_box_names_its_release_from_the_bundle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertIsNone(update.bundled_version(root), 'a development build or an older release')
+            (root / 'version.txt').write_text('2026.10.20\n')
+            self.assertEqual(update.bundled_version(root), '2026.10.20')
+
     def test_the_installed_version_comes_from_the_package_list(self):
         # `apk info -v` on OpenWrt 25.12; `apk info -v dashplay` prints the description instead (lab, 2026-10-19).
         listing = 'busybox-1.37.0-r6\ndashplay-2026.10.19.1-r1\ndashplay-jre-21.0.12.1-r1\nluci-app-dashplay-0.261019.40345\n'
@@ -136,16 +143,6 @@ class VersionTests(unittest.TestCase):
         self.assertEqual(update.apk_version('dashplay-jre', listing), '21.0.12.1-r1')
         self.assertIsNone(update.apk_version('dashplay', 'dashplay: Receives CarPlay from an iPhone\n'))
 
-    def test_a_box_names_its_release_from_the_bundle(self):
-        # 2026-10-20: a user's N1 still ran the image's 2026.10.15 program; nothing on the box said so.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            self.assertIsNone(update.bundled_version(root), 'a development build or an older release')
-            update.save(root / 'state/update.json', {'version': '2026.10.19.2'})
-            self.assertEqual(update.current_version(root, False), '2026.10.19.2')
-            (root / 'version.txt').write_text('2026.10.20\n')
-            self.assertEqual(update.bundled_version(root), '2026.10.20')
-            self.assertEqual(update.current_version(root, False), '2026.10.20', 'the files on the box win')
 
     def test_the_apk_plan_may_not_touch_the_kernel_kmods_or_bluez(self):
         # Shape of `apk add --upgrade --simulate` on the F50 (2026-10-19).
@@ -252,30 +249,7 @@ class SignedReleaseTests(unittest.TestCase):
         with patch.object(update, 'apk_version', lambda name: '2026.10.20-r1'):
             self.assertFalse(update.check(self.root, True, self.pub)['available'])
 
-    def test_a_box_flashed_from_an_image_is_compared_by_its_files(self):
-        (self.root / 'supervisor.py').write_text('new')
-        files = {'supervisor.py': sha(b'new')}
-        self.publish({'format': 1, 'version': '2026.10.20', 'online': True, 'debian': {'files': files}})
-        result = update.check(self.root, False, self.pub)
-        self.assertEqual((result['available'], result['current']), (False, '2026.10.20'))
-        (self.root / 'supervisor.py').write_text('old')
-        result = update.check(self.root, False, self.pub)
-        self.assertEqual((result['available'], result['current']), (True, None))
 
-    def test_a_box_with_an_older_system_is_not_updated_online(self):
-        # A OneCloud flashed with the 2026-10-12 images: its install.sh is not the one the release was made for.
-        (self.root / 'firmware').mkdir()
-        (self.root / 'firmware/install.sh').write_text('2026-10-12 system')
-        files = {'supervisor.py': sha(b'new'), 'firmware/install.sh': sha(b'2026-10-15 system')}
-        self.publish({'format': 1, 'version': '2026.10.20', 'online': True, 'debian': {'files': files}})
-        result = update.check(self.root, False, self.pub)
-        self.assertEqual((result['available'], result['online']), (True, False))
-        self.assertIn('系统比这一版要求的旧', result['reason'])
-        self.assertEqual(update.install(self.root, False, self.pub), 1)
-        status = json.loads((self.root / 'state/update-status.json').read_text())
-        self.assertIn('刷机包', status['message'])
-        (self.root / 'firmware/install.sh').write_text('2026-10-15 system')
-        self.assertTrue(update.check(self.root, False, self.pub)['online'])
 
     def test_a_failed_check_is_written_too(self):
         result = update.check(self.root, True, self.pub)   # nothing published
@@ -369,33 +343,6 @@ class SignedReleaseTests(unittest.TestCase):
                          ['dashplay-2026.10.19.1-r1.apk', 'luci-app-dashplay-2026.10.19.1-r1.apk',
                           'luci-i18n-dashplay-zh-cn-2026.10.19.1-r1.apk'])
 
-    def test_a_box_runs_the_new_releases_upgrader_with_the_checked_bundle(self):
-        bundle = io.BytesIO()
-        with tarfile.open(fileobj=bundle, mode='w') as tar:
-            for name, data in (('./firmware/upgrade.py', b'# new upgrader'), ('./supervisor.py', b'new')):
-                info = tarfile.TarInfo(name)
-                info.size = len(data)
-                tar.addfile(info, io.BytesIO(data))
-        data = bundle.getvalue()
-        self.server.put('dp/v2026.10.20/dashplay-bundle-2026.10.20.tar', data)
-        self.publish({'format': 1, 'version': '2026.10.20', 'online': True,
-                      'debian': {'base': self.server.base + 'dp/v2026.10.20/', 'files': {'supervisor.py': sha(b'new')},
-                                 'bundle': {'file': 'dashplay-bundle-2026.10.20.tar', 'sha256': sha(data), 'size': len(data)}}})
-        calls = []
-
-        def run(*args, timeout=300):
-            if args[0] == OPENSSL:
-                return subprocess.run(list(args), capture_output=True, text=True)
-            calls.append(list(args))
-            (self.root / 'supervisor.py').write_text('new')
-            return subprocess.CompletedProcess(args, 0, '', '')
-
-        with patch.object(update, 'run', run), patch.object(update, 'BACKUP', 'backup.tar.gz'):
-            self.assertEqual(update.install(self.root, False, self.pub), 0)
-        self.assertEqual(Path(calls[0][1]).name, 'upgrade.py')
-        self.assertEqual(Path(calls[0][2]).name, 'dashplay-bundle-2026.10.20.tar')
-        self.assertEqual(json.loads((self.root / 'state/update.json').read_text())['version'], '2026.10.20')
-        self.assertFalse(json.loads((self.root / 'state/update-check.json').read_text())['available'])
 
 
 class ServiceUpTests(unittest.TestCase):
@@ -437,10 +384,6 @@ class LaunchTests(unittest.TestCase):
                 self.assertEqual(service['instances']['update']['command'][2:], ['install', '--root', str(root)])
                 self.assertIn('正在升级', update.launch(root, True), 'a second click while it runs starts nothing')
                 self.assertEqual(len(calls), 2)
-                update.save(root / 'state/update-status.json', {'phase': 'done', 'at': 0})
-                update.launch(root, False)
-                self.assertEqual(calls[2][0], 'systemd-run')
-                self.assertIn('--unit=dashplay-update', calls[2])
 
 
 class ManifestTests(unittest.TestCase):
@@ -465,12 +408,14 @@ class ManifestTests(unittest.TestCase):
                     info.size = len(data)
                     tar.addfile(info, io.BytesIO(data))
             value = maker.manifest('2026.10.20', '- 新功能', release, 'owner', True)
+            size = (release / 'dashplay/dashplay-bundle-2026.10.20.tar').stat().st_size
         self.assertEqual((value['format'], value['version'], value['online'], value['notes']), (1, '2026.10.20', True, '- 新功能'))
         self.assertEqual(value['openwrt']['packages']['dashplay']['sha256'], sha(b'dashplay-2026.10.20-r1.apk'))
         self.assertEqual(value['openwrt']['jre']['version'], '21.0.12.1-r1')
         self.assertEqual(sorted(value['openwrt']['jre']['files']), ['aarch64_generic', 'x86_64'])
         self.assertEqual(value['openwrt']['base'], 'https://github.com/owner/openwrt-dashplay/releases/download/v2026.10.20/')
-        self.assertEqual(value['debian']['files'], {'supervisor.py': sha(b'program')}, "the owner's data is no program file")
+        self.assertEqual(value['bundle']['file'], 'dashplay-bundle-2026.10.20.tar')
+        self.assertEqual(value['bundle']['size'], size)
 
 
 if __name__ == '__main__':

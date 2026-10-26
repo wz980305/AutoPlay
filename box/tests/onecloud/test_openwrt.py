@@ -12,7 +12,6 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/onecloud'))
 import platform_openwrt as ow
 from settings_page import SettingsPage
-import setup_wizard
 import supervisor_openwrt
 from supervisor_openwrt import (name_changes, read_config, trusted_networks, shared_lan_changes,
                                shared_lan_conflict, apply_shared_lan, car_audio_args, waiting_trust, waiting_warning)
@@ -110,51 +109,8 @@ class HandoffTests(unittest.TestCase):
         self.assertEqual((network["channel"], network["security"], network["device"], str(network["address"].ip)),
                          (36, "wpa2", "br-lan", "192.168.1.1"))
 
-    def test_another_routers_wifi_is_handed_as_entered(self):
-        # A travel router bridged into the LAN (cable or USB): its Wi-Fi is not in /etc/config/wireless.
-        config = read_config("dashplay.main.wifi='external'\ndashplay.main.external_ssid='Travel-5G'\n"
-                             "dashplay.main.external_key='travel-pass'\ndashplay.main.external_channel='149'\n")
-        network, reason = ow.external_network(config)
-        self.assertEqual(reason, "")
-        self.assertEqual((network["mode"], network["ssid"], network["key"], network["network"], network["channel"],
-                          network["ifname"]), ("external", "Travel-5G", "travel-pass", "lan", 149, ""))
-        self.assertEqual(ow.handoff_security(network["encryption"]), "wpa2")
-        wpa3 = dict(config, external_security="wpa3", external_network="guest")
-        self.assertEqual((ow.external_network(wpa3)[0]["encryption"], ow.external_network(wpa3)[0]["network"]),
-                         ("sae", "guest"))
-        self.assertEqual(ow.external_network(dict(config, external_security="open", external_key=""))[0]["key"], "")
 
-    def test_another_routers_wifi_needs_its_name_password_and_channel(self):
-        config = {"external_ssid": "Travel-5G", "external_key": "travel-pass", "external_security": "wpa2",
-                  "external_channel": "149", "external_network": "lan"}
-        for change, why in (({"external_ssid": ""}, "Wi-Fi name"), ({"external_ssid": "x" * 33}, "Wi-Fi name"),
-                            ({"external_key": "short"}, "password"), ({"external_key": ""}, "password"),
-                            ({"external_channel": ""}, "channel"), ({"external_channel": "auto"}, "channel"),
-                            ({"external_channel": "0"}, "channel"), ({"external_security": "wep"}, "password type"),
-                            ({"external_network": "lan wan"}, "network")):
-            network, reason = ow.external_network(dict(config, **change))
-            self.assertIsNone(network, change)
-            self.assertIn(why, reason)
 
-    def test_handoff_of_another_routers_wifi_uses_the_lan_address_and_entered_channel(self):
-        config = {"external_ssid": "Travel-5G", "external_key": "travel-pass", "external_security": "wpa2",
-                  "external_channel": "149", "external_network": "lan"}
-        commands = []
-
-        class Done:
-            def __init__(self, stdout): self.stdout, self.returncode = stdout, 0
-
-        def run(argv, **_):
-            commands.append(argv)
-            return Done(json.dumps({"network.interface.lan": LAN}.get(argv[2], {})) if argv[0] == "ubus" else "")
-
-        with tempfile.TemporaryDirectory() as tmp, patch.object(ow.subprocess, "run", run):
-            network, reason = ow.OpenWrtPlatform(run=Path(tmp)).handoff("external", external=config)
-        self.assertEqual(reason, "")
-        self.assertEqual((network["ssid"], network["channel"], network["security"], network["device"],
-                          str(network["address"].ip)), ("Travel-5G", 149, "wpa2", "br-lan", "192.168.1.1"))
-        self.assertNotIn(["ubus", "call", "network.wireless", "status"], commands)   # not one of our radios
-        self.assertFalse([argv for argv in commands if argv[0] == "iw"])
 
 
 class TemperatureTests(unittest.TestCase):
@@ -232,29 +188,6 @@ class WaitingForWifiTests(unittest.TestCase):
             self.assertEqual(ow.OpenWrtPlatform.interface_network("lan"), ipaddress.IPv4Interface("192.168.1.1/24"))
             self.assertIsNone(ow.OpenWrtPlatform.interface_network("guest"))
 
-class PublicIpv6Tests(unittest.TestCase):
-    def test_the_modems_address_when_the_lan_has_only_a_local_prefix(self):
-        self.assertEqual(ow.public_ipv6(F50_ADDR, F50_ROUTE, "br-lan"), "2408:8409:8500:1d4:a00:1ff:fe00:1")
-
-    def test_an_address_on_the_lan_comes_first(self):
-        delegated = F50_ADDR + "34: br-lan    inet6 240e:3b0:1234:5600::1/64 scope global dynamic noprefixroute \\ valid_lft 3000sec\n"
-        self.assertEqual(ow.public_ipv6(delegated, F50_ROUTE, "br-lan"), "240e:3b0:1234:5600::1")
-
-    def test_local_temporary_and_unready_addresses_do_not_count(self):
-        addr = """13: wan@eth0    inet6 2408:8409::aa/64 scope global temporary dynamic \\ valid_lft 3000sec
-13: wan@eth0    inet6 2408:8409::bb/64 scope global deprecated dynamic \\ valid_lft 3000sec
-13: wan@eth0    inet6 2408:8409::cc/64 scope global tentative \\ valid_lft 3000sec
-34: br-lan    inet6 fd9e:30a4:d99::1/60 scope global noprefixroute \\ valid_lft forever
-"""
-        self.assertIsNone(ow.public_ipv6(addr, "default via fe80::1 dev wan proto ra\n", "br-lan"))
-        self.assertEqual(ow.public_ipv6(addr + "13: wan@eth0    inet6 2408:8409::dd/64 scope global dynamic\n",
-                                        "default via fe80::1 dev wan proto ra\n", "br-lan"), "2408:8409::dd")
-
-    def test_none_without_an_ipv6_route_out(self):
-        self.assertIsNone(ow.public_ipv6(F50_ADDR, "", "br-lan"))
-        self.assertIsNone(ow.public_ipv6("", "", "br-lan"))
-
-
 DHCP = """dhcp.cfg01411c=dnsmasq
 dhcp.cfg01411c.domain='lan'
 dhcp.cfg01411c.local='/lan/'
@@ -283,10 +216,10 @@ def applied(uci, changes):
 
 
 class NameRecordTests(unittest.TestCase):
-    """uci dashplay.main.public_ipv6: the name also (1) or only (2) answers with the router's public IPv6."""
+    """The own name's uci dhcp records: a local A record, or none plus the rebind whitelist (Tesla mode)."""
 
     def test_tesla_online_own_domain_returns_to_public_resolution(self):
-        start = applied(DHCP, name_changes(DHCP, NAME, LAN_IP, PUBLIC, only_public=True))
+        start = applied(DHCP, name_changes(DHCP, NAME, LAN_IP))
         tesla = applied(start, name_changes(start, NAME, None, rebind=True))
         self.assertNotIn('dhcp.dashplay=', tesla)
         self.assertNotIn('dhcp.dashplay6=', tesla)
@@ -334,36 +267,18 @@ class NameRecordTests(unittest.TestCase):
         self.assertNotIn("rebind_domain", after, 'other modes do not touch the rebind whitelist')
         self.assertEqual(name_changes(after, NAME, LAN_IP), [], "nothing to do when current")
 
-    def test_beside_the_lan_address(self):
-        after = applied(DHCP, name_changes(DHCP, NAME, LAN_IP, PUBLIC))
-        self.assertIn(f"dhcp.dashplay.ip='{LAN_IP}'", after)
-        self.assertIn(f"dhcp.dashplay6.ip='{PUBLIC}'", after)
-        self.assertNotIn(f"/{NAME}/", after, "both types are answered locally")
-
-    def test_instead_of_the_lan_address_and_back(self):
-        start = applied(DHCP, name_changes(DHCP, NAME, LAN_IP))
-        alone = applied(start, name_changes(start, NAME, LAN_IP, PUBLIC, only_public=True))
-        self.assertNotIn("dhcp.dashplay=", alone)
-        self.assertIn(f"dhcp.dashplay6.ip='{PUBLIC}'", alone)
-        self.assertIn(f"dhcp.cfg01411c.server='/{NAME}/'", alone, "no A record from upstream")
-        self.assertEqual(name_changes(alone, NAME, LAN_IP, PUBLIC, only_public=True), [])
-        back = applied(alone, name_changes(alone, NAME, LAN_IP))
-        self.assertIn(f"dhcp.dashplay.ip='{LAN_IP}'", back)
-        self.assertNotIn("dashplay6", back)
-        self.assertNotIn(f"/{NAME}/", back)
-
-    def test_only_public_without_a_public_address_keeps_the_lan_address(self):
-        after = applied(DHCP, name_changes(DHCP, NAME, LAN_IP, None, only_public=True))
-        self.assertIn(f"dhcp.dashplay.ip='{LAN_IP}'", after)
+    def test_records_of_older_versions_are_removed(self):
+        # 2026.10.x wrote a dashplay6 (public IPv6) record and a local-only server entry; both go.
+        old = DHCP + f"dhcp.dashplay6=domain\ndhcp.dashplay6.name='{NAME}'\ndhcp.dashplay6.ip='{PUBLIC}'\n" \
+            f"dhcp.cfg01411c.server='/{NAME}/'\n"
+        after = applied(old, name_changes(old, NAME, LAN_IP))
+        self.assertNotIn("dashplay6", after)
         self.assertNotIn(f"/{NAME}/", after)
+        self.assertIn(f"dhcp.dashplay.ip='{LAN_IP}'", after)
 
-    def test_a_new_prefix_or_name_replaces_the_old_records(self):
-        alone = applied(DHCP, name_changes(DHCP, NAME, LAN_IP, PUBLIC, only_public=True))
-        moved = applied(alone, name_changes(alone, NAME, LAN_IP, "2408:8409:8500:77::1", only_public=True))
-        self.assertIn("dhcp.dashplay6.ip='2408:8409:8500:77::1'", moved)
-        renamed = applied(moved, name_changes(moved, "dashplay.lan", LAN_IP, "2408:8409:8500:77::1", only_public=True))
-        self.assertNotIn(f"/{NAME}/", renamed)
-        self.assertIn("'/dashplay.lan/'", renamed)
+
+
+
 
 
 # `uci -q show network` and `ip -4 -o addr show` of the F50 (2026-10-14), without its Tailscale line.
@@ -502,12 +417,6 @@ class SharedLanTests(unittest.TestCase):
             self.assertFalse(changed)
             self.assertIn("路由器自己的 WiFi", warning)
             self.assertIn("network.lan.ipaddr='192.168.77.1'", uci["network"])
-            # Another router's Wi-Fi bridged into this LAN: its devices get their address here, so the LAN moves.
-            calls.clear()
-            external = dict(network, mode="external", ifname="")
-            self.assertEqual(apply_shared_lan(True, external, state, said.append), (True, ""))
-            self.assertIn("network.lan.ipaddr='100.96.0.1'", uci["network"])
-            self.assertFalse([c for c in calls if c[:2] == ["ubus", "call"]], "its stations are not ours to kick")
 
 
     def test_waits_while_a_luci_apply_awaits_its_confirm(self):
@@ -533,8 +442,6 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(read_config("")["idle_release"], "300")
         self.assertEqual(read_config("dashplay.main.idle_release='0'\n")["idle_release"], "0")
 
-    def test_the_public_ipv6_address_is_off_by_default(self):
-        self.assertEqual(read_config("")["public_ipv6"], "0")
 
     def test_the_shared_lan_is_off_by_default(self):
         self.assertEqual(read_config("")["shared_lan"], "0")
@@ -559,10 +466,6 @@ class ConfigTests(unittest.TestCase):
                          ("wwan", "18090", "/usr/lib/dashplay-jre/bin/java"))
         self.assertEqual(read_config("")["wifi"], "auto")
 
-    def test_another_routers_wifi_defaults_to_wpa2_on_the_lan(self):
-        config = read_config("")
-        self.assertEqual((config["external_ssid"], config["external_key"], config["external_security"],
-                          config["external_channel"], config["external_network"]), ("", "", "wpa2", "", "lan"))
 
 
 
@@ -570,18 +473,16 @@ class ManagedPageTests(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
         self.state = Path(tmp.name) / "state"; self.state.mkdir()
-        setup_wizard.save(self.state, {"done": True, "mode": "box_hotspot"})
         self.status = {"mode": "openwrt", "ssid": "Car-5G", "home": "http://192.168.1.1:18080/", "identity": True,
                        "entries": ["https://dashplay.lan:18443/", "https://192.168.1.1:18443/"]}
-        self.page = SettingsPage(self.state, lambda: self.status, lambda reason: None, lambda: [], None,
-                                 managed={"by": "OpenWrt", "admin": "/cgi-bin/luci/admin/network/wireless"})
+        self.page = SettingsPage(self.state, lambda: self.status, lambda reason: None, lambda: [])
 
     def test_shows_phones_and_router_wifi_without_network_setup(self):
         html = self.page.render("")
-        for text in ("交给 iPhone 的 WiFi", "Car-5G", "在 OpenWrt 后台设置 WiFi", "https://dashplay.lan:18443/",
+        for text in ("交给 iPhone 的 Wi-Fi", "Car-5G", "在 OpenWrt 后台设置 Wi-Fi", "https://dashplay.lan:18443/",
                      "添加"):
             self.assertIn(text, html)
-        for text in ("盒子热点", "重新进行首次设置", "使用方式", "第 1 步"):
+        for text in ("盒子热点", "重新进行首次设置", "使用方式", "第 1 步", "数据线", "用户名 root", "密码 1234", "组合与验证状态"):
             self.assertNotIn(text, html)
         # The settings page runs on 18080; a relative link stayed there and got a 404 (review 2026-10-12).
         self.assertIn('href="http://192.168.1.1/cgi-bin/luci/admin/network/wireless"', html)

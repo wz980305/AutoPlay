@@ -1,7 +1,6 @@
 # DashPlay for OpenWrt 25.12 (apk). Architecture-independent: the program bundle attached to each
 # DashPlay release (Python, the receiver's jars and the web player; DashPlay builds it with
-# scripts/onecloud/firmware/build-bundle.sh, since the receiver needs a JDK and Gradle, which the SDK
-# does not have). The SDK downloads it and checks PKG_HASH; scripts/bump-dashplay.sh moves this package
+# box/scripts/build-bundle.sh, since the receiver needs a JDK and Gradle, which the SDK does not have). The SDK downloads it and checks PKG_HASH; scripts/bump-dashplay.sh moves this package
 # to another DashPlay release, and scripts/build-packages.sh can build from a local bundle instead.
 include $(TOPDIR)/rules.mk
 
@@ -21,16 +20,15 @@ define Package/dashplay
   TITLE:=DashPlay: CarPlay in the car's web browser
   PKGARCH:=all
   # Runtime dependencies only (EXTRA_DEPENDS): the SDK would otherwise build them from source.
-  # Wireless CarPlay also needs bluez-daemon and a Bluetooth adapter; wired CarPlay needs kmod-tun and a
-  # USB host port. Neither is a hard dependency: some boards (ZTE F50) run their own BlueZ, and kernel
-  # packages must match the board's kernel.
+  # Wireless CarPlay needs BlueZ and a Bluetooth adapter: not a hard dependency, since the ZTE F50 runs its
+  # own BlueZ root (board_zte_f50.py --setup) and kernel packages must match the board's kernel.
   # curl: acme.sh, for the optional own name's certificate (duckdns_domain); BusyBox/uclient wget will not do.
   EXTRA_DEPENDS:=python3 (>=3.11), ip-full (>=6.0), iw (>=5.0), openssl-util (>=3.0), curl (>=8.0), dashplay-jre (>=21)
 endef
 
 define Package/dashplay/description
-  Receives CarPlay from an iPhone (Bluetooth + Wi-Fi, or the USB cable) and shows it, with sound and
-  touch, in any web browser on the router's network. The MFi identity is not included: put it in
+  Receives wireless CarPlay from an iPhone (Bluetooth + Wi-Fi) and shows it, with sound and touch, in the
+  car's web browser on the router's network. The MFi identity is not included: put it in
   /opt/dashplay/identity/offline-mfi/ yourself.
 endef
 
@@ -46,12 +44,11 @@ endef
 define Build/Compile
 endef
 
-# The Debian/Armbian pieces stay out; state/ and identity/ are created by postinst and never owned by
-# the package, so an upgrade or removal keeps pairings, certificates and the MFi identity.
+# state/ and identity/ are created by postinst and never owned by the package, so an upgrade or removal
+# keeps pairings, certificates and the MFi identity.
 define Package/dashplay/install
 	$(INSTALL_DIR) $(1)/opt/dashplay $(1)/etc/init.d $(1)/etc/config $(1)/usr/libexec
-	cd $(PKG_BUILD_DIR)/bundle && tar -cf - --exclude=./state --exclude=./identity --exclude=./firmware \
-		--exclude=./service.json --exclude=./dashplay.service --exclude=./supervisor.py . | tar -xf - -C $(1)/opt/dashplay
+	cd $(PKG_BUILD_DIR)/bundle && tar -cf - --exclude=./state --exclude=./identity . | tar -xf - -C $(1)/opt/dashplay
 	$(INSTALL_BIN) ./files/dashplay.init $(1)/etc/init.d/dashplay
 	# Online update: LuCI's check / start command (update.py launch runs the update as a procd service of its own).
 	$(INSTALL_BIN) ./files/dashplay-update $(1)/usr/libexec/dashplay-update

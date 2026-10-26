@@ -8,15 +8,8 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/onecloud'))
 import diagnostics
-import platform_debian
+import platform_openwrt
 
-LINK = """Connected to 02:00:00:00:00:a1 (on wlx020000000010)
-\tSSID: 小鹏汽车
-\tfreq: 5745.0
-\tsignal: -61 dBm
-\trx bitrate: 433.3 MBit/s VHT-MCS 9 80MHz short GI VHT-NSS 1
-\ttx bitrate: 292.5 MBit/s VHT-MCS 7 80MHz VHT-NSS 1
-"""
 STATIONS = """Station 02:00:00:00:00:a1 (on wlx020000000010)
 \tinactive time:\t40 ms
 \ttx packets:\t12000
@@ -32,10 +25,8 @@ Station 02:00:00:00:00:a4 (on wlx020000000010)
 
 
 class ParseTests(unittest.TestCase):
-    def test_link_and_stations(self):
-        self.assertEqual(platform_debian.parse_link(LINK), {'freq': 5745, 'signal': -61, 'rx_mbps': 433.3, 'tx_mbps': 292.5})
-        self.assertEqual(platform_debian.parse_link('Not connected.'), {})
-        peers = platform_debian.parse_stations(STATIONS)
+    def test_stations(self):
+        peers = platform_openwrt.parse_stations(STATIONS)
         self.assertEqual(peers[0], {'peer': '00:a1', 'signal': -61, 'rx_mbps': 433.3, 'tx_mbps': 292.5,
                                     'tx_packets': 12000, 'tx_retries': 3500, 'tx_failed': 12, 'inactive_ms': 40})
         self.assertEqual(peers[1]['peer'], '00:a4')
@@ -100,24 +91,6 @@ class DiagLogTests(unittest.TestCase):
         self.assertEqual(records[1]['link'], {'signal': -60})
         self.assertEqual(records[1]['log'], ['x WARN something'])
 
-    def test_direct_phone_diagnostic_samples_ap_instead_of_upstream(self):
-        platform = Mock(interface='wlan-test')
-        platform.boot_id.return_value = 'abcdef01'
-        platform.diagnostics.return_value = {}
-        stopped = Mock(); stopped.wait.side_effect = [False, True]
-        log = diagnostics.DiagLog(self.dir)
-        status = {'mode':'sta', 'phone_interface':'ap0', 'direct_phone':'validation', 'tesla_dns_log':'stopped'}
-        # Run exactly one real loop iteration, synchronously, without network probes.
-        with patch('diagnostics.threading.Thread') as thread, patch('diagnostics.ping_targets', return_value={'phone':'192.0.2.2'}), \
-             patch('diagnostics.ping_stats', return_value=None), patch('diagnostics.tcp_stats', return_value=[]), \
-             patch('diagnostics.time.monotonic', return_value=30), patch('diagnostics.phone_traffic', return_value={'bytes':42}) as traffic:
-            thread.side_effect = lambda target, **kw: Mock(start=target)
-            diagnostics.start(stopped, log, Path(self.tmp.name)/'receiver.log', platform, status, state=Path(self.tmp.name))
-        traffic.assert_called_once_with('ap0', '192.0.2.2')
-        record = json.loads(log.text().splitlines()[-1])
-        self.assertEqual(record['phone_interface'], 'ap0')
-        self.assertEqual(record['direct_phone'], 'validation')
-        self.assertEqual(record['tesla_dns_log'], 'stopped')
 
 
 
@@ -129,9 +102,7 @@ class LogMirrorTests(unittest.TestCase):
         self.root.mkdir()
         self.run.mkdir()
 
-    @patch('diagnostics.subprocess.run')
-    def test_full_logs_survive_restarts_and_truncation(self, run):
-        run.return_value = Mock(stdout=b'[ 1.0] kernel: usb 1-1: new device\n')
+    def test_full_logs_survive_restarts_and_truncation(self):
         receiver = self.run / 'receiver.log'
         receiver.write_text('one\ntwo\npartial')
         mirror = diagnostics.LogMirror(self.root, self.run, 'abcdef0123456789')
@@ -139,8 +110,6 @@ class LogMirrorTests(unittest.TestCase):
         offsets, handles = {}, {}
         mirror.cycle(offsets, handles)
         self.assertEqual((mirror.directory / 'receiver.log').read_text(), 'one\ntwo\n')   # partial line waits
-        self.assertIn('usb 1-1', (mirror.directory / 'journal.log').read_text())
-        self.assertIn('--cursor-file=', ' '.join(run.call_args.args[0]))
         # A supervisor restart in the same boot resumes from the saved offsets: nothing twice.
         with receiver.open('a') as log:
             log.write('\nthree\n')
@@ -155,14 +124,14 @@ class LogMirrorTests(unittest.TestCase):
         self.assertTrue((mirror.directory / 'receiver.log').read_text().endswith('restarted]\nfresh\n'))
 
     @patch('diagnostics.subprocess.run')
-    def test_without_a_journal_only_run_logs_are_kept(self, run):
+    def test_only_run_logs_are_kept(self, run):
         (self.run / 'supervisor.log').write_text('boot 12.0s supervisor start\n')
-        mirror = diagnostics.LogMirror(self.root, self.run, 'abcdef0123456789', journal=False)
+        mirror = diagnostics.LogMirror(self.root, self.run, 'abcdef0123456789')
         mirror.directory.mkdir()
         mirror.cycle({}, {})
-        run.assert_not_called()   # OpenWrt has no journalctl
+        run.assert_not_called()   # OpenWrt has no journalctl; nothing is run
         self.assertEqual((mirror.directory / 'supervisor.log').read_text(), 'boot 12.0s supervisor start\n')
-        self.assertFalse((mirror.directory / 'journal.log').exists())
+        self.assertEqual(sorted(p.name for p in mirror.directory.iterdir()), ['.offsets.json', 'supervisor.log'])
 
     def test_old_boots_are_pruned(self):
         for index in range(12):
@@ -185,7 +154,7 @@ class LogMirrorTests(unittest.TestCase):
 
 
 
-class CarHotspotLagTests(unittest.TestCase):
+class LagTests(unittest.TestCase):
     @patch('diagnostics.subprocess.run')
     def test_ping_burst_and_tcp_state(self, run):
         run.return_value = Mock(stdout='5 packets transmitted, 4 received, 20% packet loss, time 410ms\n'

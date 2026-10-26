@@ -13,7 +13,7 @@ from install_progress import Progress  # noqa: E402
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('group',choices=('f50','n1','onecloud','adb-mac','adb-windows','zadig','mac-tools-src'))
+    p.add_argument('group',choices=('f50','adb-mac','adb-windows','zadig'))
     p.add_argument('out',type=Path)
     a=p.parse_args()
     manifest=Path(__file__).resolve().parents[1]/'skills/dashplay-install/downloads.json'
