@@ -403,6 +403,8 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
     }
 
     private var touchDownIds = emptySet<Int>()
+    /** The last touch report, so a page that vanished mid-press can be lifted where its fingers were. */
+    @Volatile private var lastContacts: List<TouchContactMessage> = emptyList()
 
     private fun routeInput(message: ClientMessage) {
         val session = activeSession ?: return
@@ -416,6 +418,14 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                     if (down != touchDownIds || !sent) log.info("touch forwarded receivedMs={} epochMs={} down={} sent={}",
                         receivedMs, System.currentTimeMillis(), down.size, sent)
                     touchDownIds = down
+                    lastContacts = message.contacts
+                }
+                // WebHub: the page closed or froze with a finger down. Lift every contact at its last position ((0,0)
+                // can cancel an iPhone button tap, input.ts), as the page itself does on pagehide when it can.
+                "touch-release" -> if (touchDownIds.isNotEmpty()) {
+                    val sent = session.sendTouch(lastContacts.map { AirPlayContact(it.id, it.x, it.y, false) })
+                    log.info("touch released for a vanished page contacts={} sent={}", touchDownIds.size, sent)
+                    touchDownIds = emptySet()
                 }
                 "media" -> message.media?.let {
                     // Media keys from the page (1 play, 2 pause, 3 toggle, 4 next, 5 previous): the log then tells a

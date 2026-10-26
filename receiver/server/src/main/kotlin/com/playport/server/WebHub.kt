@@ -125,6 +125,8 @@ private class WsClient(
     val videoSent = AtomicLong(0)
     val videoDropped = AtomicLong(0)
     val bytesSent = AtomicLong(0)
+    /** The last touch report from this page had a finger down: lift it if the page vanishes or freezes. */
+    @Volatile var touchDown = false
 
     private companion object {
         val nextClientId = AtomicLong(0)
@@ -376,6 +378,7 @@ class WebHub(
                         if (client.paused() && !client.wasPaused) {
                             client.wasPaused = true
                             log.info("viewer paused client={} (silent {} ms)", client.id, silentMs)
+                            releaseTouch(client, "paused")
                         }
                         if (silentMs > SILENT_VIEWER_MS) {
                             ending = "silent ${silentMs} ms"
@@ -448,6 +451,7 @@ class WebHub(
                         } else if (message.type == "ping") {
                             client.offer(Frame.Text("""{"type":"pong"}"""))
                         } else {
+                            if (message.type == "touch") client.touchDown = message.contacts.any { it.down }
                             inputHandler?.invoke(message)
                         }
                     }
@@ -456,6 +460,7 @@ class WebHub(
                     throw error
                 } finally {
                     clients.remove(client)
+                    releaseTouch(client, ending)
                     client.channel.close()
                     writer.cancel()
                     marker.cancel()
@@ -488,6 +493,14 @@ class WebHub(
                 call.respondText(Files.readString(file), contentTypeFor(file.fileName.toString()))
             }
         }
+    }
+
+    /** A page that left or froze with a finger down (media_performance_audit #16): lift it on the phone, once. */
+    private fun releaseTouch(client: WsClient, why: String) {
+        if (!client.touchDown) return
+        client.touchDown = false
+        log.info("viewer client={} {} with a finger down: lifting it", client.id, why)
+        inputHandler?.invoke(ClientMessage(type = "touch-release"))
     }
 
     private fun contentTypeFor(name: String): io.ktor.http.ContentType = when {

@@ -424,9 +424,11 @@ el<HTMLFormElement>('display-form').onsubmit=event => {
   void saveDisplay({...size,fps:Number(el<HTMLSelectElement>('fps').value),uiScale:Number(el<HTMLSelectElement>('ui-scale').value),hevc:wantHevc()},{reason:'manual'});
 };
 new ResizeObserver(()=>{ fit(); scheduleAuto(); }).observe(screen);
+// A finger left down when the page goes away or is frozen stays down on the phone: lift every contact first.
+window.addEventListener('pagehide', () => input.releaseAll());
 document.addEventListener('visibilitychange',()=>{
   pageEvent(document.hidden ? 1 : 2);
-  if (document.hidden) return;
+  if (document.hidden) { input.releaseAll(); return; }
   // The picture at once instead of the phone's next keyframe; then the sound.
   send({ type:'keyframe' }); fit(); scheduleAuto(); void unlock();
 });
