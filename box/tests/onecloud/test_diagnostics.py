@@ -133,6 +133,28 @@ class LogMirrorTests(unittest.TestCase):
         self.assertEqual((mirror.directory / 'supervisor.log').read_text(), 'boot 12.0s supervisor start\n')
         self.assertEqual(sorted(p.name for p in mirror.directory.iterdir()), ['.offsets.json', 'supervisor.log'])
 
+    def test_mirror_is_bounded_minute_wise_and_flushes_on_errors(self):
+        # reliability_audit #11: 5 MB per file and boot, a cycle a minute, at once when an error line arrives.
+        self.assertEqual(diagnostics.MIRROR_INTERVAL, 60)
+        self.assertEqual(diagnostics.LOG_FILE_MAX, 5_000_000)
+        (self.run / 'receiver.log').write_text('INFO fine\n')
+        mirror = diagnostics.LogMirror(self.root, self.run, 'abcdef0123456789')
+        mirror.directory.mkdir()
+        offsets, handles = {}, {}
+        self.assertFalse(mirror.cycle(offsets, handles))
+        with (self.run / 'receiver.log').open('a') as log:
+            log.write('ERROR something broke\n')
+        self.assertTrue(mirror.cycle(offsets, handles), 'an error line asks for an immediate flush')
+        self.assertFalse(mirror.wake.is_set())
+        mirror.flush_now()
+        self.assertTrue(mirror.wake.is_set())
+        with patch.object(diagnostics, 'LOG_FILE_MAX', 20):
+            (self.run / 'big.log').write_text('x' * 100 + '\n')
+            mirror.cycle(offsets, handles)
+            text = (mirror.directory / 'big.log').read_text()
+            self.assertIn('size limit reached', text)
+            self.assertLess(len(text), 100)
+
     def test_old_boots_are_pruned(self):
         for index in range(12):
             (self.root / f'boot{index:02d}').mkdir()

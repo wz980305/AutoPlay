@@ -149,8 +149,17 @@ def main():
             time.sleep(0.2)
         raise SystemExit("Bluetooth controller did not come up")
 
+    def protect():
+        # The OOM killer should take the JVM (run-receiver.py sets it +500) long before the Bluetooth daemons
+        # (reliability_audit, security one-liners): -500 for every child of this helper.
+        try:
+            Path("/proc/self/oom_score_adj").write_text("-500\n")
+        except OSError:
+            pass
+
     def start(name, argv):
-        children.append((name, subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL, start_new_session=True)))
+        children.append((name, subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL, start_new_session=True,
+                                                preexec_fn=protect)))
 
     try:
         subprocess.run(["modprobe", "sprdbt_tty"], check=True)

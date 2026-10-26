@@ -52,6 +52,24 @@ class BrowserAccessTest(unittest.TestCase):
                 run_receiver.write_browser_access(Path(directory), "not-a-token")
 
 
+class AccessFileTests(unittest.TestCase):
+    def test_the_access_file_is_written_only_when_it_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "playport/web/dist").mkdir(parents=True)
+            self.assertTrue(run_receiver.write_browser_access(root, "0123456789abcdef0123456789abcdef", 18080))
+            self.assertFalse(run_receiver.write_browser_access(root, "0123456789abcdef0123456789abcdef", 18080),
+                             "the same token and port: no write on the SD card at every start")
+            self.assertTrue(run_receiver.write_browser_access(root, "f" * 32, 18080))
+
+    def test_jvm_options_exit_on_oom_and_write_crash_files_to_state(self):
+        source = HERE.read_text()
+        self.assertIn("-XX:+ExitOnOutOfMemoryError", source)
+        self.assertIn('"-XX:ErrorFile=" + str(crash / "hs_err_%p.log")', source)
+        self.assertIn("oom_score_adj", source)
+        self.assertIn("--prime-cds", source)
+
+
 class RedactionTest(unittest.TestCase):
     def test_a_password_the_trace_escaped_is_still_hidden(self):
         # The iAP2 trace prints strings escaped (\" and \\): a password with those characters was not found by a

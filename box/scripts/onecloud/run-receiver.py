@@ -50,11 +50,20 @@ def write_browser_access(root, token, settings_port=18080, tesla=True):
     path = dist / "receiver-access.json"
     flags = {"carMusic": True, "tesla": True} if tesla else {}
     content = json.dumps({"token": token, "settingsPort": int(settings_port), **flags}) + "\n"
+    # Written only when it changes (the token is stable across starts): the file sits in the program directory on
+    # the SD card, where the receiver serves it from; a symlink into tmpfs is not known to be followed by the
+    # receiver's own-page check, so the write is avoided instead of moved (reliability_audit #11).
+    try:
+        if path.read_text() == content and path.stat().st_mode & 0o777 == 0o644:
+            return False
+    except OSError:
+        pass
     temporary = path.with_suffix('.json.tmp')
     temporary.write_text(content)
     temporary.chmod(0o644)
     temporary.replace(path)
     assert path.read_text() == content
+    return True
 
 
 # The iAP2 trace's Wi-Fi configuration field, a quoted string with " and \ escaped.
@@ -105,7 +114,10 @@ def main():
     parser.add_argument("--idle-release", type=int, default=300,
                         help="end wireless CarPlay after this many seconds without a viewer page (0: never)")
     parser.add_argument("--no-wireless", action="store_true",
-                        help="no Bluetooth/Wi-Fi handoff (car_hotspot mode: the iPhone uses the cable only)")
+                        help="no Bluetooth/Wi-Fi handoff yet (Bluetooth still coming up; the supervisor relaunches)")
+    parser.add_argument("--prime-cds", action="store_true",
+                        help="package postinst: start the JVM once on the loopback and stop it cleanly, so the AppCDS "
+                             "archive exists before the first drive (it is otherwise written only at a clean exit)")
     args = parser.parse_args()
     root = args.root.resolve()
     os.umask(0o077)
@@ -164,8 +176,14 @@ def main():
     if not stamp.exists() or stamp.read_text() != fingerprint:
         (state / "app-cds.jsa").unlink(missing_ok=True)
         stamp.write_text(fingerprint)
+    crash = state / "crash"
+    crash.mkdir(exist_ok=True)
     options = [
         "-Xms64m", heap_limit(Path("/proc/meminfo").read_text()),
+        # An OutOfMemoryError in the accept or supervisor thread left a JVM that never invited the iPhone again;
+        # exit instead, the supervisor restarts the receiver (reliability_audit #5). The crash report goes to the
+        # SD card, where diagnostics can find it, not the program directory.
+        "-XX:+ExitOnOutOfMemoryError", "-XX:ErrorFile=" + str(crash / "hs_err_%p.log"),
         # iAP2 bootstrap steps (message ids only, no credentials) for diagnosing a stalled Wi-Fi handoff.
         "-Dorg.slf4j.simpleLogger.log.wireless=debug",
         # Milliseconds since JVM start on every line, for boot-time profiling.
@@ -184,6 +202,17 @@ def main():
     ]
     argfile = state / "java.args"
     argfile.write_text("\n".join(json.dumps(value) for value in options) + "\n")
+
+    def expendable():
+        # Under memory pressure the OOM killer should take the JVM first, never bluetoothd (board_zte_f50.py -500)
+        # or the supervisor: +500 for the JVM.
+        try:
+            Path("/proc/self/oom_score_adj").write_text("500\n")
+        except OSError:
+            pass
+
+    if args.prime_cds:
+        return prime_cds(args.java, argfile, root, state, env)
     # The supervisor signals the whole process group; outlive the JVM so it can finish writing the
     # AppCDS archive on exit (exiting first let systemd SIGKILL it mid-dump). A Python function
     # handler, unlike SIG_IGN, is reset to default in the exec'd JVM, which keeps its own handling.
@@ -191,7 +220,7 @@ def main():
     with subprocess.Popen(
         [args.java, "@" + str(argfile)], cwd=root / "playport", env=env,
         stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, errors="replace",
+        text=True, errors="replace", preexec_fn=expendable,
     ) as process:
         (state / "java.pid").write_text(str(process.pid) + "\n")
         for line in process.stdout:
@@ -203,6 +232,42 @@ def main():
             if milestone:
                 print(f"boot {time.monotonic():.2f}s {milestone}", flush=True)
         raise SystemExit(process.wait())
+
+
+def prime_cds(java, argfile, root, state, env, listen_timeout=60, exit_timeout=45):
+    """Run the JVM once until it listens, then stop it cleanly so that -XX:+AutoCreateSharedArchive writes the
+    AppCDS archive (reliability_audit #19: a box that is only ever power-cut never exits cleanly, and every
+    update drops the archive). The archive is skipped when it is already current for this classpath."""
+    if (state / "app-cds.jsa").exists():
+        print("AppCDS archive present", flush=True)
+        return 0
+    print("priming the AppCDS archive", flush=True)
+    with subprocess.Popen([java, "@" + str(argfile)], cwd=root / "playport", env=env, stdin=subprocess.DEVNULL,
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace") as process:
+        deadline = time.monotonic() + listen_timeout
+        listening = False
+        import selectors
+        selector = selectors.DefaultSelector()
+        selector.register(process.stdout, selectors.EVENT_READ)
+        while time.monotonic() < deadline and process.poll() is None:
+            if selector.select(timeout=1):
+                line = process.stdout.readline()
+                if not line:
+                    break
+                if "RTSP listening" in line or "listening" in line.lower():
+                    listening = True
+                    break
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=exit_timeout)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+        ok = (state / "app-cds.jsa").exists()
+        print(f"AppCDS archive {'written' if ok else 'not written'} (receiver {'listened' if listening else 'did not listen'})",
+              flush=True)
+        return 0 if ok else 1
 
 
 if __name__ == "__main__":

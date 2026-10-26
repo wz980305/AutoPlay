@@ -14,6 +14,22 @@ spec.loader.exec_module(presence)
 
 
 class PresenceTests(unittest.TestCase):
+    def test_the_probe_file_is_rewritten_only_when_it_changes(self):
+        # reliability_audit #11: every 2 s probe rewrote the file on the SD card.
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'phone-presence.json'
+            state = {'phones': {'A': {}}, 'last_phone': 'A', 'scan_at': 1}
+            lasting = json.dumps([state.get(key) for key in presence.LASTING], sort_keys=True)
+            presence.save_state(path, state, lasting)
+            first = path.stat().st_mtime_ns
+            import time; time.sleep(0.01)
+            presence.save_state(path, dict(state), lasting)
+            self.assertEqual(path.stat().st_mtime_ns, first, 'same content: no write')
+            presence.save_state(path, dict(state, scan_at=2), lasting)
+            self.assertNotEqual(path.stat().st_mtime_ns, first)
+            self.assertEqual(json.loads(path.read_text())['scan_at'], 2)
+
     def test_boot_grant_not_repeated_by_service_restart(self):
         state = {}
         self.assertTrue(presence.grant_boot(state, 'boot-one'))

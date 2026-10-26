@@ -67,22 +67,25 @@ class LogTail:
         return data[:end].decode(errors="replace").splitlines()
 
 
-LOG_BOOTS = 8                 # boots whose full logs are kept
-LOG_FILE_MAX = 40_000_000     # per mirrored file and boot
-MIRROR_INTERVAL = 5
+LOG_BOOTS = 8                 # boots whose logs are kept
+LOG_FILE_MAX = 5_000_000      # per mirrored file and boot: a 5 MB persisted tail (reliability_audit #11)
+MIRROR_INTERVAL = 60          # the RAM logs (/var/run, tmpfs) are the ring; the SD card sees them once a minute
+ERROR_LINE = re.compile(r"\b(ERROR|fatal|Traceback|exited with|hs_err|OutOfMemory)\b")
 
 
 class LogMirror:
-    """Full logs that survive a power cut: every /var/run/dashplay/*.log (the supervisor, the receiver, the
-    Bluetooth helper) appended to root/<boot>/ and fsynced every few seconds. Offsets are kept beside them, so
-    a supervisor restart within the same boot neither repeats nor skips lines (2026-10-12: every drive's logs
-    were lost on power-off).
+    """Logs that survive a power cut: every /var/run/dashplay/*.log (the supervisor, the receiver, the Bluetooth
+    helper; tmpfs is the RAM ring) appended to root/<boot>/ and fsynced once a minute, at once when a copied
+    chunk holds an error line, and at shutdown; at most LOG_FILE_MAX per file and boot. Offsets are kept beside
+    them, so a supervisor restart within the same boot neither repeats nor skips lines (2026-10-12: every
+    drive's logs were lost on power-off; 2026-10-20: a 5 s fsync of 40 MB files wore the SD card).
     """
 
     def __init__(self, root: Path, run: Path, boot_id: str):
         self.root, self.run = root, run
         self.directory = root / boot_id[:8]
         self.state_file = self.directory / ".offsets.json"
+        self.wake = threading.Event()   # flush_now() sets it
 
     def prune(self):
         boots = sorted((d for d in self.root.iterdir() if d.is_dir() and d != self.directory),
@@ -111,7 +114,12 @@ class LogMirror:
             fd = handles[name] = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         os.write(fd, data)
 
+    def flush_now(self):
+        """Ask the mirror thread for a cycle now (an error was logged)."""
+        self.wake.set()
+
     def cycle(self, offsets, handles):
+        urgent = False
         for path in sorted(self.run.glob("*.log")):
             key = path.name
             try:
@@ -131,10 +139,13 @@ class LogMirror:
                 if end:
                     self.append(key, data[:end], handles)
                     offset += end
+                    if ERROR_LINE.search(data[:end].decode(errors="replace")):
+                        urgent = True
             offsets[key] = (stat.st_ino, offset)
         for fd in handles.values():
             os.fsync(fd)
         self.state_file.write_text(json.dumps(offsets))
+        return urgent
 
     def start(self, stopped, interval=MIRROR_INTERVAL):
         self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -149,8 +160,13 @@ class LogMirror:
                     self.cycle(offsets, handles)
                 except Exception as error:   # logging must never take the service down
                     print(f"log mirror skipped: {type(error).__name__}", flush=True)
-                if stopped.wait(interval):
+                # Wait a minute, or until an error asks for a flush; a quick second cycle then copies the rest.
+                woke = self.wake.wait(interval) if not stopped.is_set() else False
+                self.wake.clear()
+                if stopped.is_set():
                     break
+                if woke:
+                    stopped.wait(2)
             try:
                 self.cycle(offsets, handles)   # what the shutdown itself logged
             except Exception:
