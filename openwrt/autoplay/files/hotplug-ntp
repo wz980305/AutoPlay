@@ -1,0 +1,6 @@
+#!/bin/sh
+# /etc/hotplug.d/ntp/90-autoplay: sysntpd synced the clock. The certificate check and the DuckDNS record are
+# retried now (a renewal decided on a wrong clock may have been skipped), and the clock floor is raised.
+[ "$ACTION" = stratum ] || exit 0
+[ -d /var/run/autoplay ] && : > /var/run/autoplay/wan-up
+exit 0

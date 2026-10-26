@@ -24,7 +24,7 @@ class ViewerPortConfigTests(unittest.TestCase):
         self.assertEqual(read_config("")["viewer_port"], "")
 
     def test_parsed(self):
-        self.assertEqual(read_config("dashplay.main.viewer_port='19000'")["viewer_port"], "19000")
+        self.assertEqual(read_config("autoplay.main.viewer_port='19000'")["viewer_port"], "19000")
 
 # Shape of `ubus call network.wireless status` on OpenWrt 25.12 (two radios, a 2.4 GHz AP listed first).
 WIRELESS = {
@@ -195,7 +195,7 @@ class LegacyCleanupTests(unittest.TestCase):
 
     def test_nothing_to_do_on_a_clean_box(self):
         self.assertEqual(legacy_dns_cleanup(DHCP), [])
-        self.assertEqual(obsolete_options("dashplay.main=dashplay\ndashplay.main.enabled='1'\n"), [])
+        self.assertEqual(obsolete_options("autoplay.main=autoplay\nautoplay.main.enabled='1'\n"), [])
 
     def test_old_name_records_and_whitelist_go(self):
         old = DHCP + (f"dhcp.dashplay=domain\ndhcp.dashplay.name='{NAME}'\ndhcp.dashplay.ip='{LAN_IP}'\n"
@@ -209,21 +209,21 @@ class LegacyCleanupTests(unittest.TestCase):
         self.assertIn(["del_list", f"dhcp.cfg01411c.rebind_domain=/{NAME}/"], changes)
         self.assertEqual(changes[-1], ["commit", "dhcp"])
         after = applied(old, changes)
-        self.assertNotIn("dashplay", after)
+        self.assertNotIn("autoplay", after)
         self.assertIn("'/other.example/'", after, "other programs' entries stay")
         self.assertIn("'192.0.2.53'", after)
         self.assertEqual(legacy_dns_cleanup(after), [])
 
     def test_obsolete_options_are_dropped_and_the_seven_keys_kept(self):
-        old = ("dashplay.main=dashplay\ndashplay.main.enabled='1'\ndashplay.main.wifi='auto'\n"
-               "dashplay.main.tesla_mode='1'\ndashplay.main.answer_tesla_checks='0'\ndashplay.main.settings_port='18080'\n"
-               "dashplay.main.bluetooth_service='/usr/bin/python3 /opt/dashplay/board_zte_f50.py'\n"
-               "dashplay.main.duckdns_domain='mycar'\ndashplay.main.idle_release='0'\n")
+        old = ("autoplay.main=autoplay\nautoplay.main.enabled='1'\nautoplay.main.wifi='auto'\n"
+               "autoplay.main.tesla_mode='1'\nautoplay.main.answer_tesla_checks='0'\nautoplay.main.settings_port='18080'\n"
+               "autoplay.main.bluetooth_service='/usr/bin/python3 /opt/autoplay/board_zte_f50.py'\n"
+               "autoplay.main.duckdns_domain='mycar'\nautoplay.main.idle_release='0'\n")
         changes = obsolete_options(old)
         self.assertEqual({c[1] for c in changes if c[0] == "delete"},
-                         {"dashplay.main.wifi", "dashplay.main.tesla_mode", "dashplay.main.answer_tesla_checks",
-                          "dashplay.main.settings_port", "dashplay.main.bluetooth_service"})
-        self.assertEqual(changes[-1], ["commit", "dashplay"])
+                         {"autoplay.main.wifi", "autoplay.main.tesla_mode", "autoplay.main.answer_tesla_checks",
+                          "autoplay.main.settings_port", "autoplay.main.bluetooth_service"})
+        self.assertEqual(changes[-1], ["commit", "autoplay"])
         config = read_config(old)
         self.assertEqual(set(config), set(DEFAULTS))
         self.assertEqual((config["duckdns_domain"], config["idle_release"]), ("mycar", "0"))
@@ -287,14 +287,14 @@ class SharedLanTests(unittest.TestCase):
 class ConfigTests(unittest.TestCase):
     def test_idle_release_defaults_to_five_minutes_and_can_be_turned_off(self):
         self.assertEqual(read_config("")["idle_release"], "300")
-        self.assertEqual(read_config("dashplay.main.idle_release='0'\n")["idle_release"], "0")
+        self.assertEqual(read_config("autoplay.main.idle_release='0'\n")["idle_release"], "0")
 
     def test_seven_keys_and_constants(self):
         self.assertEqual(sorted(DEFAULTS), ["duckdns_domain", "duckdns_token", "enabled", "idle_release", "update_check",
                                             "update_mirror", "viewer_port"])
         self.assertEqual(SETTINGS_PORT, 18080)
         self.assertEqual(str(supervisor_openwrt.SHARED_LAN), "100.96.0.1/24")
-        self.assertEqual(supervisor_openwrt.JAVA, "/usr/lib/dashplay-jre/bin/java")
+        self.assertEqual(supervisor_openwrt.JAVA, "/usr/lib/autoplay-jre/bin/java")
 
     def test_the_name_is_the_duckdns_one_or_the_local_one(self):
         self.assertEqual(box_name(None), "autoplay.lan")
@@ -303,7 +303,7 @@ class ConfigTests(unittest.TestCase):
     def test_the_receiver_always_runs_in_tesla_mode(self):
         network = {"ssid": "Car-5G", "key": "k", "security": "wpa2", "channel": 149, "device": "br-lan",
                    "address": ipaddress.IPv4Interface("100.96.0.1/24")}
-        command = receiver_command(Path("/opt/dashplay"), network, Path("/var/run/dashplay/handoff.json"), 18443, 300)
+        command = receiver_command(Path("/opt/autoplay"), network, Path("/var/run/autoplay/handoff.json"), 18443, 300)
         self.assertIn("--tesla", command)
         self.assertNotIn("--car-music", command)
         self.assertNotIn("--no-wireless", command)
@@ -313,7 +313,7 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("--bind-wait", receiver_command(Path("/x"), network, Path("/h"), 18443, 300, wait=True))
 
     def test_uci_options_override_defaults_and_unknown_keys_are_ignored(self):
-        config = read_config("dashplay.main=dashplay\ndashplay.main.viewer_port='19000'\ndashplay.main.wifi='wwan'\n")
+        config = read_config("autoplay.main=autoplay\nautoplay.main.viewer_port='19000'\nautoplay.main.wifi='wwan'\n")
         self.assertEqual(config["viewer_port"], "19000")
         self.assertNotIn("wifi", config)
 

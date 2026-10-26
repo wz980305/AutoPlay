@@ -41,7 +41,7 @@ CERT_RETRIES = (60, 120, 300, 900)
 CERT_RETRY = 3600
 ACME_TIMEOUT = 600
 DNS_SLEEP = 60             # wait for the TXT record instead of acme.sh's DoH check (blocked on some networks)
-ACME_SERVER = os.environ.get("DASHPLAY_ACME_SERVER", "letsencrypt")   # tests: letsencrypt_test
+ACME_SERVER = os.environ.get("AUTOPLAY_ACME_SERVER", "letsencrypt")   # tests: letsencrypt_test
 
 
 def sub_domain(text):
@@ -212,7 +212,7 @@ class Maintainer(threading.Thread):
         log = home / "acme.log"
         log.unlink(missing_ok=True)   # one run's log only (private, 0600)
         # One worker at a time, also across a supervisor restart while acme.sh is still running.
-        fd = os.open(home / "dashplay.lock", os.O_RDWR | os.O_CREAT, 0o600)
+        fd = os.open(home / "autoplay.lock", os.O_RDWR | os.O_CREAT, 0o600)
         with os.fdopen(fd, "a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             # 2: acme.sh still has a certificate it considers current; install that one.

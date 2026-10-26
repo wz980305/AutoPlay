@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the DashPlay receiver (OpenWrt); keep Wi-Fi credentials and tokens out of logs.
+"""Run the AutoPlay receiver (OpenWrt); keep Wi-Fi credentials and tokens out of logs.
 
 Reads the Wi-Fi handed to the iPhone from the JSON file the supervisor wrote (--hotspot: the network read
 from ubus) and uses the system Python and the board's BlueZ/D-Bus.
@@ -104,7 +104,7 @@ def main():
     parser.add_argument("--web-host", default="",
                         help="address the viewer listens on, e.g. 0.0.0.0 when the head unit reaches the box "
                              "through the car hotspot while AirPlay stays on --bind")
-    parser.add_argument("--java", default="/usr/bin/java", help="Java 21 (OpenWrt: the dashplay-jre package)")
+    parser.add_argument("--java", default="/usr/bin/java", help="Java 21 (OpenWrt: the autoplay-jre package)")
     parser.add_argument("--settings-port", type=int, default=18080, help="port of the box settings page")
     parser.add_argument("--viewer-port", type=int, default=0,
                         help="port of the viewer page (default: the saved config's, else 18443)")
@@ -135,7 +135,7 @@ def main():
     password = "" if args.security == "open" else hotspot["passphrase"]
     viewer = args.viewer_port if 1024 <= args.viewer_port <= 65535 else 0
     config = {
-        "deviceName": "DashPlay", "model": "DashPlay", "manufacturer": "DashPlay",
+        "deviceName": "AutoPlay", "model": "AutoPlay", "manufacturer": "AutoPlay",
         "airPlayPort": 7000, "httpPort": viewer or saved.get("httpPort", 18443),
         "display": saved.get("display", {"width": 1280, "height": 720, "fps": 30, "uiScale": 100, "hevc": False}),
         "wireless": not args.no_wireless, "wifiSsid": ssid, "wifiPassphrase": password,

@@ -39,7 +39,7 @@ BLUETOOTH_TEXT = {   # reason codes of the bluetooth domain (status_model) -> wh
     "adapter-not-powered": "蓝牙适配器没有上电，盒子会一直重试",
     "controller-init-failed": "蓝牙芯片初始化失败（Marlin3 固件没有接受配置）",
     "controller-timeout": "蓝牙芯片没有响应",
-    "bluez-missing": "盒子上缺少蓝牙程序（安装没有完成：重新运行装机的 dashplay 步骤）",
+    "bluez-missing": "盒子上缺少蓝牙程序（安装没有完成：重新运行装机的 autoplay 步骤）",
     "rfkill": "找不到唯一的蓝牙开关（rfkill）",
     "hci-busy": "另一个程序占着蓝牙控制器",
     "hci-lost": "蓝牙控制器消失了（Wi-Fi 芯片复位），正在重新启动",
@@ -123,7 +123,7 @@ class SettingsPage:
                     return self._send(403, "forbidden")
                 if self.path == "/diag.txt":
                     return self._send(200, diagnostics.DiagLog(page.state / "diag").text(), "text/plain; charset=utf-8",
-                                      {"Content-Disposition": 'attachment; filename="dashplay-diag.txt"'})
+                                      {"Content-Disposition": 'attachment; filename="autoplay-diag.txt"'})
                 if self.path == "/status.json":
                     return self._send(200, json.dumps(page.status(), ensure_ascii=False), "application/json")
                 if self.path.split("?")[0] == "/reset":
@@ -351,7 +351,7 @@ class SettingsPage:
                           for u in status.get("entries", []) if u.startswith("https"))
         if not entries or refresh:
             return ""
-        foot = f"车机连接 Wi-Fi「{escape(status.get('ssid', ''))}」后，在车机浏览器输入上面的地址；画面端口在 OpenWrt 后台的 DashPlay 页设置。"
+        foot = f"车机连接 Wi-Fi「{escape(status.get('ssid', ''))}」后，在车机浏览器输入上面的地址；画面端口在 OpenWrt 后台的 AutoPlay 页设置。"
         return ui.group("CarPlay 画面", entries, foot)
 
     def network_block(self):
@@ -364,7 +364,7 @@ class SettingsPage:
         return (f'<div class=cell><span class=main><b>交给 iPhone 的 Wi-Fi</b></span>'
                 f'<span class=value>{escape(status.get("ssid", "") or "等待 Wi-Fi")}</span></div>'
                 f'<a class=cell href="{escape(admin)}"><span class=main><b>在 OpenWrt 后台设置 Wi-Fi</b>'
-                '<span>Wi-Fi 名称、密码或信道改了以后，DashPlay 会自动跟着改</span></span><span class=chev></span></a>')
+                '<span>Wi-Fi 名称、密码或信道改了以后，AutoPlay 会自动跟着改</span></span><span class=chev></span></a>')
 
     def notices(self):
         status = self.status()
@@ -419,7 +419,7 @@ class SettingsPage:
                     '<span>画面卡顿、断线时，把它交给 AI 助手或开发者分析</span></span><span class=chev></span></a>'
                     '<a class="cell destructive" href="/reset">恢复出厂设置…</a>')
         intro = ui.other_screen(self.home()) if not devices and not refresh else ""
-        body = (f'<h1 class=span>盒子设置</h1>{notice}{self.chain(devices, presence, phase)}<div>'
+        body = (f'<h1 class=span>AutoPlay 设置</h1>{notice}{self.chain(devices, presence, phase)}<div>'
                 + self.entries_block(status, refresh)
                 + ui.group("网络", self.network_block())
                 + intro + ui.group("iPhone", block) + '</div><div>'
@@ -428,12 +428,12 @@ class SettingsPage:
                            "每天自动检查一次，只提示不自动安装。升级前会备份配对、证书和设置，新版本起不来会自动退回。")
                 + ui.group("高级", advanced)
                 + '</div>')
-        return ui.page("盒子设置", body, refresh or update.running(self.state.parent), wide=True)
+        return ui.page("AutoPlay 设置", body, refresh or update.running(self.state.parent), wide=True)
 
     def render_reset(self):
         """The factory-reset page: what goes, two typed confirmations (no JS confirm() to bypass)."""
         nonce = self.pairing.nonce
-        body = (f'<a class=back href="/">‹ 盒子设置</a><h1>恢复出厂设置</h1>'
+        body = (f'<a class=back href="/">‹ AutoPlay 设置</a><h1>恢复出厂设置</h1>'
                 '<p class=sub>删除这台盒子上所有属于你的数据，然后以出厂状态重新启动。</p>'
                 + ui.group("会被删除", '<div class=cell><span class=main><b>已添加的 iPhone</b><span>蓝牙配对、CarPlay 配对记录、上次使用的记录</span></span></div>'
                            '<div class=cell><span class=main><b>证书与密钥</b><span>正式证书、DuckDNS 申请账户、网页访问令牌</span></span></div>'

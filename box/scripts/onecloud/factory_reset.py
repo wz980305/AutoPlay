@@ -73,11 +73,11 @@ def wipe(root, identity=False, uci=subprocess.run, keep=("clock-floor",)):
         removed.append("identity/offline-mfi")
     for key, value in UCI_DEFAULTS.items():
         try:
-            uci(["uci", "set", f"dashplay.main.{key}={value}"], capture_output=True, timeout=10, check=False)
+            uci(["uci", "set", f"autoplay.main.{key}={value}"], capture_output=True, timeout=10, check=False)
         except (OSError, subprocess.SubprocessError):
             pass
     try:
-        uci(["uci", "commit", "dashplay"], capture_output=True, timeout=10, check=False)
+        uci(["uci", "commit", "autoplay"], capture_output=True, timeout=10, check=False)
     except (OSError, subprocess.SubprocessError):
         pass
     try:

@@ -180,7 +180,7 @@ class BluetoothManagerTests(unittest.TestCase):
         self.status = Status(clock=lambda: 1_700_000_000)
         self.said = []
         self.hci = Path(self.tmp.name) / "hci0"
-        self.manager = sup.BluetoothManager(self.platform, Path("/opt/dashplay"), Path(self.tmp.name), self.status,
+        self.manager = sup.BluetoothManager(self.platform, Path("/opt/autoplay"), Path(self.tmp.name), self.status,
                                             self.said.append, clock=self.clock, hci=self.hci)
 
     def power_cycle(self, result):
@@ -330,7 +330,7 @@ class ReceiverManagerTests(unittest.TestCase):
 class ReasonTests(unittest.TestCase):
     def test_helper_reason_words(self):
         self.assertEqual(sup.helper_reason("x\nMarlin3 Bluetooth init failed\n", 1), "controller-init-failed")
-        self.assertEqual(sup.helper_reason("missing /opt/dashplay-bluez/usr/bin/bluetoothd: run board_zte_f50.py --setup", 1), "bluez-missing")
+        self.assertEqual(sup.helper_reason("missing /opt/autoplay-bluez/usr/bin/bluetoothd: run board_zte_f50.py --setup", 1), "bluez-missing")
         self.assertEqual(sup.helper_reason("Bluetooth controller did not come up"), "controller-timeout")
         self.assertEqual(sup.helper_reason("", 137), "helper-exit-137")
 

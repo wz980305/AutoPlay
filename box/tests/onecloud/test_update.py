@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 import update
 
 # OpenSSL 3 signs and checks Ed25519 with -rawin; a Mac's own openssl is LibreSSL.
-OPENSSL = next((p for p in (os.environ.get('DASHPLAY_OPENSSL'), '/opt/homebrew/opt/openssl@3/bin/openssl',
+OPENSSL = next((p for p in (os.environ.get('AUTOPLAY_OPENSSL'), '/opt/homebrew/opt/openssl@3/bin/openssl',
                             '/usr/local/opt/openssl@3/bin/openssl', shutil.which('openssl'))
                 if p and Path(p).exists() and 'OpenSSL 3' in subprocess.run([p, 'version'], capture_output=True,
                                                                               text=True).stdout), None)
@@ -138,9 +138,9 @@ class VersionTests(unittest.TestCase):
 
     def test_the_installed_version_comes_from_the_package_list(self):
         # `apk info -v` on OpenWrt 25.12; `apk info -v dashplay` prints the description instead (lab, 2026-10-19).
-        listing = 'busybox-1.37.0-r6\ndashplay-2026.10.19.1-r1\ndashplay-jre-21.0.12.1-r1\nluci-app-dashplay-0.261019.40345\n'
+        listing = 'busybox-1.37.0-r6\ndashplay-2026.10.19.1-r1\nautoplay-jre-21.0.12.1-r1\nluci-app-autoplay-0.261019.40345\n'
         self.assertEqual(update.apk_version('dashplay', listing), '2026.10.19.1-r1')
-        self.assertEqual(update.apk_version('dashplay-jre', listing), '21.0.12.1-r1')
+        self.assertEqual(update.apk_version('autoplay-jre', listing), '21.0.12.1-r1')
         self.assertIsNone(update.apk_version('dashplay', 'dashplay: Receives CarPlay from an iPhone\n'))
 
 
@@ -148,8 +148,8 @@ class VersionTests(unittest.TestCase):
         # Shape of `apk add --upgrade --simulate` on the F50 (2026-10-19).
         plan = ('(1/4) Upgrading dashplay (2026.10.16-r1 -> 2026.10.19.1-r1)\n'
                 '(2/4) Upgrading luci-base (26.280.64158~a450f0d -> 26.288.56989~75a306d)\n'
-                '(3/4) Upgrading luci-app-dashplay (0.261016.36841 -> 0.261019.40345)\n'
-                '(4/4) Upgrading luci-i18n-dashplay-zh-cn (0.261016.36841 -> 0.261019.40345)\nOK: 267.2 MiB\n')
+                '(3/4) Upgrading luci-app-autoplay (0.261016.36841 -> 0.261019.40345)\n'
+                '(4/4) Upgrading luci-i18n-autoplay-zh-cn (0.261016.36841 -> 0.261019.40345)\nOK: 267.2 MiB\n')
         self.assertEqual(update.forbidden_in_plan(plan), [])
         plan += ('(5/7) Installing kmod-bluetooth (6.12.94-r1)\n(6/7) Installing bluez-daemon (5.83-r1)\n'
                  '(7/7) Upgrading kernel (6.12.94~abc-r1)\n')
@@ -167,7 +167,7 @@ class SignedReleaseTests(unittest.TestCase):
         subprocess.run([OPENSSL, 'pkey', '-in', str(self.key), '-pubout', '-out', str(self.pub)], check=True, capture_output=True)
         self.server = Server(self.dir / 'www')
         self.addCleanup(self.server.close)
-        self.root = self.dir / 'opt/dashplay'
+        self.root = self.dir / 'opt/autoplay'
         (self.root / 'state/receiver').mkdir(parents=True)
         (self.root / 'identity/offline-mfi').mkdir(parents=True)
         (self.root / 'identity/offline-mfi/identity.pk8').write_bytes(b'secret identity')
@@ -189,20 +189,20 @@ class SignedReleaseTests(unittest.TestCase):
 
     def publish(self, manifest, signature=None):
         data = json.dumps(manifest).encode()
-        self.server.put('latest/dashplay-update.json', data)
-        self.server.put('latest/dashplay-update.json.sig', signature if signature is not None else self.sign(data))
+        self.server.put('latest/autoplay-update.json', data)
+        self.server.put('latest/autoplay-update.json.sig', signature if signature is not None else self.sign(data))
 
     def openwrt_release(self, version, packages, jre='21.0.12.1-r1'):
-        """Serve packages {name: bytes} as openwrt-dashplay v<version>; returns the manifest's openwrt part."""
+        """Serve packages {name: bytes} as openwrt-autoplay v<version>; returns the manifest's openwrt part."""
         base = f'owrt/v{version}/'
         entries, sums = {}, []
         for name, data in packages.items():
-            file = f'{name}-{version}-r1.apk' if name != 'dashplay-jre' else f'dashplay-jre-{jre}_aarch64_generic.apk'
+            file = f'{name}-{version}-r1.apk' if name != 'autoplay-jre' else f'autoplay-jre-{jre}_aarch64_generic.apk'
             self.server.put(base + file, data)
             sums.append(f'{sha(data)}  {file}')
             entries[name] = {'file': file, 'sha256': sha(data), 'size': len(data)}
         self.server.put(base + 'SHA256SUMS', ('\n'.join(sums) + '\n').encode())
-        jre_entry = entries.pop('dashplay-jre', {'file': 'x', 'sha256': '0', 'size': 1})
+        jre_entry = entries.pop('autoplay-jre', {'file': 'x', 'sha256': '0', 'size': 1})
         return {'base': self.server.base + base, 'packages': entries,
                 'jre': {'version': jre, 'files': {'aarch64_generic': jre_entry}}}
 
@@ -211,7 +211,7 @@ class SignedReleaseTests(unittest.TestCase):
         self.publish(manifest)
         self.assertEqual(update.latest_manifest(self.root, True, self.pub)['version'], '2026.10.20')
         data = json.dumps(manifest).encode()
-        self.server.put('latest/dashplay-update.json', data.replace(b'2026.10.20', b'2026.10.21'))   # tampered
+        self.server.put('latest/autoplay-update.json', data.replace(b'2026.10.20', b'2026.10.21'))   # tampered
         with self.assertRaisesRegex(update.UpdateError, '签名不对'):
             update.latest_manifest(self.root, True, self.pub)
         other = self.dir / 'other.pem'
@@ -224,7 +224,7 @@ class SignedReleaseTests(unittest.TestCase):
 
     def test_the_mirror_is_used_when_github_fails(self):
         self.publish({'format': 1, 'version': '2026.10.20', 'online': True})
-        self.server.down.add('latest/dashplay-update.json')
+        self.server.down.add('latest/autoplay-update.json')
         with patch.object(update, 'MIRRORS', (self.server.mirror,)):
             self.assertEqual(update.latest_manifest(self.root, False, self.pub)['version'], '2026.10.20')
         self.assertTrue(any(p.startswith('/mirror/') for p in self.server.seen))
@@ -270,10 +270,11 @@ class SignedReleaseTests(unittest.TestCase):
             self.assertEqual(update.install(self.root, True, self.pub), 0)
             self.assertIn('已是最新', json.loads((self.root / 'state/update-status.json').read_text())['message'])
 
-    def openwrt_install(self, simulation_extra='', comes_up=(True,), old_published=True):
+    def openwrt_install(self, simulation_extra='', comes_up=(True,), old_published=True, installed='autoplay'):
         # Larger than fetch()'s default limit, as real packages are (37 MB; lab, 2026-10-19).
+        old_names = update.LEGACY_PACKAGES if installed == 'dashplay' else update.OPENWRT_PACKAGES
         if old_published:
-            self.openwrt_release('2026.10.19.1', {n: f'old {n}'.encode() * 200000 for n in update.OPENWRT_PACKAGES})
+            self.openwrt_release('2026.10.19.1', {n: f'old {n}'.encode() * 200000 for n in old_names})
         new = self.openwrt_release('2026.10.20', {n: f'new {n}'.encode() for n in update.OPENWRT_PACKAGES})
         self.publish({'format': 1, 'version': '2026.10.20', 'online': True, 'openwrt': new})
         calls, ups = [], list(comes_up)
@@ -284,7 +285,7 @@ class SignedReleaseTests(unittest.TestCase):
             calls.append(list(args))
             out = ''
             if args[:3] == ('apk', 'add', '--upgrade') and '--simulate' in args:
-                out = '(1/3) Upgrading dashplay (2026.10.19.1-r1 -> 2026.10.20-r1)\n' + simulation_extra
+                out = f'(1/3) Upgrading {installed} (2026.10.19.1-r1 -> 2026.10.20-r1)\n' + simulation_extra
             return subprocess.CompletedProcess(args, 0, out, '')
 
         arch = self.dir / 'arch'
@@ -294,13 +295,17 @@ class SignedReleaseTests(unittest.TestCase):
         def fake_path(*parts):
             return arch if parts == ('/etc/apk/arch',) else real_path(*parts)
 
-        versions = {'dashplay': '2026.10.19.1-r1', 'dashplay-jre': '21.0.12.1-r1'}
+        versions = {installed: '2026.10.19.1-r1', 'autoplay-jre': '21.0.12.1-r1'}
         with patch.object(update, 'run', run), patch.object(update, 'apk_version', versions.get), \
                 patch.object(update, 'Path', fake_path), patch.object(update, 'settings_port', lambda: 18080), \
                 patch.object(update, 'service_up', lambda port, seconds=150: ups.pop(0)), \
-                patch.object(update, 'BACKUP', 'backup.tar.gz'):
+                patch.object(update, 'BACKUP', 'backup.tar.gz'), \
+                patch.object(update, 'LEGACY_ROOT', str(self.dir / 'legacy')):
             code = update.install(self.root, True, self.pub)
-        return code, calls, json.loads((self.root / 'state/update-status.json').read_text())
+        status_file = self.root / 'state/update-status.json'
+        if not status_file.exists():   # a legacy rollback moved the state back to the DashPlay root
+            status_file = self.dir / 'legacy/state/update-status.json'
+        return code, calls, json.loads(status_file.read_text())
 
     def test_openwrt_installs_the_three_packages_after_a_clean_plan(self):
         code, calls, status = self.openwrt_install()
@@ -309,8 +314,8 @@ class SignedReleaseTests(unittest.TestCase):
         real = [c for c in calls if c[:3] == ['apk', 'add', '--upgrade'] and '--simulate' not in c]
         self.assertEqual(len(real), 1)
         self.assertEqual(sorted(Path(p).name for p in real[0][4:]),
-                         ['dashplay-2026.10.20-r1.apk', 'luci-app-dashplay-2026.10.20-r1.apk',
-                          'luci-i18n-dashplay-zh-cn-2026.10.20-r1.apk'], 'no JRE: its version did not change')
+                         ['autoplay-2026.10.20-r1.apk', 'luci-app-autoplay-2026.10.20-r1.apk',
+                          'luci-i18n-autoplay-zh-cn-2026.10.20-r1.apk'], 'no JRE: its version did not change')
         self.assertLess(calls.index(['apk', 'update']), calls.index(real[0]))
         with tarfile.open(self.root.parent / 'backup.tar.gz') as saved:
             names = saved.getnames()
@@ -340,8 +345,34 @@ class SignedReleaseTests(unittest.TestCase):
         self.assertIn('已退回 2026.10.19.1', status['message'])
         back = [c for c in calls if c[:2] == ['apk', 'add'] and '--upgrade' not in c]
         self.assertEqual(sorted(Path(p).name for p in back[0][3:]),
+                         ['autoplay-2026.10.19.1-r1.apk', 'luci-app-autoplay-2026.10.19.1-r1.apk',
+                          'luci-i18n-autoplay-zh-cn-2026.10.19.1-r1.apk'])
+
+    def test_a_dashplay_box_moves_over_by_removing_the_old_packages_first(self):
+        # The transition (TRIM-LOG.md, item 7): different package names, so apk cannot upgrade in place. The old
+        # packages go first (their prerm keeps /opt/dashplay/state), the autoplay postinst moves the state over.
+        code, calls, status = self.openwrt_install(installed='dashplay')
+        self.assertEqual((code, status['phase']), (0, 'done'), status)
+        removal = calls.index(['apk', 'del', 'dashplay', 'luci-app-dashplay', 'luci-i18n-dashplay-zh-cn'])
+        real = [i for i, c in enumerate(calls) if c[:3] == ['apk', 'add', '--upgrade'] and '--simulate' not in c]
+        self.assertEqual(len(real), 1)
+        self.assertLess(removal, real[0], 'the old packages are removed before the new ones are installed')
+        journal = json.loads((self.root / 'state/update-journal.json').read_text())
+        self.assertEqual((journal['phase'], journal['previous']), ('done', '2026.10.19.1'))
+
+    def test_a_dashplay_box_goes_back_to_dashplay_when_autoplay_does_not_come_up(self):
+        code, calls, status = self.openwrt_install(installed='dashplay', comes_up=(False, True))
+        self.assertEqual((code, status['phase']), (1, 'failed'))
+        self.assertIn('已退回 2026.10.19.1', status['message'])
+        self.assertIn(['apk', 'del', 'autoplay', 'luci-app-autoplay', 'luci-i18n-autoplay-zh-cn'], calls)
+        back = [c for c in calls if c[:2] == ['apk', 'add'] and '--upgrade' not in c]
+        self.assertEqual(sorted(Path(p).name for p in back[0][3:]),
                          ['dashplay-2026.10.19.1-r1.apk', 'luci-app-dashplay-2026.10.19.1-r1.apk',
                           'luci-i18n-dashplay-zh-cn-2026.10.19.1-r1.apk'])
+        self.assertTrue((self.dir / 'legacy/state/update-journal.json').is_file(), 'the state went back to where the old service reads it')
+        self.assertIn('已退回', json.loads((self.dir / 'legacy/state/update-status.json').read_text())['message'])
+        self.assertFalse((self.root / 'state').exists(), 'nothing left to stop the next postinst from migrating')
+        self.assertFalse((self.root / 'identity').exists())
 
 
 
@@ -448,7 +479,7 @@ class LaunchTests(unittest.TestCase):
                 # A procd service for this run over ubus: no init script that installing a package would start.
                 self.assertEqual([c[:4] for c in calls], [('ubus', 'call', 'service', 'delete'), ('ubus', 'call', 'service', 'set')])
                 service = json.loads(calls[1][4])
-                self.assertEqual(service['name'], 'dashplay-update')
+                self.assertEqual(service['name'], 'autoplay-update')
                 self.assertEqual(service['instances']['update']['command'][2:], ['install', '--root', str(root)])
                 self.assertIn('正在升级', update.launch(root, True), 'a second click while it runs starts nothing')
                 self.assertEqual(len(calls), 2)
@@ -464,25 +495,25 @@ class ManifestTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             release = Path(tmp)
             (release / 'openwrt').mkdir()
-            (release / 'dashplay').mkdir()
-            for name in ('dashplay-2026.10.20-r1.apk', 'luci-app-dashplay-0.261020.1.apk',
-                         'luci-i18n-dashplay-zh-cn-0.261020.1.apk', 'dashplay-jre-21.0.12.1-r1_aarch64_generic.apk',
-                         'dashplay-jre-21.0.12.1-r1_x86_64.apk'):
+            (release / 'autoplay').mkdir()
+            for name in ('autoplay-2026.10.20-r1.apk', 'luci-app-autoplay-0.261020.1.apk',
+                         'luci-i18n-autoplay-zh-cn-0.261020.1.apk', 'autoplay-jre-21.0.12.1-r1_aarch64_generic.apk',
+                         'autoplay-jre-21.0.12.1-r1_x86_64.apk'):
                 (release / 'openwrt' / name).write_bytes(name.encode())
-            with tarfile.open(release / 'dashplay/dashplay-bundle-2026.10.20.tar', 'w') as tar:
+            with tarfile.open(release / 'autoplay/autoplay-bundle-2026.10.20.tar', 'w') as tar:
                 for name, data in (('./supervisor.py', b'program'), ('./state/receiver/x', b'owner'),
                                    ('./identity/offline-mfi/identity.pk8', b'secret')):
                     info = tarfile.TarInfo(name)
                     info.size = len(data)
                     tar.addfile(info, io.BytesIO(data))
             value = maker.manifest('2026.10.20', '- 新功能', release, 'owner', True)
-            size = (release / 'dashplay/dashplay-bundle-2026.10.20.tar').stat().st_size
+            size = (release / 'autoplay/autoplay-bundle-2026.10.20.tar').stat().st_size
         self.assertEqual((value['format'], value['version'], value['online'], value['notes']), (1, '2026.10.20', True, '- 新功能'))
-        self.assertEqual(value['openwrt']['packages']['dashplay']['sha256'], sha(b'dashplay-2026.10.20-r1.apk'))
+        self.assertEqual(value['openwrt']['packages']['autoplay']['sha256'], sha(b'autoplay-2026.10.20-r1.apk'))
         self.assertEqual(value['openwrt']['jre']['version'], '21.0.12.1-r1')
         self.assertEqual(sorted(value['openwrt']['jre']['files']), ['aarch64_generic', 'x86_64'])
-        self.assertEqual(value['openwrt']['base'], 'https://github.com/owner/openwrt-dashplay/releases/download/v2026.10.20/')
-        self.assertEqual(value['bundle']['file'], 'dashplay-bundle-2026.10.20.tar')
+        self.assertEqual(value['openwrt']['base'], 'https://github.com/owner/openwrt-autoplay/releases/download/v2026.10.20/')
+        self.assertEqual(value['bundle']['file'], 'autoplay-bundle-2026.10.20.tar')
         self.assertEqual(value['bundle']['size'], size)
 
 

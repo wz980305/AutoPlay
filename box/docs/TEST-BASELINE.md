@@ -42,7 +42,7 @@ mapping) run without `dbus_next`.
 ## Source size
 
 `wc -l` over `*.py *.sh *.js *.java Makefile *.init *.config *.po *.json
-dashplay-update` under `box/` and `openwrt/`, excluding `__pycache__`:
+autoplay-update` under `box/` and `openwrt/`, excluding `__pycache__`:
 **20,425 lines**.
 
 Per-tree: `box/scripts/onecloud` + `box/scripts` + `box/linux` ≈ 11.5k,

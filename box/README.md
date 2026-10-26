@@ -12,7 +12,7 @@ DashPlay 基于 [PlayPort](https://github.com/youcci/playport)，提供补丁和
 
 **不懂技术也能装**：把下面这句话发给你的 AI 助手（Claude Code、Codex、WorkBuddy、豆包、DeepSeek 等，能在电脑上运行命令的都行）。它会一个个问你：什么设备、现在是什么系统、什么车、车机能不能开热点、要不要上网，然后一步步装好，只在需要你插拔、在手机上点选时叫你：
 
-> 请在终端用 curl 下载 https://raw.githubusercontent.com/yizhixiaoheigou/DashPlay/main/skills/dashplay-install/SKILL.md 的原文并完整读完（不要用网页摘要工具，它可能给出旧版或删节版），再按它一步步帮我把 DashPlay 装好。
+> 请在终端用 curl 下载 https://raw.githubusercontent.com/yizhixiaoheigou/DashPlay/main/skills/autoplay-install/SKILL.md 的原文并完整读完（不要用网页摘要工具，它可能给出旧版或删节版），再按它一步步帮我把 DashPlay 装好。
 
 N1 是斐讯原厂系统、安卓电视或开不了机，都直接告诉它。N1 实测的是已刷 Linux 的路线；两条原厂路线（2.19 及以下、高于 2.19）来自公开实践，本项目尚未实测。
 
@@ -63,7 +63,7 @@ N1 是斐讯原厂系统、安卓电视或开不了机，都直接告诉它。N1
 
 - **玩客云（S805，Armbian / Debian 13 armhf）+ RTL8821CU USB 网卡**（Wi-Fi 与蓝牙二合一，`0bda:c820`），12 V 供电。有线 CarPlay 用远离网口的 USB 口（OTG，盒子切成 USB 主机）。线刷固件后手机连盒子热点 `DashPlay` 完成首次设置，由用户自己的 AI 助手放入认证文件即可使用。刷机与使用见 [固件使用说明](docs/DashPlay玩客云固件使用说明.md)，给 AI 的步骤见 [AI 安装说明](docs/DashPlay-AI安装说明.md)；固件构建工具见 `scripts/onecloud/firmware/`。
 - **斐讯 N1（S905D，aarch64，内置 BCM43455 Wi-Fi/蓝牙）**：刷机包是预装 DashPlay 的 U 盘镜像（基于 [ophub amlogic-s9xxx-armbian](https://github.com/ophub/amlogic-s9xxx-armbian) 的 Debian trixie），U 盘启动后可用 `armbian-install` 装进 eMMC；步骤同见 [固件使用说明](docs/DashPlay玩客云固件使用说明.md)。两个 USB 口都是主机口，iPhone 插哪个都行。镜像由 `scripts/onecloud/firmware/make-n1-image.sh` 在一台 N1 上生成。
-- **已经装好 OpenWrt 25.12 的路由器或随身 WiFi（aarch64 / x86_64，含 ZTE F50）**：OpenWrt 插件在姊妹仓库 [openwrt-dashplay](https://github.com/yizhixiaoheigou/openwrt-dashplay)（apk 包与软件源），网络照常在 OpenWrt 后台设置。插件运行的就是本仓库的程序：每次发布附带的 `dashplay-bundle-<版本>.tar`。原厂 F50 B16 的备份、Root 与 SD 卡 OpenWrt 路线见 [装机 skill](skills/dashplay-install/SKILL.md)，包含经校验的辅助脚本；会降低启动校验，最坏需要拆机。非 B16 没有已核实降级路线时必须停止。
+- **已经装好 OpenWrt 25.12 的路由器或随身 WiFi（aarch64 / x86_64，含 ZTE F50）**：OpenWrt 插件在姊妹仓库 [openwrt-dashplay](https://github.com/yizhixiaoheigou/openwrt-dashplay)（apk 包与软件源），网络照常在 OpenWrt 后台设置。插件运行的就是本仓库的程序：每次发布附带的 `autoplay-bundle-<版本>.tar`。原厂 F50 B16 的备份、Root 与 SD 卡 OpenWrt 路线见 [装机 skill](skills/autoplay-install/SKILL.md)，包含经校验的辅助脚本；会降低启动校验，最坏需要拆机。非 B16 没有已核实降级路线时必须停止。
 
 
 ### 实测情况
@@ -102,14 +102,14 @@ git -C playport checkout 9a0882dd0ffe48e467b59d58b12d81391df55ade
 sh scripts/apply-playport-patches.sh playport
 (cd playport && ./gradlew :protocol:test :server:test :server:installDist)
 (cd playport/web && npm ci && npm test && npm run build)   # FLAC 检查需要 ffmpeg，没有则跳过
-sh scripts/onecloud/firmware/build-bundle.sh dashplay-bundle.tar   # 程序包（盒子安装与 OpenWrt 包都用它）
+sh scripts/onecloud/firmware/build-bundle.sh autoplay-bundle.tar   # 程序包（盒子安装与 OpenWrt 包都用它）
 ```
 
-`scripts/build-playport.sh` 可在隔离 Docker 容器中完成同样的 Gradle 构建与测试。盒子上运行需要 Java 21 和带 asyncio 的 Python 3：玩客云/N1 由 `install.sh` 从 Debian 安装，OpenWrt 由插件的 `dashplay-jre`（Temurin 21 musl 版）与系统软件源提供。
+`scripts/build-playport.sh` 可在隔离 Docker 容器中完成同样的 Gradle 构建与测试。盒子上运行需要 Java 21 和带 asyncio 的 Python 3：玩客云/N1 由 `install.sh` 从 Debian 安装，OpenWrt 由插件的 `autoplay-jre`（Temurin 21 musl 版）与系统软件源提供。
 
 ## 运行（玩客云 / 斐讯 N1）
 
-- `scripts/onecloud/dashplay.service` 启动 `supervisor.py`（安装在 `/opt/dashplay`）：按所选使用方式联网（连车机热点或随身 WiFi、或开盒子热点；连不上时临时开盒子热点进设置）、蓝牙、接收服务与设置页（80 端口，`http://dashplay.local/`）。
+- `scripts/onecloud/dashplay.service` 启动 `supervisor.py`（安装在 `/opt/autoplay`）：按所选使用方式联网（连车机热点或随身 WiFi、或开盒子热点；连不上时临时开盒子热点进设置）、蓝牙、接收服务与设置页（80 端口，`http://dashplay.local/`）。
 - `setup_wizard.py`、`settings_page.py`、`settings_ui.py`：首次设置（使用方式 → 网络 → iPhone）与盒子设置页；`phone-presence.py`、`pairing_window.py`、`pair-phone.py`：多部 iPhone 的添加与轮换（无线）。
 - `linux/bt-bridge/`：PlayPort 的 Linux 蓝牙桥，通过 BlueZ D-Bus 建立 iAP2 RFCOMM；`BT_BRIDGE_READY_WAIT` 允许在蓝牙晚于接收服务就绪时等待。
 - `iphone-usb-bridge.py`：有线 CarPlay 的 USB 侧——把 iPhone 切到 CarPlay 配置、转发 USBMUX、在用户态桥接 NCM 网卡；iPhone 第一次插上时点「信任」，信任记录按 iPhone 分别保存。
@@ -119,7 +119,7 @@ sh scripts/onecloud/firmware/build-bundle.sh dashplay-bundle.tar   # 程序包�
 ## 运行（OpenWrt）
 
 - `supervisor_openwrt.py` 与 `platform_openwrt.py`：OpenWrt 上的主控与平台层，只读取 OpenWrt 的网络（`ubus`），把选中的 WiFi 经蓝牙交给 iPhone，WiFi 改了自动跟上；没有蓝牙时只提供有线。`board_zte_f50.py`：ZTE F50 的内置蓝牙初始化与独立 BlueZ。打包、安装与使用见 [openwrt-dashplay](https://github.com/yizhixiaoheigou/openwrt-dashplay)。
-- `scripts/onecloud/firmware/build-bundle.sh` 生成的程序包（发布页的 `dashplay-bundle-<版本>.tar`）就是 OpenWrt 包的内容。
+- `scripts/onecloud/firmware/build-bundle.sh` 生成的程序包（发布页的 `autoplay-bundle-<版本>.tar`）就是 OpenWrt 包的内容。
 - `scripts/carplay-night-probe.mjs`：截取当前 CarPlay 画面（夜间模式检查）。
 
 ## 测试

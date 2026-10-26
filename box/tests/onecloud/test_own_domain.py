@@ -54,11 +54,11 @@ class ConfigTests(unittest.TestCase):
             own_domain.check_token("short")
 
     def test_openwrt_reads_it_from_uci_and_ignores_a_bad_one(self):
-        base = supervisor_openwrt.read_config("dashplay.main.duckdns_domain='MyCar'\n"
-                                              f"dashplay.main.duckdns_token='{TOKEN}'\n")
+        base = supervisor_openwrt.read_config("autoplay.main.duckdns_domain='MyCar'\n"
+                                              f"autoplay.main.duckdns_token='{TOKEN}'\n")
         self.assertEqual(supervisor_openwrt.own_config(base), {"domain": "mycar", "token": TOKEN})
         self.assertIsNone(supervisor_openwrt.own_config(supervisor_openwrt.read_config("")))
-        bad = supervisor_openwrt.read_config("dashplay.main.duckdns_domain='mycar'\ndashplay.main.duckdns_token='x'\n")
+        bad = supervisor_openwrt.read_config("autoplay.main.duckdns_domain='mycar'\nautoplay.main.duckdns_token='x'\n")
         self.assertIsNone(supervisor_openwrt.own_config(bad), "a wrong token turns it off, CarPlay still starts")
 
 

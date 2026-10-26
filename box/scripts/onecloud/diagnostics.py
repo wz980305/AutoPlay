@@ -74,7 +74,7 @@ ERROR_LINE = re.compile(r"\b(ERROR|fatal|Traceback|exited with|hs_err|OutOfMemor
 
 
 class LogMirror:
-    """Logs that survive a power cut: every /var/run/dashplay/*.log (the supervisor, the receiver, the Bluetooth
+    """Logs that survive a power cut: every /var/run/autoplay/*.log (the supervisor, the receiver, the Bluetooth
     helper; tmpfs is the RAM ring) appended to root/<boot>/ and fsynced once a minute, at once when a copied
     chunk holds an error line, and at shutdown; at most LOG_FILE_MAX per file and boot. Offsets are kept beside
     them, so a supervisor restart within the same boot neither repeats nor skips lines (2026-10-12: every

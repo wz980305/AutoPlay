@@ -12,7 +12,7 @@ DashPlay is built on [PlayPort](https://github.com/youcci/playport): patches plu
 
 **No technical background needed**: send this sentence to your AI assistant (Claude Code, Codex, WorkBuddy, Doubao, DeepSeek and the like, anything that can run commands on your computer). It asks you one thing at a time (the device, its current system, the car, whether the head unit can raise a hotspot, whether the head unit needs internet) and installs DashPlay step by step, calling you only to plug or unplug something or tap on your phone:
 
-> Please download https://raw.githubusercontent.com/yizhixiaoheigou/DashPlay/main/skills/dashplay-install/SKILL.md with curl in a terminal and read all of it (not through a web summarizer, which may return an old or shortened copy), then follow it step by step to install DashPlay for me.
+> Please download https://raw.githubusercontent.com/yizhixiaoheigou/DashPlay/main/skills/autoplay-install/SKILL.md with curl in a terminal and read all of it (not through a web summarizer, which may return an old or shortened copy), then follow it step by step to install DashPlay for me.
 
 The guide itself is in Chinese; assistants follow it in whatever language you write to them. If your N1 runs stock Phicomm firmware or Android TV, or does not boot, just tell the assistant. The N1 route tested by this project starts from Linux; the two stock-firmware routes (2.19 or earlier, later than 2.19) come from public guides and have not been tested here.
 
@@ -63,7 +63,7 @@ A Tesla runs into all four. Tell the AI it is a Tesla and it turns on "Tesla mod
 
 - **OneCloud (S805, Armbian / Debian 13 armhf) with an RTL8821CU USB adapter** (Wi-Fi and Bluetooth in one, `0bda:c820`), 12 V supply. Wired CarPlay uses the USB port away from the Ethernet port (OTG, switched to USB host). After flashing, a phone joins the box hotspot `DashPlay` for first-run setup, and the user's own AI assistant puts the authentication files in place. Flashing and use: [firmware guide (Chinese)](docs/DashPlay玩客云固件使用说明.md); steps for an AI: [AI install notes (Chinese)](docs/DashPlay-AI安装说明.md); firmware build tools: `scripts/onecloud/firmware/`.
 - **Phicomm N1 (S905D, aarch64, built-in BCM43455 Wi-Fi/Bluetooth)**: the image is a USB-stick image with DashPlay preinstalled (Debian trixie from [ophub amlogic-s9xxx-armbian](https://github.com/ophub/amlogic-s9xxx-armbian)); after booting from the stick, `armbian-install` copies it to the eMMC. Same [firmware guide](docs/DashPlay玩客云固件使用说明.md). Both USB ports are host ports, so the iPhone can use either. `scripts/onecloud/firmware/make-n1-image.sh` makes the image on an N1.
-- **Routers or portable Wi-Fi already running OpenWrt 25.12 (aarch64 / x86_64, including the ZTE F50)**: the OpenWrt plugin lives in the sister repository [openwrt-dashplay](https://github.com/yizhixiaoheigou/openwrt-dashplay) (apk packages and a package feed); the network stays configured in OpenWrt as usual. The plugin runs this repository's program, the `dashplay-bundle-<version>.tar` attached to each release. The [installation skill](skills/dashplay-install/SKILL.md) includes the stock F50 B16 backup, root and SD-card OpenWrt procedure and supporting scripts. This weakens boot verification and recovery may require opening the device. Stop on other firmware unless a reliable downgrade route is verified.
+- **Routers or portable Wi-Fi already running OpenWrt 25.12 (aarch64 / x86_64, including the ZTE F50)**: the OpenWrt plugin lives in the sister repository [openwrt-dashplay](https://github.com/yizhixiaoheigou/openwrt-dashplay) (apk packages and a package feed); the network stays configured in OpenWrt as usual. The plugin runs this repository's program, the `autoplay-bundle-<version>.tar` attached to each release. The [installation skill](skills/autoplay-install/SKILL.md) includes the stock F50 B16 backup, root and SD-card OpenWrt procedure and supporting scripts. This weakens boot verification and recovery may require opening the device. Stop on other firmware unless a reliable downgrade route is verified.
 
 ### Tested
 
@@ -101,14 +101,14 @@ git -C playport checkout 9a0882dd0ffe48e467b59d58b12d81391df55ade
 sh scripts/apply-playport-patches.sh playport
 (cd playport && ./gradlew :protocol:test :server:test :server:installDist)
 (cd playport/web && npm ci && npm test && npm run build)   # the FLAC check needs ffmpeg and is skipped without it
-sh scripts/onecloud/firmware/build-bundle.sh dashplay-bundle.tar   # the program bundle (box installs and the OpenWrt packages)
+sh scripts/onecloud/firmware/build-bundle.sh autoplay-bundle.tar   # the program bundle (box installs and the OpenWrt packages)
 ```
 
-`scripts/build-playport.sh` runs the same Gradle build and tests in an isolated Docker container. On the box DashPlay needs Java 21 and Python 3 with asyncio: OneCloud and N1 get them from Debian through `install.sh`; OpenWrt from the plugin's `dashplay-jre` (Temurin 21, musl build) and the system package feeds.
+`scripts/build-playport.sh` runs the same Gradle build and tests in an isolated Docker container. On the box DashPlay needs Java 21 and Python 3 with asyncio: OneCloud and N1 get them from Debian through `install.sh`; OpenWrt from the plugin's `autoplay-jre` (Temurin 21, musl build) and the system package feeds.
 
 ## Running (OneCloud / Phicomm N1)
 
-- `scripts/onecloud/dashplay.service` starts `supervisor.py` (installed in `/opt/dashplay`): the network for the chosen way of use (joining the car hotspot or portable Wi-Fi, or raising the box hotspot; when the hotspot cannot be joined, the box hotspot opens temporarily for settings), Bluetooth, the receiver and the settings page (port 80, `http://dashplay.local/`).
+- `scripts/onecloud/dashplay.service` starts `supervisor.py` (installed in `/opt/autoplay`): the network for the chosen way of use (joining the car hotspot or portable Wi-Fi, or raising the box hotspot; when the hotspot cannot be joined, the box hotspot opens temporarily for settings), Bluetooth, the receiver and the settings page (port 80, `http://dashplay.local/`).
 - `setup_wizard.py`, `settings_page.py`, `settings_ui.py`: first-run setup (way of use → network → iPhone) and the box settings page; `phone-presence.py`, `pairing_window.py`, `pair-phone.py`: adding iPhones and taking turns (wireless).
 - `linux/bt-bridge/`: PlayPort's Linux Bluetooth bridge, which opens the iAP2 RFCOMM channel through BlueZ D-Bus; `BT_BRIDGE_READY_WAIT` lets it wait when Bluetooth comes up after the receiver.
 - `iphone-usb-bridge.py`: the USB side of wired CarPlay. It switches the iPhone to its CarPlay configuration, forwards USBMUX and bridges the NCM network in user space; the first time an iPhone is plugged in, tap "Trust" on it; trust records are kept per iPhone.
@@ -118,7 +118,7 @@ sh scripts/onecloud/firmware/build-bundle.sh dashplay-bundle.tar   # the program
 ## Running (OpenWrt)
 
 - `supervisor_openwrt.py` and `platform_openwrt.py`: the supervisor and platform layer on OpenWrt. They only read OpenWrt's network (`ubus`), hand the chosen Wi-Fi to the iPhone over Bluetooth and follow it when it changes; without Bluetooth only wired CarPlay is offered. `board_zte_f50.py`: the ZTE F50's built-in Bluetooth bring-up with its own BlueZ. Packaging, installation and use: [openwrt-dashplay](https://github.com/yizhixiaoheigou/openwrt-dashplay).
-- The bundle that `scripts/onecloud/firmware/build-bundle.sh` makes (`dashplay-bundle-<version>.tar` on the release page) is what the OpenWrt package installs.
+- The bundle that `scripts/onecloud/firmware/build-bundle.sh` makes (`autoplay-bundle-<version>.tar` on the release page) is what the OpenWrt package installs.
 - `scripts/carplay-night-probe.mjs`: captures the current CarPlay screen (night mode checks).
 
 ## Tests

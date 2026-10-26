@@ -43,12 +43,12 @@ hook, with its LICENSE.md; used only when the owner sets up an own DuckDNS name)
 unmodified). The same acme.sh files are in the program bundle that the OpenWrt package installs. No identity, pairing record, password, token or host key is included; SSH host keys and
 the machine id are generated on the first boot.
 
-Each DashPlay release also carries the **program bundle** `dashplay-bundle-<version>.tar` (the
+Each DashPlay release also carries the **program bundle** `autoplay-bundle-<version>.tar` (the
 `scripts/onecloud` program, PlayPort built from the patches here with its Maven dependencies, and
 dbus-next 0.2.3), which the OpenWrt packages of the sister repository openwrt-dashplay install.
 
 The **macOS helpers** in `tools/mac-arm64/` (used only by the installation guide on the user's Mac, built
-by `scripts/build-mac-tools.sh` from the pinned sources in `skills/dashplay-install/downloads.json`):
+by `scripts/build-mac-tools.sh` from the pinned sources in `skills/autoplay-install/downloads.json`):
 `spd_dump` from **spreadtrum_flash** <https://github.com/TomKing062/spreadtrum_flash> commit
 `d24c21a0c93a545c0130668caa1826d59ceebe48` (a fork of ilyakurdyukov/spreadtrum_flash, Unlicense) with
 `patches/spreadtrum-read-user-area.patch`, statically linked with **libusb** 1.0.29

@@ -1,0 +1,10 @@
+#!/bin/sh
+# /etc/hotplug.d/iface/90-autoplay: a WAN interface came up (the SIM dialled). AutoPlay's own-name maintainer
+# (own_domain.py) retries the DuckDNS record and the Let's Encrypt renewal at once instead of at its next
+# back-off step (reliability_audit #6). The file is consumed by the running service; harmless when it is not running.
+[ "$ACTION" = ifup ] || exit 0
+case "$INTERFACE" in
+	lan|loopback) exit 0 ;;
+esac
+[ -d /var/run/autoplay ] && : > /var/run/autoplay/wan-up
+exit 0

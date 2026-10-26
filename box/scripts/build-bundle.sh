@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build dashplay-bundle.tar (the /opt/dashplay tree the OpenWrt package unpacks) from this repository alone.
+# Build autoplay-bundle.tar (the /opt/autoplay tree the OpenWrt package unpacks) from this repository alone.
 #   sh box/scripts/build-bundle.sh OUT.tar
 # Needs on the host: the receiver built (receiver/, :server:installDist; see RECEIVER below), javac 21, pip,
 # curl, unzip. Downloads two pinned, hash-checked inputs: dbus-next 0.2.3 (the Bluetooth bridge's private
@@ -19,8 +19,8 @@ ACME_VERSION=3.1.6
 ACME_SHA256=c7d68b021cfd6380ea83a82962abde5b484779fee0b97d38681dfa1396bbc8d7
 DUCKDNS_SHA256=8be535b8d6270b7a37671da954d89c896df7af29c2f38d5029054ec315fe77af
 [ -s "$lib/server-0.1.0.jar" ] || { echo "build the receiver first (:server:installDist)" >&2; exit 1; }
-stage=$(mktemp -d "${TMPDIR:-/tmp}/dashplay-bundle.XXXXXX")
-work=$(mktemp -d "${TMPDIR:-/tmp}/dashplay-build.XXXXXX")
+stage=$(mktemp -d "${TMPDIR:-/tmp}/autoplay-bundle.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/autoplay-build.XXXXXX")
 trap 'rm -rf "$stage" "$work"' EXIT
 sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
 
@@ -60,7 +60,7 @@ cp "$work/acme.sh-$ACME_VERSION/LICENSE.md" "$stage/acme/LICENSE.md"
 chmod 755 "$stage/acme/acme.sh"
 
 # The release this bundle is (prepare-release.sh sets it): the settings page and the diagnostics show it.
-[ -z "${DASHPLAY_VERSION:-}" ] || printf '%s\n' "$DASHPLAY_VERSION" > "$stage/version.txt"
+[ -z "${AUTOPLAY_VERSION:-}" ] || printf '%s\n' "$AUTOPLAY_VERSION" > "$stage/version.txt"
 find "$stage" -name __pycache__ -type d -prune -exec rm -rf {} +
 
 # Nothing personal may ship: no identity, pairing, token, Wi-Fi password or certificate key.

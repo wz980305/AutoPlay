@@ -6,7 +6,7 @@
 
 DashPlay 是刷在玩客云或斐讯 N1 上的 CarPlay 接收盒：iPhone 用数据线插盒子（有线）或经蓝牙引导连 Wi-Fi（无线），车机浏览器打开盒子的网页显示 CarPlay。固件不含 CarPlay 认证文件（MFi 身份），要放入两个文件：`identity.pk8`（私钥）和 `certificate.p7b`（证书）。用户有就用用户的；没有就按第 2 节从 DiPlay 的发布包里取。
 
-先确认车机有浏览器且能连 WiFi。N1 / 玩客云先问「车机能自己开热点吗」，不能时再问「有没有随身 WiFi」，从方式一（车机热点）、方式二（随身 WiFi）、方式三（盒子热点）三选一；特斯拉模式叠加于方式二或三，方式一不适用。F50 / OpenWrt 自己提供热点，是否上网取决于 SIM/WAN，不选这三种方式，特斯拉开关在 LuCI「车」。先按 Skill 一次一问、总结确认，再配置。从出厂刷机、下载摘要、升级和逐步失败退路以 [装机 skill](../skills/dashplay-install/SKILL.md) 为准。
+先确认车机有浏览器且能连 WiFi。N1 / 玩客云先问「车机能自己开热点吗」，不能时再问「有没有随身 WiFi」，从方式一（车机热点）、方式二（随身 WiFi）、方式三（盒子热点）三选一；特斯拉模式叠加于方式二或三，方式一不适用。F50 / OpenWrt 自己提供热点，是否上网取决于 SIM/WAN，不选这三种方式，特斯拉开关在 LuCI「车」。先按 Skill 一次一问、总结确认，再配置。从出厂刷机、下载摘要、升级和逐步失败退路以 [装机 skill](../skills/autoplay-install/SKILL.md) 为准。
 
 N1 从原系统开始安装时，沿用用户已说明的已有 Linux / 原厂 ≤2.19 / 原厂 >2.19 起点，不重复问系统类型；只补齐缺少的版本或连接信息。两条原厂路线来自公开实践，本项目尚未实测。完整前置操作见装机 Skill 的 N1 第 3 步。
 
@@ -35,14 +35,14 @@ mkdir -p offline-mfi && unzip -o -j DiPlay.apk 'assets/offline-mfi/*' -d offline
 cd offline-mfi   # Windows 解出来在 assets/offline-mfi 下
 ```
 
-最新一个包里没有 `assets/offline-mfi/` 时，换发布列表里的上一个版本再试。下面照常放入、核对配对；电脑副本留在用户指定的私有目录，未经授权不删除；完整下载校验与不会误判空输出的身份核对命令见 [装机 skill](../skills/dashplay-install/SKILL.md#放认证文件所有设备)。
+最新一个包里没有 `assets/offline-mfi/` 时，换发布列表里的上一个版本再试。下面照常放入、核对配对；电脑副本留在用户指定的私有目录，未经授权不删除；完整下载校验与不会误判空输出的身份核对命令见 [装机 skill](../skills/autoplay-install/SKILL.md#放认证文件所有设备)。
 
 ```sh
-scp identity.pk8 certificate.p7b root@<盒子地址>:/opt/dashplay/identity/offline-mfi/
-ssh root@<盒子地址> 'chmod 600 /opt/dashplay/identity/offline-mfi/*'
+scp identity.pk8 certificate.p7b root@<盒子地址>:/opt/autoplay/identity/offline-mfi/
+ssh root@<盒子地址> 'chmod 600 /opt/autoplay/identity/offline-mfi/*'
 ```
 
-检查私钥和证书是否配对：执行 [装机 skill 的身份核对步骤](../skills/dashplay-install/SKILL.md#放认证文件所有设备)，逐条检查 OpenSSL 退出码，比较非空公钥 DER；只有输出 `IDENTITY_MATCH` 才通过。不能比较失败管道的空输出，也不要打印私钥。
+检查私钥和证书是否配对：执行 [装机 skill 的身份核对步骤](../skills/autoplay-install/SKILL.md#放认证文件所有设备)，逐条检查 OpenSSL 退出码，比较非空公钥 DER；只有输出 `IDENTITY_MATCH` 才通过。不能比较失败管道的空输出，也不要打印私钥。
 
 不配对时停下，告诉用户这两个文件不是一套。文件放好后约 2 秒盒子自动重启服务，不需要手动重启。
 
@@ -85,9 +85,9 @@ ssh root@<盒子地址> 'systemctl is-active dashplay; journalctl -u dashplay -n
 3. 盒子把 `子域名.duckdns.org` 的公网解析指向车机访问它的地址（方式一、二是盒子在热点里的地址，变了自动改；方式三默认 192.168.78.1，特斯拉用设置页显示的共享地址（默认 100.96.0.1）；OpenWrt 是路由器地址），并用内置的 acme.sh 向 Let's Encrypt 申请免费正式证书（DNS 验证，不需要开放端口），到期前 30 天自动续签。设置页这一项会显示进度和有效期。
 4. 证书申请到后**下次开机**启用，之后车机打开 `https://子域名.duckdns.org:18443/`（设置页「CarPlay 画面」会把它排在第一个）。
 
-- 申请和续签要盒子能上网：方式一、二在车上就有网；方式三推荐在家插上网线开机申请与续签。日志里看 `duckdns ... OK` 和 `certificate for ... installed`；acme.sh 的详细输出在 `/opt/dashplay/state/acme/acme.log`（0600，可能含账号信息，不要整段贴出）。
+- 申请和续签要盒子能上网：方式一、二在车上就有网；方式三推荐在家插上网线开机申请与续签。日志里看 `duckdns ... OK` 和 `certificate for ... installed`；acme.sh 的详细输出在 `/opt/autoplay/state/acme/acme.log`（0600，可能含账号信息，不要整段贴出）。
 - 先确认这条路对这台车机有用：只填好域名、等解析生效后，在车机打开 `https://子域名.duckdns.org:18443/`。如果出现的仍是证书警告，说明车机接受这个域名，等证书即可；如果是「无法访问」或被拦截，多半是车机或它用的 DNS 不接受指向局域网地址的域名（有的路由器、随身 WiFi 有「DNS 重绑定保护」），这时再勾选下面的「同时登记公网 IPv6」。
-- 已有别处申请好的证书（含完整链）时，也可以直接放进 `/opt/dashplay/state/tls/own/fullchain.pem` 与 `key.pem`（目录 0700、私钥 0600），重启服务后生效；它过期前一天自动退回盒子自带证书。这种方式需要自己按时更换。
+- 已有别处申请好的证书（含完整链）时，也可以直接放进 `/opt/autoplay/state/tls/own/fullchain.pem` 与 `key.pem`（目录 0700、私钥 0600），重启服务后生效；它过期前一天自动退回盒子自带证书。这种方式需要自己按时更换。
 
 ### 同时登记公网 IPv6（车机不让打开局域网地址时）
 
@@ -102,7 +102,7 @@ ssh root@<盒子地址> 'systemctl is-active dashplay; journalctl -u dashplay -n
 - **先问 SIM/WAN**：F50 有 SIM 且能上网时维持正常 DNS/DHCP；无卡或无信号时，「车机上网」的默认自动模式启用方案 A，恢复上游后还原。可关闭代答；开启时仍只在无上游时回答，首次启用会让 WiFi 重连。无卡 A 本轮已实现，待实测，不能用 10-14 插卡通过代替。
 - **F50 不支持借手机热点的 B**：当前驱动不能同时当热点和连接另一热点；要让特斯拉自带音乐/地图联网，给 F50 插 SIM。A 下 CarPlay 正常，自带应用不能联网。普通 OpenWrt 以实际 WAN 为准。
 
-- **打开**：后台「服务 → DashPlay → 车」勾选「特斯拉模式」，保存并应用（命令：`uci set dashplay.main.tesla_mode=1 && uci commit dashplay && /etc/init.d/dashplay restart`）。它等于一起打开下面的「车机不让开任何局域网地址」（网段改成 `100.96.0.1/24`）和「声音走车机蓝牙」的两项，再加特斯拉浏览器专用的全屏；那几项不用另外勾。
+- **打开**：后台「服务 → DashPlay → 车」勾选「特斯拉模式」，保存并应用（命令：`uci set autoplay.main.tesla_mode=1 && uci commit autoplay && /etc/init.d/autoplay restart`）。它等于一起打开下面的「车机不让开任何局域网地址」（网段改成 `100.96.0.1/24`）和「声音走车机蓝牙」的两项，再加特斯拉浏览器专用的全屏；那几项不用另外勾。
 - **分工**：iPhone 用蓝牙连特斯拉，并在特斯拉里把媒体来源选成这部 iPhone：音乐、电话、Siri 都走特斯拉蓝牙（方向盘、媒体卡片、音量、车上麦克风和回声消除都是特斯拉原生的）；CarPlay 网页负责画面、触控和导航播报（播报放大 3 倍）。细节见下面「声音走车机蓝牙」。
 - **全屏**：特斯拉浏览器不理网页自己的全屏；点 CarPlay 网页右上角的全屏，会经腾讯视频、1905 电影网的跳转页回到本页并去掉地址栏（腾讯那页点「前往 电影网」）。
 - **特斯拉 WiFi 必须打开「行驶中保持连接」**：否则特斯拉一出 P 挡（倒车、开车）就断开 WiFi，画面中断到挂回 P 挡（2026-10-14 实测倒挡断 6 秒）。在特斯拉「控制 → WiFi」点所连热点的设置打开（英文 Remain connected in Drive）；打开后离开浏览器再回来 0.02 秒出画。
@@ -120,7 +120,7 @@ ssh root@<盒子地址> 'systemctl is-active dashplay; journalctl -u dashplay -n
 - **自己的网址**：特斯拉推荐 DuckDNS + 正式证书，回家插网线申请，按期联网续签。只用 IP 时警告页有没有「继续」仍未实车验证。A 下盒子直接解析自己的域名，浏览器本地验证证书，不需要外网查名。
 - **全屏与声音**：车上打开「行驶中保持连接」。声音默认车机蓝牙，可在「声音」单独调整。全屏跳转需要外网，A 下保留普通画面，B 下另做全屏验收。
 - **远程调试**：需要已安装的 Tailscale（禁用其 netfilter 和 DNS 接管，避免拦共享地址）。设置页保存独立调试热点，可预填日常热点；开始后盒子暂时关自己的热点，只用有线，域名记录不改。**调试中想恢复：给盒子拔电再插上，就回到原来的网络；或等 30 分钟自动结束。** 能进入设置页也可点结束调试。
-- **验收与排错**：A 要连接无提示、域名出画和触控；B 另加特斯拉自带网易云可用。各拔电重启、记录 MAC 与日志时刻。详情看 [Skill 排查表](../skills/dashplay-install/SKILL.md#特斯拉连-wifi-的排查表)，单测和模拟不能代替实车。
+- **验收与排错**：A 要连接无提示、域名出画和触控；B 另加特斯拉自带网易云可用。各拔电重启、记录 MAC 与日志时刻。详情看 [Skill 排查表](../skills/autoplay-install/SKILL.md#特斯拉连-wifi-的排查表)，单测和模拟不能代替实车。
 
 ### 声音走车机蓝牙（所有盒子）
 
@@ -128,13 +128,13 @@ ssh root@<盒子地址> 'systemctl is-active dashplay; journalctl -u dashplay -n
 - **两项，可单独勾**：
   - 「音乐走车机蓝牙」：网页不再当媒体来源（不报歌名、不接方向盘按键），没有声音时关掉自己的音频输出（否则车机把它当第二个音源，和蓝牙来回切），导航播报放大 3 倍（网址加 `?promptgain=1..8` 可改）。iPhone 偶尔仍把音乐发给网页（如用完 Siri 那一会儿），网页照放。偶尔放歌没声音时，在 iPhone 控制中心把音频输出选成车机。
   - 「通话与 Siri 走车机蓝牙」：接收端不向 iPhone 声明通话与 Siri 音频、不要麦克风，iPhone 就把它们留在车机蓝牙上。网页通话有回声的车可以试（小鹏待实测）。
-- **做法**：iPhone 先用蓝牙连上车机，并在车机里把媒体来源选成这部 iPhone。玩客云 / N1：设置页「声音」分组勾选后保存，盒子约 1 分钟后重启服务（存在 `/opt/dashplay/state/options.json` 的 `car_music`、`car_voice`）。OpenWrt：后台「服务 → DashPlay → 声音」勾选（`uci set dashplay.main.car_music=1`、`dashplay.main.car_voice=1`，再 `uci commit dashplay && /etc/init.d/dashplay restart`）；打开特斯拉模式时这两项隐藏、按开着算。
+- **做法**：iPhone 先用蓝牙连上车机，并在车机里把媒体来源选成这部 iPhone。玩客云 / N1：设置页「声音」分组勾选后保存，盒子约 1 分钟后重启服务（存在 `/opt/autoplay/state/options.json` 的 `car_music`、`car_voice`）。OpenWrt：后台「服务 → DashPlay → 声音」勾选（`uci set autoplay.main.car_music=1`、`autoplay.main.car_voice=1`，再 `uci commit autoplay && /etc/init.d/autoplay restart`）；打开特斯拉模式时这两项隐藏、按开着算。
 - **检查**：盒子 `receiver.log` 里网页的 viewer stats 带 `carMusic=1`；接收端命令行带 `--car-music` / `--car-voice`（或 `--tesla`）。
 
 ### 车机不让开任何局域网地址（OpenWrt）
 
 - **用途**：车机浏览器不让打开 `192.168.x.x`、`10.x.x.x`、`172.16–31.x.x` 这些局域网地址，用指向它们的名称（`dashplay.lan`、自己的域名）也不行，又不走 IPv6（上面的公网 IPv6 帮不上）时。`100.64.0.0–100.127.255.255` 这段地址不算局域网地址，特斯拉能打开（2026-10-14 实测）；特斯拉直接用上面的「特斯拉模式」。
-- **做法**：后台「服务 → DashPlay → 自己的网址」勾选「车机不让开任何局域网地址（如特斯拉）」，保存并应用。DashPlay 把路由器自己 WiFi 所在的网络（通常是 `lan`）改成 `100.96.0.1/24`，原来的地址记在 `/opt/dashplay/state/lan-before.json`；访问名称、自己的域名和盒子证书自动跟着改。命令：`uci set dashplay.main.shared_lan=1 && uci commit dashplay && /etc/init.d/dashplay restart`。
+- **做法**：后台「服务 → DashPlay → 自己的网址」勾选「车机不让开任何局域网地址（如特斯拉）」，保存并应用。DashPlay 把路由器自己 WiFi 所在的网络（通常是 `lan`）改成 `100.96.0.1/24`，原来的地址记在 `/opt/autoplay/state/lan-before.json`；访问名称、自己的域名和盒子证书自动跟着改。命令：`uci set autoplay.main.shared_lan=1 && uci commit autoplay && /etc/init.d/autoplay restart`。
 - **改完**：车机和手机重新连一次 WiFi（拿到 `100.96.0.x`），后台改用 `http://100.96.0.1/` 打开；车机打开 `https://100.96.0.1:18443/`，设了自己的域名就打开 `https://子域名.duckdns.org:18443/`（不再有证书警告）。用 USB 连电脑管理的 F50，电脑那头的地址也变成 `100.96.0.x`。
 - **限制**：只对路由器自己的 WiFi 有效（车机要连路由器的 WiFi）。路由器上别的网口已在用这段地址时不改，设置页会说明原因。网络不是单个静态 IPv4 地址（如手工配了多个地址）时也不改。
 - **改回**：取消勾选并保存，DashPlay 把原来的地址放回去；如果这期间在后台手工改过地址，DashPlay 不动它。
@@ -143,9 +143,9 @@ ssh root@<盒子地址> 'systemctl is-active dashplay; journalctl -u dashplay -n
 
 | 内容 | 位置 |
 |---|---|
-| 程序 | `/opt/dashplay` |
+| 程序 | `/opt/autoplay` |
 | 服务 | `systemctl status dashplay` |
-| 认证文件 | `/opt/dashplay/identity/offline-mfi/` |
-| 运行日志 | `/run/dashplay/`（`receiver.log` 为 CarPlay 接收端） |
+| 认证文件 | `/opt/autoplay/identity/offline-mfi/` |
+| 运行日志 | `/run/autoplay/`（`receiver.log` 为 CarPlay 接收端） |
 | 设置页 | `http://<盒子地址>/` |
 | CarPlay 网页 | `https://<盒子地址>:18443/` |

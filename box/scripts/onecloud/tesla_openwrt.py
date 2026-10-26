@@ -16,7 +16,7 @@ import threading
 import state as state_files
 import tesla_checks
 
-TABLE = 'dashplay_tesla_checks'
+TABLE = 'autoplay_tesla_checks'
 # Any one answering means the upstream works. A Chinese SIM may drop 1.1.1.1:443 and 8.8.8.8:443 while the
 # rest of the internet works (F50, 2026-10-15), so domestic resolvers come first.
 PROBES = (('223.5.5.5', 443), ('1.12.12.12', 443), ('1.1.1.1', 443))

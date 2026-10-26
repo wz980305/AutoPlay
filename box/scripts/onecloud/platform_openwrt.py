@@ -1,6 +1,6 @@
-"""OpenWrt adapter: the router owns the network (netifd, uci); DashPlay only reads it.
+"""OpenWrt adapter: the router owns the network (netifd, uci); AutoPlay only reads it.
 
-The person sets up Wi-Fi in LuCI as usual. DashPlay hands the iPhone one of the router's own access points
+The person sets up Wi-Fi in LuCI as usual. AutoPlay hands the iPhone one of the router's own access points
 over Bluetooth (5 GHz first) and serves the viewer on that network's address. Nothing here creates hotspots
 or joins networks.
 
@@ -14,8 +14,8 @@ import re
 import signal
 import subprocess
 
-RUN = Path("/var/run/dashplay")
-BLUETOOTH_NAME = "DashPlay"   # what iPhones list under Bluetooth (bluetoothctl system-alias)
+RUN = Path("/var/run/autoplay")
+BLUETOOTH_NAME = "AutoPlay"   # what iPhones list under Bluetooth (bluetoothctl system-alias)
 
 
 def boot_id():

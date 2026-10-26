@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run DashPlay on OpenWrt as one procd service (/etc/init.d/dashplay, package openwrt/dashplay).
+"""Run AutoPlay on OpenWrt as one procd service (/etc/init.d/autoplay, package openwrt/autoplay).
 
 Tesla mode only, on the ZTE F50 (tesla_only_box_delta.md): the router owns the network, its LAN is
 100.96.0.1/24 (set at install time, uci-defaults in the package), the first access point (5 GHz first) is
@@ -45,7 +45,7 @@ from tesla_openwrt import OfflineChecks
 from platform_openwrt import OpenWrtPlatform, RUN
 import viewer_port
 
-# uci dashplay.main: the seven owner-editable keys (tesla_only_box_delta.md section 5). Everything else is a
+# uci autoplay.main: the seven owner-editable keys (tesla_only_box_delta.md section 5). Everything else is a
 # constant below; keys of older releases are ignored and cleaned up (obsolete_options).
 DEFAULTS = {"enabled": "1",
             # The CarPlay page's HTTPS port. Empty is 18443, or the port an older install saved in
@@ -66,35 +66,35 @@ OBSOLETE_OPTIONS = ("wifi", "settings_port", "java", "name", "bluetooth_service"
 
 # Constants of the Tesla-only box (no uci key): D1, D4, D8, D11, D14.
 SETTINGS_PORT = 18080                                   # plain-HTTP settings page; LuCI keeps 80
-JAVA = "/usr/lib/dashplay-jre/bin/java"                 # the dashplay-jre package
+JAVA = "/usr/lib/autoplay-jre/bin/java"                 # the autoplay-jre package
 LOCAL_NAME = state_files.LOCAL_NAME                     # the name without a DuckDNS one
 SHARED_LAN = state_files.SHARED_LAN                     # 100.96.0.1/24, set by the package at install time
 BLUETOOTH_BUS = f"unix:path={RUN}/bluetooth/system_bus_socket"   # board_zte_f50.py's private D-Bus
 RECHECK_EVERY = 10      # seconds between looks at the Wi-Fi handed to the iPhone and the other slow checks
 TICK = 2                # seconds between child polls
 STATUS_FILE = RUN / "status.json"
-WAN_UP_FILE = RUN / "wan-up"       # touched by the hotplug scripts (openwrt/dashplay/files/hotplug-*)
+WAN_UP_FILE = RUN / "wan-up"       # touched by the hotplug scripts (openwrt/autoplay/files/hotplug-*)
 HCI = Path("/sys/class/bluetooth/hci0")
 
 
 def read_config(uci_text):
-    """`uci -q show dashplay` -> the seven options of the main section, with defaults; other keys ignored."""
+    """`uci -q show autoplay` -> the seven options of the main section, with defaults; other keys ignored."""
     config = dict(DEFAULTS)
     for line in (uci_text or "").splitlines():
-        match = re.match(r"^dashplay\.main\.(\w+)='?(.*?)'?$", line)
+        match = re.match(r"^autoplay\.main\.(\w+)='?(.*?)'?$", line)
         if match and match.group(1) in DEFAULTS:
             config[match.group(1)] = match.group(2)
     return config
 
 
 def obsolete_options(uci_text):
-    """The uci commands that drop the keys of older releases from dashplay.main (one-shot, idempotent)."""
+    """The uci commands that drop the keys of older releases from autoplay.main (one-shot, idempotent)."""
     found = []
     for line in (uci_text or "").splitlines():
-        match = re.match(r"^dashplay\.main\.(\w+)=", line)
+        match = re.match(r"^autoplay\.main\.(\w+)=", line)
         if match and match.group(1) in OBSOLETE_OPTIONS:
-            found.append(["delete", f"dashplay.main.{match.group(1)}"])
-    return found + [["commit", "dashplay"]] if found else []
+            found.append(["delete", f"autoplay.main.{match.group(1)}"])
+    return found + [["commit", "autoplay"]] if found else []
 
 
 def legacy_dns_cleanup(uci_dhcp):
@@ -131,7 +131,7 @@ def lan_warning(address):
     if address.ip in state_files.SHARED_SPACE:
         return ""
     return (f"局域网地址是 {address}，不在 100.64.0.0/10 里，特斯拉的浏览器打不开它。请在 OpenWrt 后台「网络 → 接口 → LAN」"
-            f"改回 {SHARED_LAN}，或重新安装 DashPlay。")
+            f"改回 {SHARED_LAN}，或重新安装 AutoPlay。")
 
 
 def channel_warning(channel):
@@ -172,8 +172,8 @@ def waiting_warning(why):
         if re.fullmatch(pattern, why):
             why = re.sub(pattern, text, why)
             break
-    return (f"交给 iPhone 的 Wi-Fi 还没准备好：{why}。请在 OpenWrt 后台「网络 → 无线」或「服务 → DashPlay」检查；"
-            "准备好后 DashPlay 会自动继续。")
+    return (f"交给 iPhone 的 Wi-Fi 还没准备好：{why}。请在 OpenWrt 后台「网络 → 无线」或「服务 → AutoPlay」检查；"
+            "准备好后 AutoPlay 会自动继续。")
 
 
 TAILSCALE_DROP = re.compile(r'iifname != "tailscale0\*?" ip saddr 100\.64\.0\.0/10 .*\bdrop\b')
@@ -236,7 +236,7 @@ def own_config(config):
         return {"domain": own_domain.sub_domain(config["duckdns_domain"]),
                 "token": own_domain.check_token(config["duckdns_token"])}
     except ValueError:
-        print("dashplay.main.duckdns_domain/duckdns_token invalid: own name off", flush=True)
+        print("autoplay.main.duckdns_domain/duckdns_token invalid: own name off", flush=True)
         return None
 
 
@@ -506,13 +506,13 @@ def main():
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     root = args.root.resolve()
-    shown = subprocess.run(["uci", "-q", "show", "dashplay"], capture_output=True, text=True, timeout=10).stdout
+    shown = subprocess.run(["uci", "-q", "show", "autoplay"], capture_output=True, text=True, timeout=10).stdout
     config = read_config(shown)
     # Empty in the uci means 18443, or an owner's older state/receiver/config.json value: an update keeps it.
     viewer = (int(config["viewer_port"]) if str(config.get("viewer_port", "")).isdigit()
               else viewer_port.resolve(root / "state"))
     if viewer == SETTINGS_PORT or not viewer_port.valid(viewer):
-        raise ValueError("Invalid dashplay.main.viewer_port")
+        raise ValueError("Invalid autoplay.main.viewer_port")
     idle_release = int(config["idle_release"]) if config["idle_release"].isdigit() else 300
     ddns = own_config(config)
     name = box_name(ddns)
@@ -522,7 +522,7 @@ def main():
         if not (root / relative).is_file():
             raise RuntimeError("Missing runtime input: " + relative)
     if not Path(JAVA).is_file():
-        raise RuntimeError(f"Java not found at {JAVA}: install the dashplay-jre package")
+        raise RuntimeError(f"Java not found at {JAVA}: install the autoplay-jre package")
     identity = [root / "identity/offline-mfi/identity.pk8", root / "identity/offline-mfi/certificate.p7b"]
 
     def identity_ok():
@@ -574,8 +574,8 @@ def main():
     # Keep the uci mirroring the effective port, so the LuCI link and field show it (an owner's older
     # state/receiver/config.json value is adopted once; the uci survives package updates).
     if str(viewer) != config.get("viewer_port", ""):
-        subprocess.run(["uci", "set", f"dashplay.main.viewer_port={viewer}"], check=False, capture_output=True, timeout=10)
-        subprocess.run(["uci", "commit", "dashplay"], check=False, capture_output=True, timeout=10)
+        subprocess.run(["uci", "set", f"autoplay.main.viewer_port={viewer}"], check=False, capture_output=True, timeout=10)
+        subprocess.run(["uci", "commit", "autoplay"], check=False, capture_output=True, timeout=10)
         config["viewer_port"] = str(viewer)
     platform = OpenWrtPlatform(run=RUN)
     platform.bluetooth_state = state
@@ -764,7 +764,7 @@ def main():
                     receiver.launch(network, True)
         else:
             say("MFi identity missing: settings page only, CarPlay starts once the files are added")
-        say(f"DashPlay services started on {network['ssid']} ({host}, channel {network['channel']})")
+        say(f"AutoPlay services started on {network['ssid']} ({host}, channel {network['channel']})")
         plan = plan_of(network)
         misses = supervision.Misses(limit=3)
         next_check = time.monotonic() + RECHECK_EVERY
@@ -813,7 +813,7 @@ def main():
         offline_checks.restore()
         settings.stop()
         platform.stop_all()
-        say("DashPlay services stopped")
+        say("AutoPlay services stopped")
     if reexec and reexec[0] is not None:
         say(f"restarting: {reexec[0]}")
         os.execv(sys.executable, [sys.executable, str(Path(__file__).resolve()), "--root", str(root)])

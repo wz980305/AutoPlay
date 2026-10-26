@@ -5,9 +5,9 @@ and run a private D-Bus and BlueZ, as DashPlay's earlier F50-only service did (2
 The F50 runs a vendor 5.4 kernel; OpenWrt's bluez-daemon pulls in kmod-bluetooth for 6.12 (checked
 2026-10-12), so BlueZ lives in its own root (--setup makes it with apk, scripts off, from the
 official feeds) and is never installed into the system.
-uci dashplay.main (supervisor_openwrt.py):
-  option bluetooth_service '/usr/bin/python3 /opt/dashplay/board_zte_f50.py'
-  option dbus_address 'unix:path=/var/run/dashplay/bluetooth/system_bus_socket'
+uci autoplay.main (supervisor_openwrt.py):
+  option bluetooth_service '/usr/bin/python3 /opt/autoplay/board_zte_f50.py'
+  option dbus_address 'unix:path=/var/run/autoplay/bluetooth/system_bus_socket'
 It runs until a part exits; the supervisor then restarts everything.
 """
 import argparse
@@ -20,8 +20,8 @@ import subprocess
 import sys
 import time
 
-RUNTIME = Path("/opt/dashplay-bluez")
-RUN = Path("/var/run/dashplay")
+RUNTIME = Path("/opt/autoplay-bluez")
+RUN = Path("/var/run/autoplay")
 BUS = RUN / "bluetooth"
 TTY = Path("/dev/ttyBT0")
 
@@ -102,7 +102,7 @@ def setup(runtime):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--runtime", type=Path, default=RUNTIME)
-    parser.add_argument("--state", type=Path, default=Path("/opt/dashplay/state"))
+    parser.add_argument("--state", type=Path, default=Path("/opt/autoplay/state"))
     parser.add_argument("--setup", action="store_true", help="create the private BlueZ root, then exit")
     args = parser.parse_args()
     if args.setup:
@@ -181,7 +181,7 @@ def main():
         (BUS / "dbus.conf").write_text(
             f'<busconfig><type>system</type><listen>unix:path={BUS}/system_bus_socket</listen><auth>EXTERNAL</auth>'
             '<policy user="root"><allow own="*"/><allow send_destination="*"/><allow receive_sender="*"/></policy></busconfig>\n')
-        (BUS / "bluez.conf").write_text("[General]\nName=DashPlay\nControllerMode=dual\nDiscoverableTimeout=180\n"
+        (BUS / "bluez.conf").write_text("[General]\nName=AutoPlay\nControllerMode=dual\nDiscoverableTimeout=180\n"
                                         "PairableTimeout=180\n[Policy]\nAutoEnable=false\n")
         start("dbus", [str(runtime / "usr/bin/dbus-daemon"), "--nofork", f"--config-file={BUS / 'dbus.conf'}"])
         wait_for((BUS / "system_bus_socket").exists, 10)
