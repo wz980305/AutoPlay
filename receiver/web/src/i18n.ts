@@ -1,6 +1,6 @@
 const messages = {
-  brand: ['DashPlay', 'DashPlay'],
-  settings: ['DashPlay 设置', 'DashPlay settings'], close: ['关闭', 'Close'], done: ['完成', 'Done'],
+  brand: ['AutoPlay', 'AutoPlay'],
+  settings: ['AutoPlay 设置', 'AutoPlay settings'], close: ['关闭', 'Close'], done: ['完成', 'Done'],
   boxLink: ['盒子网页', 'Box page'], boxLinkHint: ['配对 iPhone、查看热点和证书', 'Pair an iPhone; hotspot and certificate'],
   boxLinkHintLive: ['离开画面，去配对 iPhone 或查看盒子状态', 'Leaves the picture to pair an iPhone or see the box status'],
   voiceSiri: ['Siri', 'Siri'], voiceCall: ['通话', 'Call'], voicePrompt: ['导航播报', 'Navigation'],
