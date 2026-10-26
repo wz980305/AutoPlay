@@ -7,8 +7,6 @@ plugins {
 dependencies {
     implementation("org.bouncycastle:bcprov-jdk18on:1.79")
     implementation("org.slf4j:slf4j-api:2.0.20")
-    // Lockdown plists (wired CarPlay); the Android app used the platform XmlPullParser.
-    implementation("net.sf.kxml:kxml2:2.3.0")
     testImplementation("junit:junit:4.13.2")
     testRuntimeOnly("org.slf4j:slf4j-simple:2.0.20")
 }

@@ -50,8 +50,15 @@ export class VideoPlayer {
     this.preferHardware = !compat;
     // Low-latency canvas: frames reach the screen without waiting for the page compositor (about one
     // frame sooner where supported). Created first, so every later getContext('2d') returns this one.
-    if (!compat) this.canvas.getContext('2d', { desynchronized: true });
+    // alpha:false always: the picture is opaque, and Chrome only honours desynchronized on an opaque canvas with no
+    // DOM above it (media_performance_audit #8); whether it took is read back for the viewer log (desynchronized).
+    const context = this.canvas.getContext('2d', compat ? { alpha: false } : { alpha: false, desynchronized: true });
+    const attributes = (context as (CanvasRenderingContext2D & { getContextAttributes?: () => { desynchronized?: boolean } }) | null)?.getContextAttributes?.();
+    this.desynchronized = attributes ? (attributes.desynchronized ? 1 : 0) : -1;
   }
+
+  /** Whether the browser gave the low-latency (desynchronized) canvas: 1, 0, or -1 when it cannot say. */
+  readonly desynchronized: number;
 
   get isConfigured(): boolean {
     return this.state !== null;

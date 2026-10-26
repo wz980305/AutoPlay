@@ -2,6 +2,10 @@ import type { ClientMessage, KnobState, TouchContact } from './protocol';
 
 const MAX_CONTACTS = 2;
 const KNOB_FLICK = 127;
+/** A finger lifted sooner than this after it came down is reported up this long after the down: a down and an up in
+ *  the same instant (a light tap on a slow car panel) read as nothing on the phone (media_performance_audit #16;
+ *  xcertplay uses the same 30 ms). */
+export const MIN_PRESS_MS = 30;
 
 interface ActivePointer {
   slot: number;
@@ -10,6 +14,8 @@ interface ActivePointer {
   down: boolean;
   startX: number;
   startY: number;
+  downAt: number;
+  liftTimer: number;
 }
 
 const emptyKnob = (overrides: Partial<KnobState> = {}): KnobState => ({
@@ -60,9 +66,10 @@ export class InputController {
     this.surface.focus({ preventScroll: true });
     this.surface.setPointerCapture(event.pointerId);
     const x = this.normalizeX(event.clientX), y = this.normalizeY(event.clientY);
-    this.pointers.set(event.pointerId, { slot: this.nextSlot(), x, y, down: true, startX: x, startY: y });
+    const now = performance.now();
+    this.pointers.set(event.pointerId, { slot: this.nextSlot(), x, y, down: true, startX: x, startY: y, downAt: now, liftTimer: 0 });
     this.flush();
-    this.lastDownAt = performance.now();
+    this.lastDownAt = now;
   };
 
   private readonly onPointerMove = (event: PointerEvent): void => {
@@ -76,7 +83,7 @@ export class InputController {
 
   private readonly onPointerUp = (event: PointerEvent): void => {
     const pointer = this.pointers.get(event.pointerId);
-    if (!pointer) return;
+    if (!pointer || pointer.liftTimer) return;
     event.preventDefault();
     // Release at the last real position; (0,0) can cancel an iPhone button tap.
     if (event.type === 'pointerup') {
@@ -85,12 +92,31 @@ export class InputController {
       // A swipe that moved sends its final point as a move before the up: the animation-frame flush can be
       // starved while the page decodes, and an up alone at the end reads as a tap on the phone (2026-10-23).
       if (Math.abs(pointer.x - pointer.startX) > 0.01 || Math.abs(pointer.y - pointer.startY) > 0.01) this.flush();
+      // The minimum press: a finger up within MIN_PRESS_MS of its down stays down until then (a cancel lifts at once).
+      const held = performance.now() - pointer.downAt;
+      if (held < MIN_PRESS_MS) { pointer.liftTimer = window.setTimeout(() => this.lift(event.pointerId), MIN_PRESS_MS - held); return; }
     }
+    this.lift(event.pointerId);
+  };
+
+  private lift(pointerId: number): void {
+    const pointer = this.pointers.get(pointerId);
+    if (!pointer) return;
+    pointer.liftTimer = 0;
     pointer.down = false;
     this.flush();
-    this.pointers.delete(event.pointerId);
-    if (this.surface.hasPointerCapture?.(event.pointerId)) this.surface.releasePointerCapture(event.pointerId);
-  };
+    this.pointers.delete(pointerId);
+    if (this.surface.hasPointerCapture?.(pointerId)) this.surface.releasePointerCapture(pointerId);
+  }
+
+  /** Every finger up at its last position, now: the page is going away or being frozen (the car's reverse camera,
+   *  another app), and a finger left down on the phone would stay down (media_performance_audit #16). */
+  releaseAll(): void {
+    if (!this.pointers.size) return;
+    for (const pointer of this.pointers.values()) { window.clearTimeout(pointer.liftTimer); pointer.liftTimer = 0; pointer.down = false; }
+    this.flush();
+    this.reset();
+  }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
     if (this.surface.inert || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
@@ -159,6 +185,7 @@ export class InputController {
   reset(): void {
     if (this.pendingFlush) window.cancelAnimationFrame(this.pendingFlush);
     this.pendingFlush = 0;
+    for (const pointer of this.pointers.values()) window.clearTimeout(pointer.liftTimer);
     this.pointers.clear();
   }
 

@@ -31,6 +31,14 @@ assert.deepEqual(suggestedResolution(2560,1440,2560),{width:2560,height:1440},'a
 assert.deepEqual(suggestedResolution(3840,2160,2560),{width:2560,height:1440},'never beyond 2560');
 assert.deepEqual(suggestedResolution(1254*1.53,784*1.53,2560),{width:1918,height:1200},'Tesla: same as before');
 assert.deepEqual(suggestedResolution(2560,1440),{width:1920,height:1080},'1920 unless asked for more');
+{ // Tesla defaults (2026-10-26): performance mode off, long side capped at 1920 unless f50-allow-2560. The two shapes a
+  // Tesla page takes (Model 3/Y, DPR 1.53): windowed 773x601 CSS, borderless 1256x706 CSS (view-areas header).
+  const dpr=1.53;
+  assert.deepEqual(windowResolution(773,601,1920),{width:774,height:602},'first session, slow or unproven decoder: the window as it is');
+  assert.deepEqual(windowResolution(773*dpr,601*dpr,1920),{width:1182,height:920},'fast decoder, windowed: real pixels');
+  assert.deepEqual(windowResolution(1256*dpr,706*dpr,1920),{width:1920,height:1080},'fast decoder, borderless: 1922 px capped to 1920');
+  assert.deepEqual(suggestedResolution(773,601,1920),{width:1280,height:996},'performance mode on, windowed: upsized to 1280');
+  assert.deepEqual(windowResolution(1256*dpr,706*dpr,2560),{width:1922,height:1080},'f50-allow-2560 only raises the cap; a Tesla never reaches it'); }
 // Normal mode: the window's own size, a 720 minimum width, the same maximum (2026-10-23).
 assert.deepEqual(windowResolution(876,518),{width:876,height:518},'a 2/3 window keeps its size');
 assert.deepEqual(windowResolution(490,580),{width:720,height:852},'the 1/3 window gets the minimum width');
@@ -61,42 +69,6 @@ for(const [w,h] of [[1920,1080],[2560,1440],[1920,720],[720,1280],[800,480],[320
 }
 assert.equal(aspectChanged({width:1280,height:720},{width:1920,height:1080}),false);
 assert.equal(aspectChanged({width:1280,height:720},{width:1920,height:720}),true);
-const actions={},sent=[],positions=[];
-Object.defineProperty(globalThis,'navigator',{value:{mediaSession:{setActionHandler:(a,h)=>actions[a]=h,setPositionState:p=>positions.push(p)}},configurable:true});
-globalThis.MediaMetadata=class {constructor(value){Object.assign(this,value);}};
-const {SystemMedia}=await load('media-session');
-const media=new SystemMedia(m=>sent.push(m),()=>{});
-actions.nexttrack();assert.equal(sent.length,0,'No commands before phone connection');
-media.report();
-media.setActive(true);actions.play();actions.pause();actions.previoustrack();actions.nexttrack();actions.pause();
-assert.deepEqual(sent.map(x=>x.media),[1,2,5,4,2],'Use distinct play and pause HID commands, not toggle');
-assert.deepEqual(media.report(),{positionState:1,keyPlay:1,keyPause:2,keyPrev:1,keyNext:1},'The car media keys that reached the page, for the viewer log');
-assert.deepEqual(media.report(),{positionState:1},'counted afresh each report');
-media.setPlaying(true);assert.equal(navigator.mediaSession.playbackState,'playing');
-media.setMetadata({title:'Test song',artist:'Test artist',album:'Test album'});
-media.setPlaying(false);assert.equal(navigator.mediaSession.metadata.title,'Test song');assert.equal(navigator.mediaSession.playbackState,'paused');
-media.setMetadata({title:'Next',artist:'Artist',album:'Album',durationMs:200000,positionMs:50000,revision:1});
-assert.equal(positions.at(-1).duration,200);assert.equal(positions.at(-1).position,50);
-assert.ok(positions.at(-1).playbackRate>0&&positions.at(-1).playbackRate<1e-3,'The card is told the position, not left to run it on by its own clock (XPeng: the bar stood full)');
-{ const before=positions.length;media.tick();assert.equal(positions.length,before+1,'and is told it again on every tick'); }
-media.setArtwork(0,'data:image/jpeg;base64,/9j/');assert.equal(navigator.mediaSession.metadata.artwork.length,0,'Reject old-track cover');
-media.setArtwork(1,'data:image/jpeg;base64,/9j/');assert.equal(navigator.mediaSession.metadata.artwork.length,1);
-media.setMetadata({title:'Another',artist:'',album:'',revision:2});assert.equal(navigator.mediaSession.metadata.artwork.length,0,'Clear old cover on track change');
-assert.equal(positions.at(-1),undefined,'Missing duration must clear old timeline');
-{ let clock=0;const realNow=performance.now;Object.defineProperty(performance,'now',{value:()=>clock,configurable:true,writable:true});
-  media.setPlaying(false);   // the browser hears nothing yet, e.g. sound not unlocked
-  media.setMetadata({title:'Run',artist:'',album:'',durationMs:200000,positionMs:50000,playing:true,revision:3});
-  clock=10000;media.setPlaying(true);assert.equal(positions.at(-1).position,60,"The iPhone's playing state moves the clock, not what the browser hears");
-  clock=12000;media.setMetadata({title:'Run',artist:'',album:'',durationMs:200000,positionMs:62000,playing:false,revision:3});
-  clock=20000;media.setPlaying(false);assert.equal(positions.at(-1).position,62,'Paused on the iPhone: the clock stands');
-  media.setPlaying(true);assert.equal(navigator.mediaSession.playbackState,'paused','Paused on the iPhone: the card offers play, even while the page plays its silence');
-  sent.length=0;actions.pause();assert.deepEqual(sent.map(x=>x.media),[1],"The car's pause key while the iPhone is paused plays (the car toggles by the page)");
-  assert.equal(media.report().keyPauseAsPlay,1,'counted for the viewer log');
-  media.setMetadata({title:'Run',artist:'',album:'',durationMs:200000,positionMs:62000,playing:true,revision:3});
-  assert.equal(navigator.mediaSession.playbackState,'playing','and pause once it plays again');
-  media.setMetadata({title:'Run',artist:'',album:'',durationMs:200000,positionMs:62000,playing:false,revision:3});
-  Object.defineProperty(performance,'now',{value:realNow,configurable:true,writable:true}); }
-assert.deepEqual(media.report(),{positionState:1,songPos:62,songDur:200,art:0},'The viewer log tells whether the OS card can take our song position, and whether a cover is shown');
 { // Hiccups for the viewer log: a gap in a flowing stream (network/box) apart from frames the car's decoder held long.
   let clock=0;const realNow=performance.now;Object.defineProperty(performance,'now',{value:()=>clock,configurable:true,writable:true});
   globalThis.EncodedVideoChunk=class {constructor(v){Object.assign(this,v);}};
@@ -186,16 +158,16 @@ assert.deepEqual(media.report(),{positionState:1,songPos:62,songDur:200,art:0},'
   globalThis.MediaSource=class {constructor(){return source;}};globalThis.URL.createObjectURL=()=>'blob:x';
   const element={currentTime:0,paused:true,plays:0,setAttribute(){},removeAttribute(){},load(){},remove(){},addEventListener(){},play(){this.plays++;this.paused=false;return Promise.resolve();},pause(){this.paused=true;}};
   globalThis.document={createElement:()=>element,body:{append(){}}};
-  const {MusicOutput}=await load('music-output',s=>'const FLAC_BLOCK=4096,FLAC_MIME="audio/mp4";function flacInit(){return new Uint8Array(1);}function aacInit(){return new Uint8Array(1);}function flacFrame(){return new Uint8Array(1);}function flacFragment(){return new Uint8Array(1);}\n'+s.replace(/^import .*?;$/gm,''));
-  const errors=[];const music=new MusicOutput({sampleRate:48000,channels:2,description:new Uint8Array()},m=>errors.push(m),'flac');
+  const {MusicOutput}=await load('music-output',s=>'function aacInit(){return new Uint8Array(1);}function aacFragment(){return new Uint8Array(1);}\n'+s.replace(/^import .*?;$/gm,''));
+  const errors=[];const music=new MusicOutput({sampleRate:48000,channels:2,description:new Uint8Array()},m=>errors.push(m),'aac');
   assert.deepEqual(log,['append'],'init segment');
   assert.equal(music.follow,undefined,'No song timeline to follow');
   element.paused=false;element.currentTime=600;buffer.ranges=[[599,600.6]];
-  for(let i=0;i<20;i++){clock+=85;music.packet(new Uint8Array(4096*4));}
+  for(let i=0;i<80;i++){clock+=21;music.packet(new Uint8Array(400));}
   assert.ok(!log.some(x=>x.startsWith('remove 0-')||x.startsWith('duration')),'Playing on moves neither the timeline nor the duration');
   assert.equal(element.currentTime,600,'and seeks nothing');assert.deepEqual(errors,[]);
   // Behind the cushion: no faster playback (it crackled at song changes), only measured for the viewer log.
-  element.playbackRate=1;music.report();buffer.ranges=[[590,601.5]];music.packet(new Uint8Array(4096*4));
+  element.playbackRate=1;music.report();buffer.ranges=[[590,601.5]];for(let i=0;i<4;i++)music.packet(new Uint8Array(400));
   assert.equal(element.playbackRate,1,'1.5 s behind: still normal speed');assert.equal(element.currentTime,600,'and no jump');
   assert.deepEqual([music.report().musicLeadMaxMs,music.report().musicLeadMaxMs],[1500,undefined],'How far behind it played, for the viewer log');
   element.plays=0;element.play=function(){this.plays++;return Promise.reject(Object.assign(new Error('blocked'),{name:'NotAllowedError'}));};
@@ -203,10 +175,10 @@ assert.deepEqual(media.report(),{positionState:1,songPos:62,songDur:200,art:0},'
   assert.equal(music.report().musicBlocked,1,'A play() the browser refused (no gesture) is counted for the viewer log');
   element.play=function(){this.plays++;this.paused=false;return Promise.resolve();};
   // A buffer busy for a few seconds is not a stuck one.
-  const stuck=[];const flac=new MusicOutput({sampleRate:48000,channels:2,description:new Uint8Array()},m=>stuck.push(m),'flac');
-  buffer.updating=true;for(let i=0;i<40;i++)flac.packet(new Uint8Array(4096*4));
+  const stuck=[];const slow=new MusicOutput({sampleRate:48000,channels:2,description:new Uint8Array()},m=>stuck.push(m),'aac');
+  buffer.updating=true;for(let i=0;i<40*4;i++)slow.packet(new Uint8Array(400));
   assert.deepEqual(stuck,[],'Forty fragments (3.4 s) waiting on a busy buffer close nothing');
-  for(let i=0;i<60;i++)flac.packet(new Uint8Array(4096*4));
+  for(let i=0;i<60*4;i++)slow.packet(new Uint8Array(400));
   assert.deepEqual(stuck,['Music buffer is not advancing'],'but a buffer stuck for good still does');buffer.updating=false;
   // Resuming after a pause whose buffer was played out: no step back (that replayed a second already heard).
   const resumed=new MusicOutput({sampleRate:48000,channels:2,description:new Uint8Array()},()=>{},'aac');
@@ -218,13 +190,12 @@ assert.deepEqual(media.report(),{positionState:1,songPos:62,songDur:200,art:0},'
   element.paused=true;element.currentTime=6;buffer.ranges=[[5,12]];await resumed.unlock();
   assert.equal(element.currentTime,11,'A stale buffer still jumps forward to 1 s before its end');
   Object.defineProperty(performance,'now',{value:realNow,configurable:true,writable:true}); }
-media.setActive(false);assert.equal(navigator.mediaSession.playbackState,'none');assert.equal(navigator.mediaSession.metadata,null);
 // Music must take exactly one route; voice/navigation keep the existing Web Audio path.
 const edges=[];let music;let packets=0;
-class Node {gain={value:1};connect(to){edges.push(to);}disconnect(){}}
+class Node {gain={value:1,cancelScheduledValues(){},setValueAtTime(v){this.value=v;},linearRampToValueAtTime(v,at){this.value=v;this.rampedTo=at;}};connect(to){edges.push(to);}disconnect(){}}
 globalThis.AudioContext=class {state='running';destination={speaker:true};createGain(){return new Node();}resume(){return Promise.resolve();}};
-globalThis.TestMusic=class {static supported(){return true;}static key(c){return JSON.stringify([c.sampleRate,c.channels,Array.from(c.description)]);}constructor(config){music=this;this.configKey=JSON.stringify([config.sampleRate,config.channels,Array.from(config.description)]);}unlocked=false;playing=false;configKey="";pause(){this.playing=false;this.paused=true;}volume(){}unlock(){this.unlocked=true;this.unlocks=(this.unlocks??0)+1;return Promise.resolve();}packet(){packets++;}close(){this.closed=true;}};
-const {AudioEngine}=await load('audio',s=>s.replace(/^import .*?;$/gm,'')+'\nconst MusicOutput=globalThis.TestMusic;const AudioCodec={AacLc:1,Opus:2,Lpcm:3};\nfunction audioStartTime(){return 0;}');
+globalThis.TestMusic=class {static supported(){return true;}static key(c){return JSON.stringify([c.sampleRate,c.channels,Array.from(c.description)]);}constructor(config){music=this;this.configKey=JSON.stringify([config.sampleRate,config.channels,Array.from(config.description)]);}unlocked=false;playing=false;configKey="";currentVolume=1;volumes=[];pause(){this.playing=false;this.paused=true;}volume(v){this.currentVolume=v;this.volumes.push(v);}unlock(){this.unlocked=true;this.unlocks=(this.unlocks??0)+1;return Promise.resolve();}packet(){packets++;}close(){this.closed=true;}};
+const {AudioEngine}=await load('audio',s=>s.replace(/^import .*?;$/gm,'')+'\nconst MusicOutput=globalThis.TestMusic;const MUSIC_ELEMENT=true;const AudioCodec={AacLc:1,Opus:2,Lpcm:3};\nfunction audioStartTime(){return 0;}');
 const audio=new AudioEngine(()=>{});assert.equal(edges.length,1);assert.equal(edges[0].speaker,true);
 audio.handleConfig({streamType:102,codec:1,name:'media',sampleRate:48000,channels:2,description:new Uint8Array([0x11,0x90])});
 audio.handlePacket({streamType:102,timestampUs:0,data:new Uint8Array([1,2])});assert.equal(packets,1);
@@ -234,6 +205,18 @@ audio.stopStream(102);assert.equal(music.closed,undefined,"Pause retains native 
 const pausedMusic=music;
 audio.handleConfig({streamType:102,codec:1,name:'media',sampleRate:48000,channels:2,description:new Uint8Array([0x11,0x90])});
 assert.equal(music,pausedMusic,'Resume reuses the native media element');assert.equal(audio.streams.get(102).music,pausedMusic,'as the stream\'s music');
+{ // Duck/unduck (media_performance_audit #2): the iPhone lowers the music under a prompt, the page ramps the media
+  // gain and the element's volume over the given time, and a music stream that starts while ducked starts ducked.
+  const intervals=[];globalThis.window=globalThis.window??{};window.setInterval=f=>{intervals.push(f);return intervals.length;};window.clearInterval=id=>{intervals[id-1]=null;};
+  const tick=()=>{for(let i=0;i<100&&intervals.some(Boolean);i++)intervals.forEach(f=>f&&f());};
+  music.volumes.length=0;audio.duck(0.2,500);tick();
+  assert.ok(music.volumes.length>=5&&Math.abs(music.volumes.at(-1)-0.2)<1e-9,'the element volume ramps down in steps to the level');
+  assert.equal(audio.streams.get(102).gain.gain.value,0.2,'and the media gain ramps to it');
+  assert.deepEqual(audio.duckReport(),{ducks:1},'counted for the viewer log');
+  audio.stopStream(102);audio.handleConfig({streamType:102,codec:1,name:'media',sampleRate:48000,channels:2,description:new Uint8Array([0x11,0x90])});
+  assert.equal(music.currentVolume,0.2,'a stream that starts while ducked starts ducked');
+  audio.duck(1,300);tick();assert.ok(Math.abs(music.currentVolume-1)<1e-9,'unduck brings it back');assert.deepEqual(audio.duckReport(),{unducks:1});
+  assert.deepEqual(audio.duckReport(),{},'counted afresh each report'); }
 audio.stopAll();assert.equal(music.closed,true);assert.equal(audio.isPlaying,false);
 const {aacInit,aacFragment}=await load('aac-mp4');
 const init=aacInit(48000,2,new Uint8Array([0x11,0x90]));
@@ -257,7 +240,7 @@ assert.equal(isNight('schedule',at(18,29),true),false);assert.equal(isNight('sch
 assert.equal(isNight('schedule',at(0,0),false),true);assert.equal(isNight('schedule',at(6,29),false),true);assert.equal(isNight('schedule',at(6,30),true),false);
 assert.equal(isNight('system',at(12,0),true),true);assert.equal(isNight('system',at(23,0),false),false);
 assert.equal(isNight('day',at(23,0),true),false);assert.equal(isNight('night',at(12,0),false),true);
-console.log('Car checks passed: aspect fit, media keys, disconnect state, single music route, MP4 framing, night schedule.');
+console.log('Car checks passed: aspect fit, hiccups, decode backlog, single music route, MP4 framing, night schedule.');
 { // View areas (2026-10-14): a window shape seen before is an area switch, never a reconnect.
   const windowed={width:1280,height:996}, full={width:1920,height:1080};
   const start={width:1280,height:996,hevc:true,fps:30};
@@ -379,17 +362,31 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
   const copy=timing.snapshot();copy.wsOpenMs=0;assert.equal(timing.snapshot().wsOpenMs,10030);
 }
 
-{ // Tesla browser UI can keep sound in the webpage: explicit false wins over the legacy Tesla default.
+{ // Tesla-only build (flags.ts): the box's carMusic/tesla fields are constants now; boot reads the token and the
+  // settings port only, and a stale receiver-access.json with the old fields changes nothing.
+  const flags=await load('flags');
+  assert.deepEqual([flags.CAR_MUSIC,flags.TESLA,flags.MUSIC_ELEMENT,flags.PROMPT_BOOST],[true,true,true,3]);
   const savedWindow=globalThis.window, savedFetch=globalThis.fetch, savedStorage=globalThis.localStorage;
-  globalThis.window={};globalThis.localStorage={setItem(){}};
+  const stored={};globalThis.window={};globalThis.localStorage={setItem(k,v){stored[k]=v;}};
   const {access}=await load('boot',s=>s.replace(/^import .*?;$/gm,'const startup={mark(){}};').replace('async function access()', 'export async function access()'));
-  for(const [flags,want] of [[{tesla:true},true],[{tesla:true,carMusic:false},false],[{tesla:false,carMusic:true},true]]) {
-    globalThis.fetch=async()=>({ok:true,json:async()=>flags});await access();
-    assert.equal(window.playportCarMusic,want);assert.equal(window.playportTeslaMode,flags.tesla);
-  }
+  globalThis.fetch=async()=>({ok:true,json:async()=>({token:'0123456789abcdef0123456789abcdef',settingsPort:18080,tesla:false,carMusic:false})});await access();
+  assert.equal(stored['playport-token'],'0123456789abcdef0123456789abcdef');assert.equal(window.playportBoxSettingsPort,18080);
+  assert.equal(window.playportCarMusic,undefined,'no runtime car flags any more');
   globalThis.window=savedWindow;globalThis.fetch=savedFetch;globalThis.localStorage=savedStorage;
 }
 
+{ // The hint follows the state (viewer audit V3): the box is the question while the link is down, the iPhone only
+  // while the box answers; the box's own page link hides while the box is unreachable.
+  const {statusHint,SLOW_LINK_S}=await load('status');
+  assert.deepEqual(statusHint('waiting',0),{key:'waitingHint',seconds:null,boxLink:true},'the one good state as before');
+  assert.deepEqual(statusHint('starting',0),{key:'startingHint',seconds:null,boxLink:true},'iPhone connected: no first-run hint');
+  assert.deepEqual(statusHint('renegotiating',0),{key:'renegotiatingHint',seconds:null,boxLink:true},'a display change is not "waiting for iPhone"');
+  assert.deepEqual(statusHint('connecting',1),{key:null,seconds:null,boxLink:false},'the first seconds of a connect say nothing');
+  assert.deepEqual(statusHint('connecting',SLOW_LINK_S+4.7),{key:'reconnectingHint',seconds:7,boxLink:false},'then the box is not answering, with the time');
+  assert.deepEqual(statusHint('reconnecting',0.5),{key:'reconnectingHint',seconds:null,boxLink:false},'a dropped link names the box at once, the time after 3 s');
+  assert.equal(statusHint('reconnecting',12.2).seconds,12);
+  assert.equal(statusHint('access',0).key,'accessHint');
+}
 { // Debug overlay (2026-10-16): three short lines, the music bitrate on the music stream, nothing for no picture yet.
   const {hudLines}=await load('debug-hud');
   const sample={width:1280,height:846,fps:29.6,hevc:false,videoKbps:2412,decodeMs:63.4,queue:1,rttMs:41.2,
@@ -414,11 +411,12 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
   const {VideoPlayer}=await load('video',s=>s.replace(/^import .*?;$/gm,'')+'\nconst VideoCodec={H264:1,H265:2};function avcCodecString(){return "avc1.640028";}function annexBToAvcc(d){return d;}');
   const hvcC=new Uint8Array([1,1,0x60,0,0,0,0x90,0,0,0,0,0,0x5d]);
   for (const compat of [false,true]) {
-    const contexts=[];const canvas={getContext(kind,options){contexts.push(options??null);return null;},width:0,height:0};
+    const contexts=[];const canvas={getContext(kind,options){contexts.push(options??null);return {getContextAttributes:()=>({alpha:false,desynchronized:!compat})};},width:0,height:0};
     const player=new VideoPlayer(canvas,()=>{},()=>{},()=>{},()=>{},compat);
+    assert.equal(player.desynchronized,compat?0:1,'what the browser gave is read back for the viewer log');
     player.configure({codec:1,width:1280,height:846,codecData:new Uint8Array([1,0x64,0,0x28,0x40])});await Promise.resolve();
     player.configure({codec:2,width:1280,height:846,codecData:hvcC});for(let i=0;i<5;i++)await Promise.resolve();
-    assert.deepEqual(contexts,compat?[]:[{desynchronized:true}],compat?'compatible: no low-latency canvas':'default: the low-latency canvas');
+    assert.deepEqual(contexts,compat?[{alpha:false}]:[{alpha:false,desynchronized:true}],compat?'compatible: an opaque canvas, not the low-latency one':'default: the opaque low-latency canvas');
     assert.deepEqual(configs.splice(0).map(c=>c.hardwareAcceleration),compat?['no-preference','no-preference']:['prefer-hardware','prefer-hardware'],
       'H.264 and the first H.265 candidate');
   }

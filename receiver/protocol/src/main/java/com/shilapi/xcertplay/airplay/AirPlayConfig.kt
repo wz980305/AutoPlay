@@ -60,11 +60,15 @@ data class AirPlayConfig(
     val entertainmentSampleRate: Int = 48000,
     val hevc: Boolean = false,
     val disableAudioOutput: Boolean = false,
-    val microphone: Boolean = false,
-    /** false: offer no call and no Siri audio, so the iPhone keeps them on the car's own Bluetooth (DashPlay car_voice). */
-    val callsAndSiri: Boolean = true,
     val manufacturer: String = "xcertplay",
     val model: String = "xcertplay",
     val oemLabel: String = "xcertplay",
     val icons: List<AirPlayIcon> = emptyList(),
+    /**
+     * Declare the newer per-display appearance protocol (/info enablesUIAppearance and enablesMapAppearance) and
+     * switch day/night with uiAppearanceUpdate + mapAppearanceUpdate. iOS 27 follows light/dark only this way; iOS 26
+     * follows plain setNightMode, which is always sent. Design borrowed from the dashplay-tesla fork of DashPlay
+     * (observed in a car on iOS 26.2 and 27, 2026-10-22; GPL-3.0), re-implemented here.
+     */
+    val appearanceUpdates: Boolean = false,
 )

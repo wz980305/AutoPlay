@@ -85,23 +85,17 @@ data class DisplayOutcome(val error: String? = null, val deferred: Boolean = fal
 data class ServerMessage(
     val type: String,
     val mark: Long? = null,
-    val nowPlaying: NowPlaying? = null,
-    val artwork: String? = null,
-    val revision: Long? = null,
     val deviceName: String? = null,
     val sessionActive: Boolean = false,
     val width: Int? = null,
     val height: Int? = null,
     val viewers: Int = 0,
     val message: String? = null,
-    val micActive: Boolean? = null,
-    val micRate: Int? = null,
-    val micChannels: Int? = null,
-    val micCodec: String? = null,
-    val micSamplesPerPacket: Int? = null,
-    val micBitrate: Int? = null,
     /** "session" ended because the receiver applies a new display: the phone comes back at once (keep the picture). */
     val restarting: Boolean? = null,
+    /** "duck": the music's gain the iPhone asks for (1.0 = as sent) and the ramp to it, from duckAudio/unduckAudio. */
+    val level: Double? = null,
+    val ms: Long? = null,
 )
 
 private class WsClient(
@@ -131,6 +125,8 @@ private class WsClient(
     val videoSent = AtomicLong(0)
     val videoDropped = AtomicLong(0)
     val bytesSent = AtomicLong(0)
+    /** The last touch report from this page had a finger down: lift it if the page vanishes or freezes. */
+    @Volatile var touchDown = false
 
     private companion object {
         val nextClientId = AtomicLong(0)
@@ -161,46 +157,7 @@ class WebHub(
     /** Applies a display change; returns null on success or an error message. */
     @Volatile var onApplyDisplay: ((DisplayRequest) -> DisplayOutcome)? = null
 
-    /** Browser microphone payloads: (isOpus, payload). */
-    @Volatile var onMicrophoneData: ((Boolean, ByteArray) -> Unit)? = null
-
-    fun microphoneRequested(uplink: MicUplink) {
-        broadcastJson(
-            ServerMessage(
-                type = "mic",
-                deviceName = config.deviceName,
-                micActive = true,
-                micRate = uplink.sampleRate,
-                micChannels = uplink.channels,
-                micCodec = uplink.codec,
-                micSamplesPerPacket = uplink.samplesPerPacket,
-                micBitrate = uplink.bitrate,
-            ),
-        )
-    }
-
-    fun microphoneStopped() {
-        broadcastJson(ServerMessage(type = "mic", deviceName = config.deviceName, micActive = false))
-    }
-
     @Volatile private var sessionActive = false
-    @Volatile private var nowPlaying = NowPlaying()
-
-    @Volatile private var artwork: String? = null
-
-    @Synchronized fun artwork(revision: Long, bytes: ByteArray): Boolean {
-        if (!sessionActive || nowPlaying.revision != revision) return false
-        artwork = "data:image/jpeg;base64," + java.util.Base64.getEncoder().encodeToString(bytes)
-        broadcastJson(ServerMessage(type = "artwork", artwork = artwork, revision = revision))
-        return true
-    }
-
-    @Synchronized fun nowPlaying(value: NowPlaying) {
-        if (!sessionActive || value == nowPlaying) return
-        if (value.revision != nowPlaying.revision) artwork = null
-        nowPlaying = value
-        broadcastJson(ServerMessage(type = "now-playing", nowPlaying = value.at(System.nanoTime() / 1_000_000)))
-    }
 
     @Volatile private var phoneName: String? = null
 
@@ -212,10 +169,14 @@ class WebHub(
         broadcastJson(ServerMessage(type = "host-ui", sessionActive = sessionActive))
     }
 
+    /** The iPhone's duckAudio/unduckAudio: every page ramps its music gain to [level] over [durationMs]. */
+    fun duck(level: Double, durationMs: Long) {
+        broadcastJson(ServerMessage(type = "duck", level = level, ms = durationMs))
+    }
+
     fun videoCodec(type: Int): VideoCodec? = codecsByStream[type]
 
     fun setSessionState(active: Boolean, name: String?, restarting: Boolean = false) {
-        if (!active) { nowPlaying = NowPlaying(); artwork = null }
         sessionActive = active
         phoneName = name
         broadcastJson(
@@ -417,6 +378,7 @@ class WebHub(
                         if (client.paused() && !client.wasPaused) {
                             client.wasPaused = true
                             log.info("viewer paused client={} (silent {} ms)", client.id, silentMs)
+                            releaseTouch(client, "paused")
                         }
                         if (silentMs > SILENT_VIEWER_MS) {
                             ending = "silent ${silentMs} ms"
@@ -439,9 +401,6 @@ class WebHub(
                                 ServerMessage.serializer(),
                                 ServerMessage(
                                     type = "hello",
-                                    nowPlaying = nowPlaying.at(System.nanoTime() / 1_000_000),   // not where it was when reported
-                                    artwork = artwork,
-                                    revision = nowPlaying.revision,
                                     deviceName = config.deviceName,
                                     sessionActive = sessionActive,
                                     width = display.width,
@@ -474,18 +433,8 @@ class WebHub(
                             configByStream.keys.forEach { streamType -> requestKeyframe(streamType) }
                         }
                         client.lastHeard.set(heardAt)
-                        if (frame is Frame.Binary) {
-                            val data = frame.data
-                            if (data.size >= 2) {
-                                val kind = data[0].toInt() and 0xff
-                                val payload = data.copyOfRange(1, data.size)
-                                when (kind) {
-                                    MIC_FRAME_LPCM -> onMicrophoneData?.invoke(false, payload)
-                                    MIC_FRAME_OPUS -> onMicrophoneData?.invoke(true, payload)
-                                }
-                            }
-                            continue
-                        }
+                        // Binary frames from a page (the microphone uplink of older builds) carry nothing now.
+                        if (frame is Frame.Binary) continue
                         val text = (frame as? Frame.Text)?.readText() ?: continue
                         val message = try {
                             json.decodeFromString(ClientMessage.serializer(), text)
@@ -502,6 +451,7 @@ class WebHub(
                         } else if (message.type == "ping") {
                             client.offer(Frame.Text("""{"type":"pong"}"""))
                         } else {
+                            if (message.type == "touch") client.touchDown = message.contacts.any { it.down }
                             inputHandler?.invoke(message)
                         }
                     }
@@ -510,6 +460,7 @@ class WebHub(
                     throw error
                 } finally {
                     clients.remove(client)
+                    releaseTouch(client, ending)
                     client.channel.close()
                     writer.cancel()
                     marker.cancel()
@@ -542,6 +493,14 @@ class WebHub(
                 call.respondText(Files.readString(file), contentTypeFor(file.fileName.toString()))
             }
         }
+    }
+
+    /** A page that left or froze with a finger down (media_performance_audit #16): lift it on the phone, once. */
+    private fun releaseTouch(client: WsClient, why: String) {
+        if (!client.touchDown) return
+        client.touchDown = false
+        log.info("viewer client={} {} with a finger down: lifting it", client.id, why)
+        inputHandler?.invoke(ClientMessage(type = "touch-release"))
     }
 
     private fun contentTypeFor(name: String): io.ktor.http.ContentType = when {
@@ -643,8 +602,6 @@ class WebHub(
         private fun io.ktor.server.application.ApplicationCall.fromOwnPage(): Boolean = ownPage(
             request.headers["Origin"], "${request.local.serverHost}:${request.local.serverPort}", request.headers["Sec-Fetch-Site"])
 
-        const val MIC_FRAME_LPCM = 0x10
-        const val MIC_FRAME_OPUS = 0x11
         private const val SEND_QUEUE_CAPACITY = 1024
         /** Written by the box's startup (run-receiver.py): {"token": ..., "settingsPort": ...}. */
         const val ACCESS_FILE = "receiver-access.json"

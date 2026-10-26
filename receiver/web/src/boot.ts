@@ -13,15 +13,10 @@ async function access() {
   try {
     const response = await fetch('./receiver-access.json', { cache: 'no-store', credentials: 'same-origin' });
     if (!response.ok) return;
-    const value = await response.json() as { token?: string; settingsPort?: number; carMusic?: boolean; tesla?: boolean };
+    // The box's carMusic/tesla fields are ignored since the Tesla-only build: those are constants now (flags.ts).
+    const value = await response.json() as { token?: string; settingsPort?: number };
     if (typeof value.token === 'string' && /^[0-9a-f]{32}$/.test(value.token)) localStorage.setItem('playport-token', value.token);
     if (Number.isInteger(value.settingsPort)) (window as unknown as { playportBoxSettingsPort?: number }).playportBoxSettingsPort = value.settingsPort;
-    // Set on the box: carMusic, the music goes over the car's own Bluetooth (OpenWrt dashplay.main.car_music, settings
-    // page); tesla, the Tesla browser's ways (fullscreen through a listed video site, a quieter microphone). Tesla
-    // mode (dashplay.main.tesla_mode) sets both.
-    const flags = window as unknown as { playportCarMusic?: boolean; playportTeslaMode?: boolean };
-    flags.playportTeslaMode = value.tesla === true;
-    flags.playportCarMusic = value.carMusic === true || (value.carMusic === undefined && value.tesla === true);
   } catch { /* No box behind this page, or storage blocked: the page asks for a token as before. */ }
 }
 start();

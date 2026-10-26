@@ -16,8 +16,8 @@ import org.slf4j.LoggerFactory
  * Wireless CarPlay bring-up: Bluetooth RFCOMM iAP2 bootstrap, Wi-Fi credentials handoff and the
  * tunneled iAP2 handover.
  *
- * Requires the macOS `bt-bridge` helper (macos/bt-bridge) with the iPhone already paired in
- * System Settings, and the server running on the Wi-Fi network the phone should join.
+ * Requires the `bt-bridge` helper (`--bt-bridge`, the box's BlueZ RFCOMM relay) with the iPhone already
+ * paired, and the Wi-Fi the phone should join named with `--wifi-ssid` (the box's own access point).
  */
 class WirelessBootstrap(private val server: CarPlayServer) : Closeable {
     private val log = LoggerFactory.getLogger("wireless")
@@ -40,25 +40,21 @@ class WirelessBootstrap(private val server: CarPlayServer) : Closeable {
         var failed = false
         try {
             val config = server.config
-            val wifi = WifiInfo.detect(config)
+            // The box's own access point, as the launcher passes it (the macOS SSID detection went with that build).
+            val wifi = config.wifiSsid?.takeIf { it.isNotBlank() }?.let { WifiNetwork(it, config.wifiChannel) }
             if (wifi == null) {
                 log.warn(
-                    "wireless bootstrap skipped: no Wi-Fi network detected. " +
-                        "Pass the Wi-Fi the iPhone should use: " +
-                        "--wifi-ssid \"<name>\" --wifi-passphrase \"<password>\" " +
-                        "(macOS hides the SSID from processes without Location Services permission).",
+                    "wireless bootstrap skipped: no Wi-Fi network configured. " +
+                        "Pass the Wi-Fi the iPhone should use: --wifi-ssid \"<name>\" --wifi-passphrase \"<password>\"",
                 )
                 return
             }
-            if (!wifi.ssid.isNullOrBlank() && config.wifiPassphrase.isNullOrBlank()) {
+            if (config.wifiPassphrase.isNullOrBlank()) {
                 log.warn("no --wifi-passphrase configured; the phone must already know network {}", wifi.ssid)
             }
             val bridgePath = BluetoothBridge.resolvePath(config.bluetoothBridge)
             if (bridgePath == null) {
-                log.warn(
-                    "wireless bootstrap skipped: bt-bridge helper not found; " +
-                        "build it with macos/bt-bridge/build.sh or pass --bt-bridge",
-                )
+                log.warn("wireless bootstrap skipped: bt-bridge helper not found; pass --bt-bridge <path>")
                 return
             }
             val deviceAddress = server.wirelessPhone()?.takeIf { it.isNotBlank() }
@@ -146,16 +142,14 @@ class WirelessBootstrap(private val server: CarPlayServer) : Closeable {
     }
 }
 
-/** Helpers around the macOS bt-bridge executable. */
+/** The Wi-Fi the iPhone is handed: the box's own access point. */
+data class WifiNetwork(val ssid: String, val channel: Int)
+
+/** Helpers around the bt-bridge executable (`--bt-bridge`; the box's BlueZ RFCOMM relay, same CLI as the old
+ *  macOS helper: --print-address, --list, --address <mac>). */
 object BluetoothBridge {
-    fun resolvePath(configured: Path?): Path? {
-        val candidates = listOfNotNull(
-            configured,
-            Path.of("macos/bt-bridge/bt-bridge"),
-            Path.of("macos/bt-bridge/.build/bt-bridge"),
-        )
-        return candidates.firstOrNull { Files.isExecutable(it) }
-    }
+    /** Only the configured path: the macOS build-tree candidates went with that build. */
+    fun resolvePath(configured: Path?): Path? = configured?.takeIf { Files.isExecutable(it) }
 
     private val log = LoggerFactory.getLogger("bt-bridge")
 

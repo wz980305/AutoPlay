@@ -63,7 +63,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
     )
     val hub = WebHub(config, display)
     val bridge = WebBridge(hub)
-    val media = CarPlayMediaEngine(bridge, microphoneEnabled = true, audioCaptureDirectory = null)
+    val media = CarPlayMediaEngine(bridge, audioCaptureDirectory = null)
 
     private val pairings = loadPairings()
     val mfi: MfiAuthenticator by lazy { MfiIdentity.load(config) }
@@ -82,6 +82,10 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
     private var bootDeadline = 0L
     @Volatile private var presenceLearned = false
     @Volatile private var lastPeer: String? = null
+
+    /** duckAudio / unduckAudio commands seen, for the log. */
+    private val ducks = java.util.concurrent.atomic.AtomicLong(0)
+    private val unducks = java.util.concurrent.atomic.AtomicLong(0)
 
     @Volatile private var selectedPhone: String? = null
     @Volatile private var invitedPhone: String? = null
@@ -143,6 +147,32 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
     private fun selectedPresent(): Boolean = selectedPhone?.let { presence("present", it) } == true
     private fun selectPhone(): String? = presenceResult("select")?.takeIf { it.matches(Regex("(?:[0-9A-F]{2}:){5}[0-9A-F]{2}")) }
 
+    /**
+     * Each phone's iOS major version by its Bluetooth address (SETUP deviceID), kept in phone-ios.properties for its
+     * next connection: /info is answered before the phone states its version, and day/night works differently on iOS
+     * 26 (setNightMode) and 27 (appearance updates). A phone not seen yet is taken for iOS 27 or newer. Design from
+     * the dashplay-tesla fork of DashPlay (GPL-3.0), re-implemented.
+     */
+    private val iosFile: Path get() = config.stateDir.resolve("phone-ios.properties")
+    private fun knownIos(phone: String?): Int? = phone?.takeIf { it.isNotBlank() }?.let { address ->
+        runCatching { Properties().apply { Files.newInputStream(iosFile).use { load(it) } }.getProperty(address.uppercase())?.toIntOrNull() }.getOrNull()
+    }
+    private fun rememberIos(phone: String, version: String) {
+        val major = version.substringBefore('.').toIntOrNull() ?: return
+        if (phone.isBlank() || knownIos(phone) == major) return
+        runCatching {
+            val all = Properties()
+            runCatching { Files.newInputStream(iosFile).use { all.load(it) } }
+            all.setProperty(phone.uppercase(), major.toString())
+            Files.createDirectories(config.stateDir)
+            val temporary = iosFile.resolveSibling("${iosFile.fileName}.tmp")
+            Files.newOutputStream(temporary).use { all.store(it, "iPhone iOS major versions by Bluetooth address") }
+            Files.move(temporary, iosFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+        }.onFailure { log.warn("phone iOS version not saved: {}", it.message) }
+        log.info("phone {} runs iOS {}; appearance updates={}", phone, major, major >= APPEARANCE_MIN_IOS)
+    }
+    private fun appearanceUpdatesFor(phone: String?): Boolean = (knownIos(phone) ?: APPEARANCE_MIN_IOS) >= APPEARANCE_MIN_IOS
+
     val airPlayConfig: AirPlayConfig
         get() = AirPlayConfig(
             deviceName = config.deviceName,
@@ -162,12 +192,11 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             port = config.airPlayPort,
             entertainmentSampleRate = 48_000,
             hevc = display.hevc,
-            microphone = !config.carVoice,
-            callsAndSiri = !config.carVoice,
             manufacturer = config.manufacturer,
             model = config.model,
             oemLabel = "盒子设置",
             icons = listOf(AirPlayIcon(180, 180, checkNotNull(javaClass.getResourceAsStream("/f50-settings.png")).use { it.readBytes() })),
+            appearanceUpdates = appearanceUpdatesFor(selectedPhone),
         )
 
     private val listener = object : AirPlaySessionListener {
@@ -200,12 +229,12 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                 log.info("display changed to {}x{} @{}fps codec={} for the next session (it waited for this one to end)",
                     display.width, display.height, display.fps, if (display.hevc) "h265" else "h264")
             }
-            bridge.endMicrophone()
             hub.setSessionState(false, null, restarting = forDisplay)
         }
 
         override fun onDeviceInfo(session: AirPlaySession, info: AirPlayDeviceInfo) {
-            log.info("iPhone connected name={} model={} deviceId={}", info.name, info.model, info.deviceId)
+            log.info("iPhone connected name={} model={} deviceId={} ios={}", info.name, info.model, info.deviceId, info.osVersion.ifEmpty { "-" })
+            rememberIos(info.deviceId, info.osVersion)
             hub.setSessionState(true, info.name)
         }
 
@@ -230,6 +259,24 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                 }
                 log.info("CarPlay resource ownership: {}", resources)
             }
+            // duckAudio / unduckAudio (media_performance_audit #2): the iPhone wants the music under a prompt or Siri
+            // lower, then back. The page plays both when music goes through it (after Siri; any car-music-off setup),
+            // so it gets the level and the ramp. The volume comes as dB (<= 0) or as a linear fraction (0..1]; both
+            // are mapped to a gain. Counted and logged so a drive log shows what the phone really sends.
+            if (type == "duckAudio" || type == "unduckAudio") {
+                val raw = (params["volume"] as? Number)?.toDouble()
+                val level = when {
+                    type == "unduckAudio" -> 1.0
+                    raw == null -> DUCK_DEFAULT_LEVEL
+                    raw <= 0.0 -> Math.pow(10.0, raw / 20.0)
+                    raw <= 1.0 -> raw
+                    else -> DUCK_DEFAULT_LEVEL
+                }.coerceIn(0.0, 1.0)
+                val durationMs = ((params["durationMs"] as? Number)?.toLong() ?: 0L).coerceIn(0L, 5_000L)
+                val count = (if (type == "duckAudio") ducks else unducks).incrementAndGet()
+                log.info("audio {} level={} ms={} volume={} count={}", type, String.format(java.util.Locale.ROOT, "%.3f", level), durationMs, raw ?: "-", count)
+                hub.duck(level, durationMs)
+            }
         }
 
         override fun onDebugLog(message: String) {
@@ -240,16 +287,12 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
     fun start() {
         hub.inputHandler = ::routeInput
         hub.onApplyDisplay = ::applyDisplay
-        hub.onMicrophoneData = { opus, payload -> bridge.sendMicrophonePayload(payload, opus) }
         hub.onViewerJoined = { streamType ->
             if (bridge.hasRecoveryHandler) {
                 log.info("requesting keyframe for stream {}", streamType)
                 bridge.requestKeyFrame(streamType)
             }
         }
-        // Wired CarPlay needs no Wi-Fi: bring the cable up while the box is still joining the car hotspot
-        // (22-37 s on the Xpeng), so the picture is there when the head unit's browser connects.
-        config.usbBridge?.let { wired = WiredBootstrap(this, it).also(WiredBootstrap::start) }
         awaitBindAddress()
         selectedPhone = presenceResult("boot")?.takeIf { it.isNotBlank() }
         bootInvite = selectedPhone != null
@@ -258,55 +301,16 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         startAirPlayListener()
         // The handoff hands the iPhone this address directly, and it accepts the Bluetooth invitation
         // ~5 s later, so mDNS (5.3 s to announce on the S805) need not delay the invitation. Without
-        // wireless CarPlay nothing looks for the AirPlay service: the cable carries the address over iAP2.
+        // wireless CarPlay nothing looks for the AirPlay service.
         if (config.wireless) Thread({
-            runCatching { Advertisers.create(config.mdns, airPlayConfig, identity, bindAddress).also { it.start() } }
-                .onSuccess { if (closed.get()) runCatching { it.close() } else advertiser = it }
+            runCatching { Advertisers.create(config.mdns, airPlayConfig, identity, bindAddress)?.also { it.start() } }
+                .onSuccess { if (closed.get()) runCatching { it?.close() } else advertiser = it }
                 .onFailure { log.warn("mDNS advertisement failed: {}", it.message) }
         }, "mdns-start").apply { isDaemon = true; start() }
-        if (config.wireless && !cablePhone && (presenceHelper == null || bootInvite || selectedPresent())) {
+        if (config.wireless && (presenceHelper == null || bootInvite || selectedPresent())) {
             wireless = WirelessBootstrap(this).also { it.start() }
         }
         startSupervisor()
-    }
-
-    @Volatile private var wired: WiredBootstrap? = null
-
-    /** An iPhone on the USB cable (WiredBootstrap): no wireless invitations until it is unplugged. */
-    @Volatile private var cablePhone = false
-    @Volatile private var wiredSession: AirPlaySession? = null
-
-    /** The iPhone on the cable has opened CarPlay (AirPlay over its NCM link) and is the active session. */
-    fun wiredSessionActive(): Boolean = wiredSession.let { it != null && it === activeSession }
-
-    fun setCablePhone(present: Boolean) {
-        if (cablePhone == present) return
-        cablePhone = present
-        if (!config.wireless) return
-        if (present) {
-            synchronized(this) {
-                ++wirelessGeneration
-                val previous = wireless
-                wireless = null
-                previous?.close()
-                // End a wireless session now: an iPhone switched from Wi-Fi straight to the cable's
-                // CarPlay start ignored the first start (2026-10-12, 28 s to picture).
-                activeSession?.takeIf { it !== wiredSession }?.let { runCatching { it.close() } }
-            }
-            log.info("iPhone on the USB cable; wireless invitations paused")
-        } else {
-            // The cable's session would only end on its 15 s keep-alive timeout and blocked the invitation
-            // below (2026-10-12): end it now, the cable is gone.
-            wiredSession?.takeIf { it === activeSession }?.let { runCatching { it.close() } }
-            wiredSession = null
-            // Whom to invite: a phone used on the cable only is not the presence helper's last phone.
-            if (presenceHelper != null && selectedPhone == null) {
-                selectedPhone = presenceResult("unplugged")?.takeIf { it.matches(Regex("(?:[0-9A-F]{2}:){5}[0-9A-F]{2}")) }
-            }
-            // Invite at once, as at boot: someone who just pulled the cable is in the car with the phone.
-            log.info("no iPhone on the USB cable; wireless invitations resume")
-            restartWireless(confirmedPresent = true)
-        }
     }
 
     /**
@@ -339,33 +343,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         log.info("AirPlay RTSP listening on {}:{}", bindAddress.hostAddress, config.airPlayPort)
     }
 
-    @Volatile private var wiredSocket: ServerSocket? = null
-
-    /**
-     * Wired CarPlay: listen on the iPhone's NCM link (see WiredBootstrap). Whoever connects there is
-     * the phone on the cable, so there is no network admission; a wired phone replaces a session.
-     */
-    @Synchronized
-    fun listenWired(address: java.net.InetAddress) {
-        val current = wiredSocket
-        // Each helper run creates the TAP again with a new interface index: InetAddress.equals ignores
-        // the scope, and a listener left on the old index never saw the iPhone (2026-10-12).
-        val scope = (address as? java.net.Inet6Address)?.scopeId
-        if (current != null && !current.isClosed && current.inetAddress == address &&
-            (current.inetAddress as? java.net.Inet6Address)?.scopeId == scope) return
-        runCatching { current?.close() }
-        val server = ServerSocket()
-        server.reuseAddress = true
-        server.bind(InetSocketAddress(address, config.airPlayPort))
-        wiredSocket = server
-        Thread({ acceptLoop(server, wired = true) }, "airplay-accept-wired").apply {
-            isDaemon = true
-            start()
-        }
-        log.info("AirPlay RTSP listening on [{}]:{} for wired CarPlay", address.hostAddress, config.airPlayPort)
-    }
-
-    private fun acceptLoop(server: ServerSocket, wired: Boolean = false) {
+    private fun acceptLoop(server: ServerSocket) {
         while (!closed.get() && !server.isClosed) {
             val socket: Socket = try {
                 server.accept()
@@ -375,12 +353,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                 continue
             }
             try {
-                if (wired) {
-                    activeSession?.let { current ->
-                        log.info("wired iPhone connected; replacing the current session")
-                        runCatching { current.close() }
-                    }
-                } else if (presenceHelper != null) {
+                if (presenceHelper != null) {
                     val incomingPhone = presenceResult("admit", socket.inetAddress.hostAddress)
                     val current = activeSession
                     if (current != null) {
@@ -421,7 +394,6 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                     media = media,
                 )
                 activeSession = session
-                if (wired) wiredSession = session
                 session.start()
             } catch (error: Exception) {
                 log.warn("AirPlay session bring-up failed: {}", error.message)
@@ -431,6 +403,8 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
     }
 
     private var touchDownIds = emptySet<Int>()
+    /** The last touch report, so a page that vanished mid-press can be lifted where its fingers were. */
+    @Volatile private var lastContacts: List<TouchContactMessage> = emptyList()
 
     private fun routeInput(message: ClientMessage) {
         val session = activeSession ?: return
@@ -444,6 +418,14 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                     if (down != touchDownIds || !sent) log.info("touch forwarded receivedMs={} epochMs={} down={} sent={}",
                         receivedMs, System.currentTimeMillis(), down.size, sent)
                     touchDownIds = down
+                    lastContacts = message.contacts
+                }
+                // WebHub: the page closed or froze with a finger down. Lift every contact at its last position ((0,0)
+                // can cancel an iPhone button tap, input.ts), as the page itself does on pagehide when it can.
+                "touch-release" -> if (touchDownIds.isNotEmpty()) {
+                    val sent = session.sendTouch(lastContacts.map { AirPlayContact(it.id, it.x, it.y, false) })
+                    log.info("touch released for a vanished page contacts={} sent={}", touchDownIds.size, sent)
+                    touchDownIds = emptySet()
                 }
                 "media" -> message.media?.let {
                     // Media keys from the page (1 play, 2 pause, 3 toggle, 4 next, 5 previous): the log then tells a
@@ -472,24 +454,20 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         }
     }
 
-    /** Opens the tunneled iAP2 link after the phone hands the session over to Wi-Fi. */
     /**
-     * NowPlaying metadata and artwork arriving on an iAP2 link (the wireless tunnel or the USB cable),
-     * forwarded to the browser's media session while [current] holds. Returns the link's frame handler.
+     * Drains the iAP2 file transfers (album artwork) the iPhone starts on the tunneled link. Nothing shows them any
+     * more (the Tesla's own media card does, over the car's Bluetooth), but an undrained queue of 256 transfers ends
+     * the whole tunneled iAP2 link (Iap2LinkChannel: "received-file queue limit exceeded"), so every packet is taken
+     * off the link's queue by the receiver, which never expects a transfer: a SETUP waits in its own small queue and
+     * is answered CANCEL when that fills (4) or after its 15 s deadline (expire); data for an unknown transfer is
+     * answered CANCEL at once.
      */
-    fun nowPlayingFeed(channel: Iap2Session, name: String, current: () -> Boolean): (com.shilapi.xcertplay.iap2.wire.Iap2Frame) -> Unit {
-        val metadata = NowPlayingState()
+    private fun artworkDrain(channel: Iap2Session, name: String, current: () -> Boolean) {
         val artwork = com.shilapi.xcertplay.iap2.message.Iap2ArtworkReceiver(
             send = { channel.sendFileTransfer(it) { current() } },
-            complete = { revision, id, bytes ->
-                (current() && metadata.value.revision == revision && metadata.artworkId == id && hub.artwork(revision, bytes)).also {
-                    log.info("artwork id={} revision={} bytes={} sent to the page={} (song revision now {})",
-                        id, revision, bytes.size, it, metadata.value.revision)
-                }
-            },
+            complete = { _, _, _ -> false },
             clock = { System.nanoTime() / 1_000_000 },
-            // A few lines a song: covers are sometimes missing on the car, and the debug log is not kept.
-            onDiagnostic = { log.info(it) },
+            onDiagnostic = { log.debug(it) },
         )
         Thread({
             try {
@@ -499,15 +477,6 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                 }
             } catch (_: Exception) { log.debug("Artwork transport ended") }
         }, "$name-artwork").apply { isDaemon = true; start() }
-        return { frame ->
-            if (current()) {
-                try { metadata.accept(frame)?.let {
-                    hub.nowPlaying(it)
-                    artwork.expect(metadata.artworkId, it.revision)
-                } }
-                catch (_: Exception) { log.debug("Ignoring malformed NowPlaying update") }
-            }
-        }
     }
 
     fun handleWirelessTunnel(
@@ -524,7 +493,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         }
         val tunnelSession = activeSession
         val tunnelDone = java.util.concurrent.atomic.AtomicBoolean(false)
-        val nowPlaying = nowPlayingFeed(channel, "wireless") { !tunnelDone.get() && activeSession === tunnelSession }
+        artworkDrain(channel, "wireless") { !tunnelDone.get() && activeSession === tunnelSession }
         Thread(
             {
                 try {
@@ -536,7 +505,6 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                         endpoint = endpoint,
                         timeoutMillis = Iap2WirelessControlClient.NO_TIMEOUT_MILLIS,
                         onReady = { log.info("wireless iAP2 tunnel ready; CarPlay is live") },
-                        onIncoming = nowPlaying,
                         onProgress = { log.debug("iAP tunnel $it") },
                     )
                     when (result.terminal) {
@@ -570,8 +538,6 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                     Thread.sleep(SUPERVISOR_INTERVAL_MS)
                     if (closed.get()) return@Thread
                     val now = System.nanoTime() / 1_000_000
-                    // The phone on the cable owns CarPlay; its session is no Wi-Fi presence either.
-                    if (cablePhone) { viewerSeenAt = now; continue }
                     if (hub.viewerCount > 0) viewerSeenAt = now
                     // Learn the phone's Wi-Fi identity before an idle release can end its session: a phone invited
                     // right after pairing, with no page open, was released first and then never invited again,
@@ -734,8 +700,6 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             return DisplayOutcome()
         }
         activeSession?.close()
-        // Wired: start the USB side over (identification, then CarPlayStartSession with the new display).
-        wired?.restart()
         // The phone was just using CarPlay, so skip the ~2.4 s presence re-check before re-inviting it.
         if (wasActive) armQuickRetry()
         restartWireless(confirmedPresent = wasActive)
@@ -748,7 +712,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
     /** confirmedPresent: the caller has just seen the selected phone on the network (skips a ~2.4 s re-check). */
     @Synchronized
     private fun restartWireless(confirmedPresent: Boolean = false) {
-        if (!config.wireless || closed.get() || cablePhone) return
+        if (!config.wireless || closed.get()) return
         val generation = ++wirelessGeneration
         sessionEnded = false
         lastBootstrapAt = System.nanoTime() / 1_000_000
@@ -789,31 +753,59 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         // goodbye on every stop or restart, F50 2026-10-14).
         runCatching { activeSession?.close() }
         runCatching { wireless?.close() }
-        runCatching { wired?.close() }
-        runCatching { wiredSocket?.close() }
         runCatching { advertiser?.close() }
         runCatching { serverSocket?.close() }
     }
 
-    // Pair records survive restarts so the phone reconnects without pairing again.
+    /**
+     * Pair records survive restarts so the phone reconnects without pairing again. Written like config.json: a
+     * temporary file in the same directory, flushed, then renamed over the old one, which first becomes
+     * pairings.properties.bak. The old code truncated and rewrote the file in place, once per paired phone at every
+     * start: a brown-out while the JVM started could leave it empty, and every iPhone then failed pair-verify
+     * (reliability audit #7). Loading no longer writes; an empty or unreadable file falls back to the .bak.
+     */
     private fun loadPairings(): PairingStore {
-        val file = config.stateDir.resolve("pairings.properties")
+        val file = config.stateDir.resolve(PAIRINGS_FILE)
+        val backup = config.stateDir.resolve("$PAIRINGS_FILE.bak")
         val properties = Properties()
-        if (Files.isRegularFile(file)) {
-            runCatching { Files.newInputStream(file).use(properties::load) }
+        for (candidate in listOf(file, backup)) {
+            if (!Files.isRegularFile(candidate)) continue
+            val loaded = Properties()
+            if (runCatching { Files.newInputStream(candidate).use(loaded::load) }.isFailure || loaded.isEmpty) continue
+            if (candidate === backup) log.warn("pairings.properties empty or unreadable; using the .bak copy")
+            properties.putAll(loaded)
+            break
         }
+        var loading = true
         val store = PairingStore { identifier, key ->
             properties.setProperty(identifier, key.joinToString("") { "%02x".format(it) })
-            runCatching {
-                Files.createDirectories(config.stateDir)
-                Files.newOutputStream(file).use { properties.store(it, "playport paired controllers") }
-            }
+            if (!loading) persistPairings(file, backup, properties)
         }
         properties.forEach { (identifier, value) ->
             val bytes = (value as? String)?.hexToBytes()
             if (bytes != null) store.save(identifier.toString(), bytes)
         }
+        loading = false
         return store
+    }
+
+    private fun persistPairings(file: Path, backup: Path, properties: Properties) {
+        runCatching {
+            Files.createDirectories(config.stateDir)
+            val temporary = file.resolveSibling("${file.fileName}.tmp")
+            val bytes = java.io.ByteArrayOutputStream().also { properties.store(it, "playport paired controllers") }.toByteArray()
+            java.nio.channels.FileChannel.open(
+                temporary,
+                java.nio.file.StandardOpenOption.CREATE,
+                java.nio.file.StandardOpenOption.WRITE,
+                java.nio.file.StandardOpenOption.TRUNCATE_EXISTING,
+            ).use { channel ->
+                channel.write(java.nio.ByteBuffer.wrap(bytes))
+                channel.force(true)
+            }
+            if (Files.isRegularFile(file)) Files.copy(file, backup, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            Files.move(temporary, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+        }.onFailure { log.warn("pairings not saved: {}", it.message) }
     }
 
     private fun String.hexToBytes(): ByteArray? {
@@ -844,6 +836,11 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
 
         /** AirPlay pair-setup PIN advertised for first-time connections. */
         const val PAIRING_PIN = "3939"
+        private const val PAIRINGS_FILE = "pairings.properties"
+        /** From this iOS major on, day/night goes through the appearance updates (AirPlayConfig.appearanceUpdates). */
+        private const val APPEARANCE_MIN_IOS = 27
+        /** Music gain under a prompt when duckAudio names no usable volume (about -14 dB). */
+        private const val DUCK_DEFAULT_LEVEL = 0.2
         private const val SUPERVISOR_INTERVAL_MS = 2_000L
         private const val QUICK_RETRY_DELAY_MS = 1_500L
         internal const val QUICK_RETRY_WINDOW_MS = 15_000L

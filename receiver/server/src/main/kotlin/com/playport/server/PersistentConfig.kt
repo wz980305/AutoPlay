@@ -13,7 +13,7 @@ data class DisplayPrefs(
     val height: Int = 720,
     // 30 by default: at 60 the iPhone encodes twice the frames on the cable and ran hot (2026-10-12 drive).
     val fps: Int = 30,
-    val uiScale: Int = 100,
+    val uiScale: Int = ServerConfig.DEFAULT_UI_SCALE,
     val hevc: Boolean = false,
     val areas: List<ViewArea> = emptyList(),
     val area: Int = 0,
@@ -34,7 +34,7 @@ data class PersistentConfig(
     val wifiChannel: Int = 0,
     val wifiSecurity: String = "wpa2",
     val bluetoothDeviceAddress: String? = null,
-    val mdns: String = "auto",
+    val mdns: String = "jmdns",
 ) {
     /** Server defaults from this file (CLI flags are applied on top and override). */
     fun toServerDefaults(identityDir: Path, stateDir: Path): ServerConfig = ServerConfig(

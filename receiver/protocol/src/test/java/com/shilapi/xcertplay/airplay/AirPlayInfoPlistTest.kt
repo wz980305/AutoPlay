@@ -35,25 +35,34 @@ class AirPlayInfoPlistTest {
     }
 
     @Test
-    fun everyDisplayDeclaresAutomaticAppearance() {
-        val info = AirPlayInfoPlist.build(
-            AirPlayConfig(
-                deviceName = "test",
-                deviceId = "02:00:00:00:00:02",
-                btMac = "02:00:00:00:00:02",
-                sourceVersion = "366.0",
-                main = AirPlayDisplayConfig(widthPixels = 1280, heightPixels = 720),
-                cluster = AirPlayDisplayConfig(widthPixels = 800, heightPixels = 480),
-            ),
+    fun noDisplayPinsAnAppearanceAndIos27UpdatesAreDeclaredOnRequest() {
+        // The four DiPlay *AppearanceMode/Setting = 0 keys kept an iPhone on "automatic" light whatever setNightMode
+        // said (dashplay-tesla fork, 2026-10-22): none is declared. iOS 27 follows the appearance updates, declared
+        // in /info only when the receiver will send them.
+        val base = AirPlayConfig(
+            deviceName = "test",
+            deviceId = "02:00:00:00:00:02",
+            btMac = "02:00:00:00:00:02",
+            sourceVersion = "366.0",
+            main = AirPlayDisplayConfig(widthPixels = 1280, heightPixels = 720),
+            cluster = AirPlayDisplayConfig(widthPixels = 800, heightPixels = 480),
         )
-
+        val info = AirPlayInfoPlist.build(base)
         val displays = info["displays"] as List<*>
         assertEquals(2, displays.size)
         for (display in displays.map { it as Map<*, *> }) {
             for (key in listOf("uiAppearanceMode", "uiAppearanceSetting", "mapAppearanceMode", "mapAppearanceSetting")) {
-                assertEquals(key, 0, display[key])
+                assertFalse(key, display.containsKey(key))
             }
         }
+        assertFalse(info.containsKey("enablesUIAppearance"))
+        val newer = AirPlayInfoPlist.build(base.copy(appearanceUpdates = true))
+        assertEquals(true, newer["enablesUIAppearance"])
+        assertEquals(true, newer["enablesMapAppearance"])
+        val dark = AirPlayInfoPlist.appearanceCommands(true).map { it["type"] to (it["params"] as Map<*, *>) }
+        assertEquals(listOf("uiAppearanceUpdate", "mapAppearanceUpdate"), dark.map { it.first })
+        assertTrue(dark.all { it.second["appearanceMode"] == 2 && it.second["appearanceSetting"] == 2 && it.second["uuid"] == AirPlayInfoPlist.MAIN_UUID })
+        assertTrue(AirPlayInfoPlist.appearanceCommands(false).all { (it["params"] as Map<*, *>)["appearanceMode"] == 1 })
     }
 
     @Test
@@ -103,23 +112,21 @@ class AirPlayInfoPlistTest {
     }
 
     @Test
-    fun callsAndSiriCanBeLeftToTheCar() {
-        fun types(callsAndSiri: Boolean) = (AirPlayInfoPlist.build(
+    fun callsAndSiriStayOnTheCarsBluetooth() {
+        // The Tesla-only constant: no telephony or speechRecognition stream is ever offered, so the iPhone keeps
+        // calls and Siri on the car's own Bluetooth; prompts, alerts and music are still offered.
+        val types = (AirPlayInfoPlist.build(
             AirPlayConfig(
                 deviceName = "test",
                 deviceId = "02:00:00:00:00:02",
                 btMac = "02:00:00:00:00:02",
                 sourceVersion = "366.0",
                 main = AirPlayDisplayConfig(widthPixels = 1280, heightPixels = 720),
-                microphone = callsAndSiri,
-                callsAndSiri = callsAndSiri,
             ),
         )["audioFormats"] as List<*>).map { (it as Map<*, *>)["audioType"] }
-        assertTrue("telephony" in types(true))
-        assertTrue("speechRecognition" in types(true))
-        assertFalse("telephony" in types(false))
-        assertFalse("speechRecognition" in types(false))
-        assertTrue("default" in types(false) && "media" in types(false))
+        assertFalse("telephony" in types)
+        assertFalse("speechRecognition" in types)
+        assertTrue("default" in types && "alert" in types && "media" in types)
     }
 
     @Test
@@ -267,38 +274,19 @@ class AirPlayInfoPlistTest {
     }
 
     @Test
-    fun microphoneInputsAreAdvertisedOnlyWhenEnabled() {
-        val base = AirPlayConfig(
-            deviceName = "test",
-            deviceId = "02:00:00:00:00:02",
-            btMac = "02:00:00:00:00:02",
-            sourceVersion = "366.0",
-            main = AirPlayDisplayConfig(widthPixels = 1280, heightPixels = 720),
-        )
-
-        fun telephony(info: Map<String, Any?>): Map<*, *> =
-            (info["audioFormats"] as List<*>)
-                .map { it as Map<*, *> }
-                .single { it["audioType"] == "telephony" }
-
-        fun defaultAudio(info: Map<String, Any?>): Map<*, *> =
-            (info["audioFormats"] as List<*>)
-                .map { it as Map<*, *> }
-                .single { it["type"] == 100 && it["audioType"] == "default" }
-
-        assertFalse(telephony(AirPlayInfoPlist.build(base)).containsKey("audioInputFormats"))
-        assertTrue(
-            telephony(AirPlayInfoPlist.build(base.copy(microphone = true)))
-                .containsKey("audioInputFormats"),
-        )
-        assertEquals(
-            0x70004154,
-            defaultAudio(AirPlayInfoPlist.build(base.copy(microphone = true)))["audioInputFormats"],
-        )
-        assertEquals(
-            0x70004154,
-            telephony(AirPlayInfoPlist.build(base.copy(microphone = true)))["audioInputFormats"],
-        )
+    fun noMicrophoneInputIsAdvertised() {
+        // No audioInputFormats on any stream: the phone cannot open a microphone uplink the receiver no longer has.
+        val formats = AirPlayInfoPlist.build(
+            AirPlayConfig(
+                deviceName = "test",
+                deviceId = "02:00:00:00:00:02",
+                btMac = "02:00:00:00:00:02",
+                sourceVersion = "366.0",
+                main = AirPlayDisplayConfig(widthPixels = 1280, heightPixels = 720),
+            ),
+        )["audioFormats"] as List<*>
+        assertTrue(formats.isNotEmpty())
+        for (format in formats) assertFalse((format as Map<*, *>).containsKey("audioInputFormats"))
     }
 
     @Test

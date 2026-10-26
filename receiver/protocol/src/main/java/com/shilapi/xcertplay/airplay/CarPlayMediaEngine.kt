@@ -21,19 +21,17 @@ interface MediaSink {
     fun onAudioStarted(type: Int, format: AudioFormat, firstSample: Int) {}
     fun onAudioRtp(type: Int, format: AudioFormat, rtp: ByteArray, sample: Int) {}
     fun onAudioStopped(type: Int) {}
-    fun onMicrophoneStarted(type: Int, config: MicrophoneConfig) {}
-    fun onMicrophoneStopped(type: Int) {}
     fun onIapMessage(bytes: ByteArray) {}
 }
 
 /**
  * Concrete [AirPlayMediaHandler] that binds the screen, audio and iAP2 DataStream ports,
- * decrypts their payloads, and hands decoded media to a [MediaSink]. Telephony and speech
- * streams can additionally return a PCM microphone uplink through the sink.
+ * decrypts their payloads, and hands decoded media to a [MediaSink]. There is no microphone uplink: calls and
+ * Siri stay on the car's own Bluetooth (AirPlayInfoPlist offers no input format and no telephony or
+ * speechRecognition stream), so the phone never opens one.
  */
 class CarPlayMediaEngine(
     private val sink: MediaSink,
-    private val microphoneEnabled: Boolean = false,
     private val audioCaptureDirectory: File? = null,
 ) : AirPlayMediaHandler {
     internal data class StreamKey(
@@ -57,7 +55,6 @@ class CarPlayMediaEngine(
 
     private val streams = ConcurrentHashMap<StreamKey, Closeable>()
     private val audioMeta = ConcurrentHashMap<Int, AudioMeta>()
-    private val pendingMicrophone = ConcurrentHashMap<Int, MicrophoneConfig>()
     private val audioCaptures = ConcurrentHashMap<Int, AudioPacketCapture>()
     private val pendingIapTunnels = ConcurrentHashMap<AirPlaySession, PendingIapTunnel>()
     @Volatile private var iapTunnelHandler: ((BlockingDuplexByteStream) -> Boolean)? = null
@@ -114,7 +111,6 @@ class CarPlayMediaEngine(
         streams.remove(streamKey)?.close()
         audioMeta.remove(type)
         audioCaptures.remove(type)?.close()
-        if (pendingMicrophone.remove(type) != null) sink.onMicrophoneStopped(type)
         sink.onAudioStopped(type)
 
         val key = outputKey(session, stream) ?: return null
@@ -133,9 +129,6 @@ class CarPlayMediaEngine(
         val connectionId = stream["streamConnectionID"]
         val latencyMs = (stream["audioLatencyMs"] as? Number)?.toInt() ?: 0
         val meta = AudioMeta(type, format, connectionId, latencyMs)
-        val microphone = microphoneConfig(session, type, stream, format)
-        if (microphone != null) pendingMicrophone[type] = microphone
-
         val capture = audioCaptureDirectory?.let { AudioPacketCapture(it, type) }
         if (capture != null) audioCaptures[type] = capture
         val audio = AudioStream(key, type, session::logDebug)
@@ -145,7 +138,6 @@ class CarPlayMediaEngine(
                     meta.firstSample = firstSample
                     meta.originNs = System.nanoTime()
                     sink.onAudioStarted(type, format, firstSample)
-                    microphone?.let { sink.onMicrophoneStarted(type, it) }
                 }
 
                 override fun onRtp(rtp: ByteArray, sample: Int) =
@@ -278,7 +270,6 @@ class CarPlayMediaEngine(
 
     override fun onTeardown(session: AirPlaySession, type: Int) {
         if (type == STREAM_TYPE_DATA) clearPendingIapTunnel(session)
-        if (pendingMicrophone.remove(type) != null) sink.onMicrophoneStopped(type)
         audioMeta.remove(type)
         audioCaptures.remove(type)?.close()
         sink.onAudioStopped(type)
@@ -294,7 +285,6 @@ class CarPlayMediaEngine(
             .forEach { sink.onScreenStreamActive(it.type, false) }
         sessionStreams.forEach { streams.remove(it)?.close() }
         audioMeta.clear()
-        pendingMicrophone.clear()
         audioCaptures.values.forEach(AudioPacketCapture::close)
         audioCaptures.clear()
     }
@@ -316,47 +306,6 @@ class CarPlayMediaEngine(
 
     private fun outputKey(session: AirPlaySession, stream: Map<String, Any?>): ByteArray? {
         return dataStreamKey(session, stream, DATASTREAM_OUTPUT_KEY)
-    }
-
-    private fun microphoneConfig(
-        session: AirPlaySession,
-        type: Int,
-        stream: Map<String, Any?>,
-        format: AudioFormat,
-    ): MicrophoneConfig? {
-        if (!microphoneEnabled || type != STREAM_TYPE_MAIN_AUDIO) return null
-        if (format.audioType != "telephony" && format.audioType != "speechrecognition") return null
-        val port = (stream["dataPort"] as? Number)?.toInt() ?: return null
-        if (port !in 1..65535) return null
-        val host = session.remoteAddress ?: return null
-        val key = dataStreamKey(session, stream, DATASTREAM_INPUT_KEY) ?: return null
-        val formatBits = (stream["audioFormat"] as? Number)?.toLong() ?: 0L
-        val framesPerPacket = (stream["framesPerPacket"] as? Number)?.toInt() ?: 0
-        val frameMillis = if (format.codec == AudioCodecKind.OPUS) {
-            20
-        } else if (framesPerPacket > 0) {
-            Math.round(framesPerPacket * 1000.0 / format.sampleRate).toInt().coerceIn(5, 60)
-        } else {
-            20
-        }
-        val opusBitrate = when {
-            formatBits and OPUS_48K != 0L -> 96_000
-            formatBits and OPUS_24K != 0L -> 64_000
-            else -> 48_000
-        }
-        return MicrophoneConfig(
-            audioType = format.audioType,
-            sampleRate = format.sampleRate,
-            channels = format.channels,
-            payloadType = type,
-            frameMillis = frameMillis,
-            host = host,
-            port = port,
-            key = key,
-            codec = format.codec,
-            bitrate = if (format.codec == AudioCodecKind.OPUS) opusBitrate else null,
-            clockRate = format.rtpClockRate,
-        )
     }
 
     private fun dataStreamKey(
@@ -384,10 +333,7 @@ class CarPlayMediaEngine(
         const val STREAM_TYPE_MAIN_AUDIO = 100
         const val STREAM_TYPE_DATA = 130
         const val DATASTREAM_OUTPUT_KEY = "DataStream-Output-Encryption-Key"
-        const val DATASTREAM_INPUT_KEY = "DataStream-Input-Encryption-Key"
         const val IAP_DATASTREAM_UUID = "E9459FD0-BCAD-4C45-820F-1E72447EF2F2"
-        const val OPUS_24K = 0x20000000L
-        const val OPUS_48K = 0x40000000L
     }
 }
 

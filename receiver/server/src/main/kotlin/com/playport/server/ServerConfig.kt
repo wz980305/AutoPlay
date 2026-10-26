@@ -15,20 +15,18 @@ data class ServerConfig(
     val displayWidth: Int = 1280,
     val displayHeight: Int = 720,
     val displayFps: Int = 60,
-    val uiScale: Int = com.shilapi.xcertplay.airplay.CarPlayUiScale.DEFAULT,
+    /** CarPlay's size as the physical width told to the phone (DisplayState.SIZE_MM): 85 = 300 mm, the Tesla default.
+     *  A Model 3/Y panel is 332 mm wide; its borderless 1920 px stream at 300 mm draws controls ~11 % larger than
+     *  true, which read better from the driver's seat than the 250 mm "standard" (tesla_only_web_delta item 9). */
+    val uiScale: Int = DEFAULT_UI_SCALE,
     val hevc: Boolean = false,
     /** View areas of the display (the page's window shapes) and the one CarPlay starts in. */
     val displayAreas: List<ViewArea> = emptyList(),
     val displayArea: Int = 0,
-    /** Calls and Siri on the car's own Bluetooth (DashPlay car_voice, part of Tesla mode; 2026-10-14): no microphone,
-     *  no call or Siri audio. */
-    val carVoice: Boolean = false,
     val rightHandDrive: Boolean = false,
     val bindAddress: String? = null,
     val identityDir: Path,
     val stateDir: Path,
-    val mfiRemoteServer: String? = null,
-    val mfiRemoteToken: String? = null,
     val wireless: Boolean = false,
     val wifiSsid: String? = null,
     val wifiPassphrase: String? = null,
@@ -36,9 +34,8 @@ data class ServerConfig(
     val wifiSecurity: Iap2WirelessSecurity = Iap2WirelessSecurity.WPA_WPA2,
     val bluetoothDeviceAddress: String? = null,
     val bluetoothBridge: Path? = null,
-    /** iphone-usb-bridge.py: also accept CarPlay from an iPhone on the USB cable (WiredBootstrap). */
-    val usbBridge: Path? = null,
-    val mdns: String = "auto",
+    /** "jmdns" (the default; "auto" from an older config.json means the same) or "off". */
+    val mdns: String = "jmdns",
     val insecureHttp: Boolean = false,
     val accessToken: String = generateToken(),
 ) {
@@ -46,6 +43,7 @@ data class ServerConfig(
 
     companion object {
         private const val TOKEN_BYTES = 16
+        const val DEFAULT_UI_SCALE = 85
 
         fun generateToken(): String {
             val bytes = ByteArray(TOKEN_BYTES).also(SecureRandom()::nextBytes)
@@ -81,13 +79,13 @@ data class ServerConfig(
                     "--fps" -> config = config.copy(displayFps = nextValue(flag).toInt())
                     "--ui-scale" -> config = config.copy(uiScale = com.shilapi.xcertplay.airplay.CarPlayUiScale.sanitize(nextValue(flag).toInt()))
                     "--hevc" -> config = config.copy(hevc = true)
-                    "--car-voice" -> config = config.copy(carVoice = true)
+                    // Calls and Siri are always on the car's own Bluetooth now (AirPlayInfoPlist offers neither):
+                    // the flag the box's launcher still passes is accepted and ignored for one release.
+                    "--car-voice" -> {}
                     "--rhd" -> config = config.copy(rightHandDrive = true)
                     "--bind" -> config = config.copy(bindAddress = nextValue(flag))
                     "--identity-dir" -> config = config.copy(identityDir = Path.of(nextValue(flag)))
                     "--state-dir" -> config = config.copy(stateDir = Path.of(nextValue(flag)))
-                    "--mfi-server" -> config = config.copy(mfiRemoteServer = nextValue(flag))
-                    "--mfi-token" -> config = config.copy(mfiRemoteToken = nextValue(flag))
                     "--wireless" -> config = config.copy(wireless = true)
                     "--wifi-ssid" -> config = config.copy(wifiSsid = nextValue(flag))
                     "--wifi-passphrase" -> config = config.copy(wifiPassphrase = nextValue(flag))
@@ -103,7 +101,6 @@ data class ServerConfig(
                     )
                     "--bt-address" -> config = config.copy(bluetoothDeviceAddress = nextValue(flag))
                     "--bt-bridge" -> config = config.copy(bluetoothBridge = Path.of(nextValue(flag)))
-                    "--usb-bridge" -> config = config.copy(usbBridge = Path.of(nextValue(flag)))
                     "--mdns" -> config = config.copy(mdns = nextValue(flag).lowercase())
                     "--http" -> config = config.copy(insecureHttp = true)
                     "--token" -> config = config.copy(accessToken = nextValue(flag))
@@ -133,22 +130,20 @@ data class ServerConfig(
                   --width <px>              Display width negotiated with the phone (default: 1280)
                   --height <px>             Display height negotiated with the phone (default: 720)
                   --fps <n>                 Display refresh rate (default: 60)
-                  --ui-scale <75|85|100|115>  CarPlay control size: larger canvas, smaller controls (default: 100)
+                  --ui-scale <75|85|100|115>  CarPlay size as physical width 350|300|250|200 mm (default: 85 = 300 mm)
                   --hevc                    Offer H.265/HEVC video (sharper at the same bitrate; browser must support it)
                   --rhd                     Right-hand-drive layout
                   --bind <address>          Bind address (default: auto-detect LAN address)
                   --identity-dir <path>     Directory containing offline-mfi/ (default: ./identity)
                   --state-dir <path>        AirPlay identity + pairing state (default: ~/.playport)
-                  --mfi-server <url>        Remote MFi server address (alternative to offline identity)
-                  --mfi-token <token>       Remote MFi bearer token
                   --wireless                Enable the Bluetooth wireless bootstrap
-                  --wifi-ssid <ssid>        Wi-Fi network the phone should join (default: auto-detect)
+                  --wifi-ssid <ssid>        Wi-Fi network the phone should join (the box's own access point)
                   --wifi-passphrase <pass>  Wi-Fi passphrase handed to the phone
                   --wifi-channel <n>        Wi-Fi channel (default: 0 = unknown)
                   --wifi-security <mode>    open | wpa | wpa2 (default: wpa2)
                   --bt-address <mac>        iPhone Bluetooth address for the wireless bootstrap
-                  --bt-bridge <path>        Path to the macOS bt-bridge helper
-                  --mdns <backend>          auto | dns-sd | jmdns (default: auto)
+                  --bt-bridge <path>        Path to the bt-bridge helper (the box's Bluetooth RFCOMM relay)
+                  --mdns <backend>          jmdns | off (default: jmdns)
                   --http                    Serve the UI over plain HTTP (WebCodecs then only works on localhost)
                   --token <token>           Browser access token (default: generated per start)
                 """.trimIndent(),

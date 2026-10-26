@@ -1,4 +1,5 @@
 import { MusicOutput } from './music-output';
+import { MUSIC_ELEMENT } from './flags';
 import { audioStartTime } from './audio-timing';
 import { AudioCodec, type AudioConfigMessage, type AudioPacketMessage } from './protocol';
 
@@ -66,7 +67,46 @@ export class AudioEngine {
   }
 
   private streamGainValue(name: string): number {
-    return (this.streamGains.get(name) ?? 1) * (name === 'default' ? this.promptBoost : 1);
+    return (this.streamGains.get(name) ?? 1) * (name === 'default' ? this.promptBoost : 1) * (name === 'media' ? this.duckLevel : 1);
+  }
+
+  /** The iPhone's duckAudio/unduckAudio (media_performance_audit #2): the music's gain goes to [level] (1 = as sent)
+   *  over [durationMs], on the Web Audio media gain and, with the music element (MUSIC_ELEMENT), on its volume. A music
+   *  stream that starts while ducked starts ducked. Counted for the viewer log (duckReport). */
+  private duckLevel = 1;
+  private ducks = 0;
+  private unducks = 0;
+  private duckTimer = 0;
+  duck(level: number, durationMs: number): void {
+    const target = Math.min(1, Math.max(0, level)), seconds = Math.min(5000, Math.max(0, durationMs)) / 1000;
+    if (target < 1) this.ducks++; else this.unducks++;
+    this.duckLevel = target;
+    const now = this.context.currentTime;
+    for (const state of this.streams.values()) {
+      if (state.name !== 'media') continue;
+      const gain = state.gain.gain;
+      gain.cancelScheduledValues(now); gain.setValueAtTime(gain.value, now);
+      gain.linearRampToValueAtTime(this.streamGainValue('media'), now + seconds);
+    }
+    // The media element has no ramp of its own: a few steps over the same time.
+    window.clearInterval(this.duckTimer);
+    const elements = Array.from(this.streams.values()).filter(s => s.music).map(s => s.music!);
+    if (!elements.length) return;
+    const steps = Math.max(1, Math.round(seconds * 20)), from = elements.map(m => m.currentVolume);
+    const to = this.masterVolume * (this.streamGains.get('media') ?? 1) * target;
+    let step = 0;
+    this.duckTimer = window.setInterval(() => {
+      step++;
+      elements.forEach((m, i) => m.volume(from[i] + (to - from[i]) * step / steps));
+      if (step >= steps) window.clearInterval(this.duckTimer);
+    }, Math.max(16, (seconds * 1000) / steps));
+  }
+  duckReport(): Record<string, number> {
+    const out: Record<string, number> = {};
+    if (this.ducks) out.ducks = this.ducks;
+    if (this.unducks) out.unducks = this.unducks;
+    this.ducks = 0; this.unducks = 0;
+    return out;
   }
 
   private streamOutput(name: string): AudioNode {
@@ -96,7 +136,7 @@ export class AudioEngine {
   setVolume(volume: number): void {
     this.masterVolume = Math.min(1, Math.max(0, volume));
     this.gain.gain.value = this.masterVolume;
-    for (const state of this.streams.values()) state.music?.volume(this.masterVolume * (this.streamGains.get(state.name) ?? 1));
+    for (const state of this.streams.values()) state.music?.volume(this.masterVolume * (this.streamGains.get(state.name) ?? 1) * this.duckLevel);
   }
 
   setStreamGain(name: string, value: number): void {
@@ -127,17 +167,15 @@ export class AudioEngine {
       nextPlayTime: 0,
       gain: streamGain,
     };
-    // Music through a media element: AAC (stream 102, wireless) as sent; the wired iPhone's LPCM
-    // (stream 100) losslessly as FLAC, since 7 ms Web Audio buffers crackled and gave the head unit no
-    // media session (2026-10-12). Other LPCM (calls, Siri, alerts) stays on Web Audio for low latency.
-    const kind = message.name !== 'media' ? null : message.codec === AudioCodec.AacLc ? 'aac'
-      : message.codec === AudioCodec.Lpcm && message.channels <= 2 && [44100, 48000].includes(message.sampleRate) ? 'flac' : null;
+    // Music through a media element (MUSIC_ELEMENT, flags.ts): AAC (stream 102) as sent. LPCM (prompts, alerts,
+    // "media" PCM) stays on Web Audio for low latency; without the element AAC decodes into Web Audio below.
+    const kind = MUSIC_ELEMENT && message.name === 'media' && message.codec === AudioCodec.AacLc ? 'aac' : null;
     if (kind && MusicOutput.supported(kind)) {
       try {
         state.music = (this.retainedMusic && this.retainedConfig === MusicOutput.key(message, kind) ? this.retainedMusic : new MusicOutput(message, this.onError, kind));
         if (this.retainedMusic && this.retainedMusic !== state.music) this.retainedMusic.close();
         this.retainedMusic = null;
-        state.music.volume(this.masterVolume * (this.streamGains.get(state.name) ?? 1));
+        state.music.volume(this.masterVolume * (this.streamGains.get(state.name) ?? 1) * this.duckLevel);
         this.streams.set(message.streamType, state);
         void state.music.unlock().catch(() => {});
         return;

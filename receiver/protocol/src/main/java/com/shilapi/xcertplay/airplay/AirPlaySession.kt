@@ -21,6 +21,8 @@ data class AirPlayDeviceInfo(
     val deviceId: String,
     val wifiMac: String,
     val model: String,
+    /** iOS version as the phone states it in SETUP ("27.0.1"), "" when absent; day/night differs by major (CarPlayServer). */
+    val osVersion: String = "",
 )
 
 /** Session lifecycle and command callbacks for the driver/UI layer. */
@@ -254,11 +256,15 @@ class AirPlaySession(
         sendPendingNightModeLocked()
     }
 
+    /** setNightMode always (iOS 26 follows it); with [AirPlayConfig.appearanceUpdates] the iOS 27 appearance updates too. */
     private fun sendPendingNightModeLocked(): Boolean {
         val night = pendingNightMode ?: return true
-        val sent = sendCommandLocked(
+        var sent = sendCommandLocked(
             linkedMapOf("type" to "setNightMode", "params" to linkedMapOf("nightMode" to night)),
         )
+        if (sent && config.appearanceUpdates) {
+            for (command in AirPlayInfoPlist.appearanceCommands(night)) sent = sendCommandLocked(command) && sent
+        }
         if (sent) pendingNightMode = null
         return sent
     }
@@ -466,7 +472,7 @@ class AirPlaySession(
         debugLog(AirPlayPeerDiagnostics.summary(model, string(dict["osVersion"]), string(dict["sourceVersion"])))
         if (deviceId.isNotEmpty()) deviceBtMac = deviceId
         if (name.isNotEmpty() || deviceId.isNotEmpty() || wifiMac.isNotEmpty()) {
-            listener.onDeviceInfo(this, AirPlayDeviceInfo(name, deviceId, wifiMac, model))
+            listener.onDeviceInfo(this, AirPlayDeviceInfo(name, deviceId, wifiMac, model, string(dict["osVersion"])))
         }
 
         val peerTimingPort = long(dict["timingPort"])?.toInt() ?: 0
