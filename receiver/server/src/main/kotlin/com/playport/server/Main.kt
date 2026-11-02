@@ -106,4 +106,4 @@ fun main(args: Array<String>) {
 }
 
 private fun projectVersion(): String =
-    CarPlayServer::class.java.`package`?.implementationVersion ?: "1.0.1"
+    CarPlayServer::class.java.`package`?.implementationVersion ?: "1.1.0"

@@ -1,5 +1,7 @@
 # AutoPlay
 
+> **1.1.0 (2026-11-02):** every sound goes over the Tesla's Bluetooth by default (new uci `audio_route_navigation`; `carplay` keeps prompts on the page), the page never plays music; DashPlay 10.26-11.01's F50 Bluetooth, idle-grace, AppCDS and certificate-issuance fixes brought in. Four Kotlin files changed without a compiler (`receiver/docs/UNVERIFIED-KOTLIN.md`). See [`docs/AUDIO.md`](docs/AUDIO.md) and [`CHANGELOG.md`](CHANGELOG.md).
+
 > **1.0.1 (2026-11-02):** wrap-up of 1.0.0: tests and Chinese LuCI strings for the DNSPod provider, two stale assertions fixed, the install script keeps an owner's 149-165 channel, real-car facts recorded in the docs; new [`docs/AUDIO.md`](docs/AUDIO.md) on which sounds go over Bluetooth and which through the page. Same features as 1.0.0.
 
 > **1.0.0 (2026-11-02):** The first release validated in a Tesla. Adds Tencent Cloud (DNSPod) support for the own-domain certificate (alongside DuckDNS), and pins the 5 GHz Wi-Fi to China / channel 149 (the vendor image ships country TR, whose rules have no 149–165, which is why a Tesla could not see the hotspot). Receiver, web and OpenWrt package versions are now 1.0.0. Earlier 0.1.x notes below are historical.

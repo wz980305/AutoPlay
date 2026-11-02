@@ -5,5 +5,5 @@ plugins {
 
 allprojects {
     group = "com.playport"
-    version = "1.0.1"
+    version = "1.1.0"
 }

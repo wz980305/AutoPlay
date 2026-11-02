@@ -10,6 +10,7 @@
 # 本仓库的工具
 python3 -m unittest discover -s tools/f50
 python3 -m unittest discover -s openwrt/tests      # 安装脚本 90-autoplay-tesla 对着假 uci（1.0.1）
+# 1.1.0 的四个 Kotlin 改动未在编写环境编译：./gradlew build 是上车前的第一步（receiver/docs/UNVERIFIED-KOTLIN.md）
 
 # 盒子侧：设置页、状态模型、守护（supervision）、升级日志与回滚、证书退避、时钟下限、出厂重置、平台、诊断、装机脚本
 cd box && python3 -m unittest discover -s tests/onecloud        # 225 个，通过（0.1.0 合并时在本机跑过）

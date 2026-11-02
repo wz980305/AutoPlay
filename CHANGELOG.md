@@ -2,6 +2,17 @@
 
 格式参考 Keep a Changelog；版本号从 0.1.0 起，1.0 之前不承诺兼容性。
 
+## [1.1.0] — 2026-11-02 — 声音走蓝牙；上游 10.26–11.01 的可靠性修复
+
+**接收端四个 Kotlin 文件改动未经编译**（没有 Gradle 网络），清单见 `receiver/docs/UNVERIFIED-KOTLIN.md`；拿到有网的机器先 `cd receiver && ./gradlew build`。
+
+- **声音（ADR-14，`docs/AUDIO.md`）**：新增 uci `audio_route_navigation`，**默认 `bluetooth`**——接收端不向 iPhone 提供任何 CarPlay 音频（`AirPlayConfig.disableAudioOutput`），音乐、导航播报、通话、Siri 全部经特斯拉蓝牙播出，页面无声、隐藏解锁条和音量、不打开音频输出；`carplay` 为备选（页面播导航，1.0.x 的做法）。LuCI「iPhone → 导航播报」切换；盒子设置页新增「声音」格显示当前模式；`run-receiver --audio-route-navigation`、`receiver-access.json` 的 `audioRouteNavigation`、`boot.ts playportPageAudio`。
+- **网页不再播放音乐**（两种模式都如此；上游 2026-11-01 实车：行驶中的特斯拉对播音乐的网页弹横幅→页面尺寸变化→CarPlay 每约 10 秒重协商）：`media` 类型的流丢弃并计数（`musicDropped`），提示一次"请在 iPhone 控制中心把音频输出选为特斯拉"；删除 `music-output.ts`、`aac-mp4.ts`、`MUSIC_ELEMENT`（ADR-5 冻结项结束）。
+- **F50 蓝牙与接收端（上游 10.25.1–10.31.3）**：hci0 出现后解除所有蓝牙 rfkill 的软阻塞（BlueZ 5.83 会让 hci0 带阻塞上线），硬阻塞给出 `rfkill-hard` 原因；蓝牙桥 ConnectProfile 超时后先清掉 BlueZ 残留的挂起请求再做链路恢复；配对代理加"代际"保护，BlueZ 取消一次确认后上一次尝试的迟到回调不能确认或清掉下一部手机的请求；每个被接受的 AirPlay 连接拿到完整的空闲宽限（`IdleReleaseTimer`，首次配对/换手机不再被上一部手机的空闲时间切断）；`cds.log` 出现 "invalid archive" 时删除被截断的 AppCDS 归档（否则每次启动多约 3 秒）。
+- **域名证书（上游 10.26–10.31）**：申请前先确认有默认路由、DNS 服务商和 CA 都能解析，否则 15 秒后再看且不计失败（开机首轮不再白白吃掉 60 秒退避）；acme.sh 的每个请求经 curl 壳加 `--connect-timeout 10 --max-time 90 --retry 2`（固定版本的 acme.sh 本身不改）；失败原因改为代码（`curl<N>`、`timeout`、`network`、`certificate`、`acme`），设置页据此给出文字；`docs/STATUS-MODEL.md` 同步。
+- 测试：盒子侧 261 个（+12），网页 `check-car` 的音乐段改为"丢弃音乐"规则并修正兼容显示段对 `document` 的隐式依赖；Kotlin 测试 +6（未运行）。
+- 版本：接收端、网页包、OpenWrt 包 1.1.0；LuCI 依赖 `autoplay (>=1.1.0)`。
+
 ## [1.0.1] — 2026-11-02 — 1.0.0 的收尾
 
 以 1.0.0 的实车版本为基线，不改功能和架构；接收端只改了一个版本字符串，需要重新编译才会得到 `server-1.0.1.jar`。

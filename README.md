@@ -1,5 +1,7 @@
 # AutoPlay
 
+> **1.1.0（2026-11-02）：** 声音默认全部走特斯拉蓝牙（新 uci `audio_route_navigation`，`carplay` 为备选），网页不再播放音乐；引入 DashPlay 10.26–11.01 的 F50 蓝牙、空闲宽限、AppCDS 和证书申请可靠性修复。四个 Kotlin 文件未经编译（`receiver/docs/UNVERIFIED-KOTLIN.md`）。说明见 [`docs/AUDIO.md`](docs/AUDIO.md)、[`CHANGELOG.md`](CHANGELOG.md)。
+
 > **1.0.1（2026-11-02）：** 1.0.0 的收尾：补齐 DNSPod 的测试与中文翻译、修正两个过期断言、安装脚本保留车主选的 149–165 信道、文档记录实车事实；新增 [`docs/AUDIO.md`](docs/AUDIO.md) 说明哪些声音走蓝牙、哪些走网页。功能与 1.0.0 相同。
 
 > **1.0.0（2026-11-02）：** 首个在特斯拉车内实测通过的版本。新增腾讯云（DNSPod）自有域名证书支持（与 DuckDNS 并存），无线固定为中国区 CN / 信道 149（特斯拉搜不到热点的根因是厂商镜像国家码 TR 不含 149–165）。接收端、网页包、OpenWrt 包版本统一为 1.0.0。下文 0.1.x 说明是历史记录。

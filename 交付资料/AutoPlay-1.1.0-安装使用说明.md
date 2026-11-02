@@ -1,7 +1,7 @@
-# AutoPlay 1.0.1 安装 / 卸载 / 使用说明
+# AutoPlay 1.1.0 安装 / 卸载 / 使用说明
 
 > 适用：中兴 F50（MU300，已 Root + OpenWrt 25.12，内核 5.4）上的无线 CarPlay，画面投到特斯拉车机浏览器。
-> 1.0.0 是**首个在特斯拉车内实测通过的版本**（无线 CarPlay 画面、触摸、导航播报已验证）；1.0.1 是它的收尾：功能相同，补测试、翻译、文档，安装脚本保留车主选的信道。声音分路（哪些走蓝牙、哪些走网页）见 `docs/AUDIO.md`。
+> 1.0.0 是**首个在特斯拉车内实测通过的版本**（无线 CarPlay 画面、触摸、导航播报已验证）；1.0.1 是它的收尾；**1.1.0 把声音默认全部交给特斯拉蓝牙**（见第三节），并引入 DashPlay 10.26–11.01 的可靠性修复。接收端四个 Kotlin 文件在 1.1.0 里未经编译，第一次构建时留意 `receiver/docs/UNVERIFIED-KOTLIN.md`。
 
 ---
 
@@ -20,12 +20,12 @@ cd receiver && ./gradlew :server:installDist
 # 编译投屏页
 cd web && npm ci && npm run build
 # 打程序包
-AUTOPLAY_VERSION=1.0.1 sh box/scripts/build-bundle.sh autoplay-bundle.tar
+AUTOPLAY_VERSION=1.1.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 # 用 Docker SDK 打 apk
 sh openwrt/scripts/build-packages.sh out/ autoplay-bundle.tar
 ```
 
-产物在 `out/`：`autoplay-1.0.1-r1.apk`、`autoplay-jre-*_<架构>.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk`。
+产物在 `out/`：`autoplay-1.1.0-r1.apk`、`autoplay-jre-*_<架构>.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk`。
 
 ### 3. 装到 F50（手动路线）
 ```sh
@@ -76,7 +76,22 @@ uci commit autoplay
 
 ---
 
-## 三、卸载
+## 三、声音（1.1.0）
+
+默认 **所有声音走特斯拉蓝牙**：盒子不向 iPhone 提供 CarPlay 音频，音乐、导航播报、通话、Siri 全部由 iPhone 经特斯拉蓝牙播出，CarPlay 页面无声。前提：iPhone 连着特斯拉蓝牙并被选为媒体来源；没连时声音会从 iPhone 自己出来。
+
+经蓝牙听不到导航播报时，改为页面播放（1.0.x 的做法，上车后要轻点页面一次开声音）：LuCI「服务 → AutoPlay → iPhone → 导航播报」选「在 CarPlay 页面」，或
+
+```sh
+uci set autoplay.main.audio_route_navigation=carplay   # 改回：bluetooth
+uci commit autoplay && /etc/init.d/autoplay restart
+```
+
+两种模式下页面都不再播放音乐（行驶中的特斯拉会对播音乐的网页弹横幅并让 CarPlay 反复重连）。细节见 `docs/AUDIO.md`。
+
+---
+
+## 四、卸载
 
 ```sh
 apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
@@ -86,7 +101,7 @@ apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
 
 ---
 
-## 四、使用
+## 五、使用
 
 | 入口 | 地址 |
 |---|---|
@@ -99,9 +114,10 @@ apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
 2. **iPhone**：连特斯拉蓝牙并设为媒体来源（音乐/通话/Siri 走特斯拉蓝牙）。
 3. **车机 Wi-Fi**：打开「行驶中保持连接」，连 F50 的热点（SSID 见 LuCI「网络 → 无线」）。
 4. iPhone 靠近盒子，蓝牙 iAP2 自动引导连上 F50 热点。
-5. 车机浏览器打开 `https://<域名>:18443/`，即看到 CarPlay 画面；触摸回传，轻点开启声音。
+5. 车机浏览器打开 `https://<域名>:18443/`，即看到 CarPlay 画面；触摸回传。默认模式下页面无声，所有声音从特斯拉蓝牙出来，不需要轻点。
 
 ### 关键注意
 - 蓝牙必须用私有 BlueZ，**不要 `apk add bluez-daemon`**（会带入不匹配的 6.12 内核模块）。
+- **1.1.0 上车第一件事**：开一段导航，确认播报从车机扬声器出来、第一个字没被吃掉；来电、Siri 照常。听不到就切回页面播报（第三节）。
 - 盒子需长期有 SIM（证书续期 + 特斯拉联网检测）。
 - **在线升级目前不可用**：`update.py` 校验发布签名，而项目还没有自己的发布密钥和软件源（仓库里的公钥仍是上游 DashPlay 的），设置页「程序更新」会报找不到或拒绝。升级请按第一节手动 `apk add` 新包（配对、证书、认证身份都在 `/opt/autoplay/` 下保留）；勿手动覆盖 `/opt/autoplay/{state,identity}`。

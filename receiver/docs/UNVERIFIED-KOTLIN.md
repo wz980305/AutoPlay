@@ -2,6 +2,16 @@
 
 > Superseded for compilation by 0.1.1 (2026-10-31): both modules now build and local tests pass on JDK 21. Hardware-dependent checks below remain open. See `../../docs/AUDIT-0.1.1.md`. This document preserves the original 0.1.0 audit history.
 
+> **1.1.0 (2026-11-02): four Kotlin files changed again without a compiler at hand** (same reason: no Gradle
+> dependency network where they were written). First thing on a machine with JDK 21: `cd receiver && ./gradlew build`.
+>
+> | File | Change | Risk |
+> |---|---|---|
+> | `server/.../CarPlayServer.kt` | `IdleReleaseTimer` class (top level, `internal`) and the supervisor thread using it instead of `viewerSeenAt`/`parked`; `disableAudioOutput = config.audioOverBluetooth` in `airPlayConfig` | Mechanical port of DashPlay `playport-idle-new-session-grace`; `activeSession` is read as `Any?` |
+> | `server/.../ServerConfig.kt` | `audioRouteNavigation` field, `audioOverBluetooth` getter, `AUDIO_ROUTE_*` constants, `audioRoute()` validator, `--audio-route-navigation` flag and usage line | `require(...)` throws IllegalArgumentException on a bad value, as the other flags do with NumberFormatException |
+> | `server/src/test/.../IdleReleaseTest.kt` | +4 tests from upstream | — |
+> | `server/src/test/.../AudioCapabilitiesTest.kt` | +2 tests: both routes' `/info`, flag parsing | `info["features"] as Long` relies on `CARPLAY_FEATURES` being a Long constant (it is: `0x615653aee2L`) |
+
 The machine this series was written on had no network: Gradle could not resolve the Kotlin plugin or any
 dependency, so **no Kotlin in this branch has been compiled or tested**. The web side was verified (`tsc`, esbuild,
 `check*.mjs`); the Kotlin side was kept mechanical, reviewed twice per commit, and every deletion was followed by a
