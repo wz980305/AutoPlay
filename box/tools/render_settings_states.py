@@ -30,7 +30,7 @@ state = root / "state"
 BASE = dict(mode="openwrt", ssid="AutoPlay-5G", home="http://100.96.0.1:18080/", identity=True,
             entries=["https://car.example.com:18443/", "https://100.96.0.1:18443/"], name="car.example.com",
             own_name="car.example.com", version="1.2.0", audio_route="bluetooth")
-PHONES = {"AA:BB:CC:DD:EE:01": "小王的 iPhone", "AA:BB:CC:DD:EE:02": "家人的 iPhone"}
+PHONES = {"02:00:00:00:00:01": "小王的 iPhone", "02:00:00:00:00:02": "家人的 iPhone"}
 LIVE = {"bluetooth": ("on", None), "identity": ("provided", None), "phone": ("live", None),
         "certificate": ("ok", None, {"not_after": "2027-01-28"}), "uplink": ("online", None)}
 
@@ -66,22 +66,22 @@ def unfold(html, index):
 states = {
     "fresh": make({"identity": False}, cert={"bluetooth": ("on", None), "identity": ("missing", None),
                                             "certificate": ("issuing", "route")}),
-    "live": make({}, devices=PHONES, presence={"active": "AA:BB:CC:DD:EE:01", "last_phone": "AA:BB:CC:DD:EE:02"},
+    "live": make({}, devices=PHONES, presence={"active": "02:00:00:00:00:01", "last_phone": "02:00:00:00:00:02"},
                  cert={**LIVE, "update": ("available", None, {"version": "1.3.0"})}),
-    "pair-waiting": make({}, pair={"phase": "waiting", "found": [{"address": "AA:BB:CC:DD:EE:03", "name": "iPhone 15 Pro"}], "error": ""},
+    "pair-waiting": make({}, pair={"phase": "waiting", "found": [{"address": "02:00:00:00:00:03", "name": "iPhone 15 Pro"}], "error": ""},
                          cert={"bluetooth": ("on", None), "identity": ("provided", None)}),
     "pair-confirm": make({}, pair={"phase": "confirm", "name": "iPhone 15 Pro", "passkey": "482913", "request_id": "r1"},
                          cert={"bluetooth": ("on", None), "identity": ("provided", None)}),
-    "bt-failed": make({}, devices={"AA:BB:CC:DD:EE:01": "小王的 iPhone"},
+    "bt-failed": make({}, devices={"02:00:00:00:00:01": "小王的 iPhone"},
                       cert={"bluetooth": ("failed", "controller-init-failed", {"retry_in": 60}), "identity": ("provided", None),
                             "certificate": ("expiring_soon", None, {"not_after": "2026-11-20"}), "uplink": ("offline", None)}),
-    "ask-remove": make({}, devices=PHONES, presence={"active": "AA:BB:CC:DD:EE:01"}, cert=LIVE,
-                       query="ask=remove&phone=AA%3ABB%3ACC%3ADD%3AEE%3A02"),
+    "ask-remove": make({}, devices=PHONES, presence={"active": "02:00:00:00:00:01"}, cert=LIVE,
+                       query="ask=remove&phone=02%3A00%3A00%3A00%3A00%3A02"),
     "ask-install": make({}, devices=PHONES, cert=LIVE, query="ask=install",
                         update_check={"available": True, "online": True, "latest": "1.3.0", "current": "1.2.0",
                                       "checked_at": 1_793_500_000, "notes": "修复若干问题"}),
 }
-states["live-open"] = unfold(make({}, devices=PHONES, presence={"active": "AA:BB:CC:DD:EE:01", "last_phone": "AA:BB:CC:DD:EE:02"},
+states["live-open"] = unfold(make({}, devices=PHONES, presence={"active": "02:00:00:00:00:01", "last_phone": "02:00:00:00:00:02"},
                                   cert=LIVE), 1)
 for name, html in states.items():
     (OUT / f"box-{name}.html").write_text(html)

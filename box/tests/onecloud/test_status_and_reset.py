@@ -169,28 +169,28 @@ class PageBannerTests(unittest.TestCase):
 
     def test_removing_a_phone_is_confirmed_on_the_page_not_in_a_browser_box(self):
         """1.2.0: a car browser draws confirm() at the OS size or not at all, so the question is a screen of the page."""
-        self.page.pairing.devices = lambda: {"AA:BB:CC:DD:EE:01": "小王的 iPhone"}
+        self.page.pairing.devices = lambda: {"02:00:00:00:00:01": "小王的 iPhone"}
         removed = []
         self.page.pairing.remove = removed.append
         nonce = self.page.pairing.nonce
         self.assertNotIn("confirm(", self.page.render(""))
         self.assertIn("删除此 iPhone…", self.page.render(""))
         # first press: nothing removed, the redirect asks for the confirmation screen
-        reply = self.page.apply("/pair", {"nonce": nonce, "action": "remove", "phone": "AA:BB:CC:DD:EE:01"})
-        self.assertEqual(reply, {"ask": "remove", "phone": "AA:BB:CC:DD:EE:01"})
+        reply = self.page.apply("/pair", {"nonce": nonce, "action": "remove", "phone": "02:00:00:00:00:01"})
+        self.assertEqual(reply, {"ask": "remove", "phone": "02:00:00:00:00:01"})
         self.assertEqual(removed, [])
-        html = self.page.render("ask=remove&phone=AA%3ABB%3ACC%3ADD%3AEE%3A01")
+        html = self.page.render("ask=remove&phone=02%3A00%3A00%3A00%3A00%3A01")
         self.assertIn("从盒子上删除这部 iPhone？", html)
         self.assertIn("小王的 iPhone", html)
         self.assertIn('name=confirmed value="1"', html)
         self.assertNotIn("我的 iPhone", html, "the question is the whole screen")
         # second press carries the confirmation
-        reply = self.page.apply("/pair", {"nonce": nonce, "action": "remove", "phone": "AA:BB:CC:DD:EE:01", "confirmed": "1"})
+        reply = self.page.apply("/pair", {"nonce": nonce, "action": "remove", "phone": "02:00:00:00:00:01", "confirmed": "1"})
         self.assertIn("已从盒子上删除", reply)
-        self.assertEqual(removed, ["AA:BB:CC:DD:EE:01"])
+        self.assertEqual(removed, ["02:00:00:00:00:01"])
         # a phone that is gone: no question, the normal page
         self.page.pairing.devices = lambda: {}
-        self.assertIn("我的 iPhone", self.page.render("ask=remove&phone=AA%3ABB%3ACC%3ADD%3AEE%3A01"))
+        self.assertIn("我的 iPhone", self.page.render("ask=remove&phone=02%3A00%3A00%3A00%3A00%3A01"))
 
     def test_an_update_is_confirmed_on_the_page_too(self):
         nonce = self.page.pairing.nonce

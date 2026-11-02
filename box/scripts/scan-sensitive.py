@@ -17,7 +17,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 # Documented example values that are safe to keep (test fixtures, RFC/locally-administered samples).
-ALLOWED_MACS = {"12:34:56:78:9A:BC", "02:11:22:33:44:55", "AA:BB:CC:DD:EE:FF", "00:00:00:00:00:00"}
+ALLOWED_MACS = {"12:34:56:78:9A:BC", "02:11:22:33:44:55", "AA:BB:CC:DD:EE:FF", "00:00:00:00:00:00", "00:11:22:33:44:55"}
 # Chip defaults that vendor firmware gives every unit alike, published in linux-firmware (BCM43455 nvram files,
 # BCM4345C0 patch): they identify no box or person. platform_debian.py replaces them with per-box addresses.
 ALLOWED_MACS |= {"B8:27:EB:74:F2:6C", "00:90:4C:C5:12:38", "43:45:C0:00:1F:AC"}
