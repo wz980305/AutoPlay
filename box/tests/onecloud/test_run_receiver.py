@@ -77,6 +77,25 @@ class AccessFileTests(unittest.TestCase):
         self.assertIn("--prime-cds", source)
 
 
+class CdsArchiveTests(unittest.TestCase):
+    """A truncated AppCDS archive (JVM restarted mid-dump) is refused on every later start and never replaced."""
+
+    def test_a_refused_archive_is_dropped_so_the_jvm_dumps_a_fresh_one(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            (state / "app-cds.jsa").write_bytes(b"x" * 10)
+            (state / "cds.log").write_text("[0.012s][info][cds] An error has occurred while processing the shared archive file.\n"
+                                           "[0.012s][info][cds] invalid archive: header checksum mismatch\n")
+            self.assertTrue(run_receiver.drop_broken_cds_archive(state))
+            self.assertFalse((state / "app-cds.jsa").exists())
+            (state / "app-cds.jsa").write_bytes(b"x" * 10)
+            (state / "cds.log").write_text("[0.5s][info][cds] Mapped static region #0 at base 0x... top 0x...\n")
+            self.assertFalse(run_receiver.drop_broken_cds_archive(state))
+            self.assertTrue((state / "app-cds.jsa").exists(), "a healthy archive stays")
+            (state / "cds.log").unlink()
+            self.assertFalse(run_receiver.drop_broken_cds_archive(state), "no log (first start): nothing to judge")
+
+
 class RedactionTest(unittest.TestCase):
     def test_a_password_the_trace_escaped_is_still_hidden(self):
         # The iAP2 trace prints strings escaped (\" and \\): a password with those characters was not found by a

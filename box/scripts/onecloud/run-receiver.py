@@ -74,6 +74,20 @@ def write_browser_access(root, token, settings_port=18080, tesla=True, audio_rou
     return True
 
 
+def drop_broken_cds_archive(state):
+    """A dump interrupted by a restart leaves a truncated archive that the JVM then refuses ("bad magic number",
+    "invalid archive") and never replaces, costing ~3 s on every start (DashPlay dp-0017, 2026-10-31: 3.9 MB instead
+    of ~39 MB). The previous start's -Xlog:cds says so; drop the archive and the JVM dumps a fresh one on exit."""
+    log = state / "cds.log"
+    try:
+        if log.exists() and any(mark in log.read_text(errors="replace") for mark in ("invalid archive", "bad magic number")):
+            (state / "app-cds.jsa").unlink(missing_ok=True)
+            return True
+    except OSError:
+        pass
+    return False
+
+
 # The iAP2 trace's Wi-Fi configuration field, a quoted string with " and \ escaped.
 PASSPHRASE_FIELD = re.compile(r'(passphrase:\s*)"(?:[^"\\]|\\.)*"')
 
@@ -187,6 +201,7 @@ def main():
     if not stamp.exists() or stamp.read_text() != fingerprint:
         (state / "app-cds.jsa").unlink(missing_ok=True)
         stamp.write_text(fingerprint)
+    drop_broken_cds_archive(state)
     crash = state / "crash"
     crash.mkdir(exist_ok=True)
     options = [

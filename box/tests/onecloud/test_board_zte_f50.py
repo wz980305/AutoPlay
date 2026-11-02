@@ -1,4 +1,5 @@
 from pathlib import Path
+import tempfile
 import subprocess
 import sys
 import time
@@ -54,3 +55,34 @@ class StopChildrenTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RfkillTests(unittest.TestCase):
+    """F50/MU300: hci0 can come up soft-blocked (DashPlay 2026-10-25); unblock by type after hci0, never a fixed index."""
+
+    def make(self, *radios):
+        tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        for name, kind, soft, hard in radios:
+            node = root / name; node.mkdir()
+            (node / "type").write_text(kind + "\n"); (node / "soft").write_text(soft + "\n"); (node / "hard").write_text(hard + "\n")
+        return root
+
+    def test_unblocks_the_soft_blocked_bluetooth_nodes_and_leaves_wifi_alone(self):
+        root = self.make(("rfkill0", "wlan", "1", "0"), ("rfkill1", "bluetooth", "0", "0"), ("rfkill5", "bluetooth", "1", "0"))
+        self.assertEqual(board_zte_f50.unblock_rfkill(root), ["rfkill5", "rfkill1"])
+        self.assertEqual((root / "rfkill5" / "soft").read_text().strip(), "0")
+        self.assertEqual((root / "rfkill0" / "soft").read_text().strip(), "1", "the Wi-Fi radio is not touched")
+        self.assertEqual(board_zte_f50.unblock_rfkill(root), ["rfkill1", "rfkill5"], "idempotent: nothing left to unblock")
+
+    def test_a_hard_block_and_a_missing_node_stop_the_helper(self):
+        with self.assertRaisesRegex(SystemExit, "hard-blocked"):
+            board_zte_f50.unblock_rfkill(self.make(("rfkill2", "bluetooth", "1", "1")))
+        with self.assertRaisesRegex(SystemExit, "not found"):
+            board_zte_f50.unblock_rfkill(self.make(("rfkill0", "wlan", "0", "0")))
+
+    def test_the_reason_words_cover_the_new_exits(self):
+        import supervisor_openwrt
+        self.assertEqual(supervisor_openwrt.helper_reason("Bluetooth rfkill not found after hci0\n"), "rfkill")
+        self.assertEqual(supervisor_openwrt.helper_reason("Bluetooth rfkill unblock failed (soft is still 1, rfkill5)\n"), "rfkill")
+        self.assertEqual(supervisor_openwrt.helper_reason("Bluetooth is hard-blocked (rfkill hard=1, rfkill5)\n"), "rfkill-hard")

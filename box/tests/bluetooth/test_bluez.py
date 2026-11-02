@@ -278,6 +278,34 @@ class BlueZTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(b'RFCOMM connected', err)
         self.assertNotIn(b'Traceback', err)
 
+    async def test_timeout_clears_pending_request_before_next_invitation(self):
+        # DashPlay 2026.10.26: a timed-out ConnectProfile left a pending BlueZ request; the next invitation then
+        # failed with br-connection-busy first. The timeout path now cancels it (Device1.Disconnect; pairing kept).
+        self.mode = 'connect-hang'
+        self.data[DEVICE]['org.bluez.Device1']['Connected'] = Variant('b', False)
+        with tempfile.TemporaryDirectory() as directory:
+            env = {'BT_BRIDGE_RECOVERY_STATE': str(Path(directory) / 'recovery')}
+            code, out, err = await self.result('--timeout', '0.3', '--address', ADDRESS, env_extra=env)
+            self.assertEqual(code, 1)
+            self.assertIn(b'RFCOMM connection timed out', err)
+            self.assertEqual(self.device_disconnects, [DEVICE])
+            self.assertEqual(self.powered, [], 'no power cycle for a stale request')
+            self.assertTrue(self.data[DEVICE]['org.bluez.Device1']['Paired'].value)
+
+    async def test_timeout_does_not_cancel_during_pairing_or_discovery(self):
+        self.mode = 'connect-hang'
+        self.data[DEVICE]['org.bluez.Device1']['Connected'] = Variant('b', False)
+        with tempfile.TemporaryDirectory() as directory:
+            for key in ('Pairable', 'Discoverable', 'Discovering'):
+                with self.subTest(key=key):
+                    self.data[ADAPTER]['org.bluez.Adapter1'][key] = Variant('b', True)
+                    code, out, err = await self.result('--timeout', '0.3', '--address', ADDRESS,
+                                                       env_extra={'BT_BRIDGE_RECOVERY_STATE': str(Path(directory) / 'recovery')})
+                    self.assertEqual(code, 1)
+                    self.assertIn(b'RFCOMM connection timed out', err)
+                    self.assertEqual((self.device_disconnects, self.powered), ([], []))
+                    self.data[ADAPTER]['org.bluez.Adapter1'][key] = Variant('b', False)
+
     async def test_held_request_without_opt_in_still_fails_plainly(self):
         self.mode = 'held-request'
         code, out, err = await self.result('--address', ADDRESS)

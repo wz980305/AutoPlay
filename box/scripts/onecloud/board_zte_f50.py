@@ -80,6 +80,30 @@ def stop_children(children, timeout=6):
             child.wait()
 
 
+def unblock_rfkill(root=Path("/sys/class/rfkill")):
+    """The hci0 controller can come up soft-blocked (F50/MU300 with BlueZ 5.83, DashPlay 2026-10-25): bluetoothd then
+    cannot power it and every power attempt fails. Once hci0 exists, unblock every Bluetooth rfkill that is
+    soft-blocked, matched by type (never a fixed index: the Wi-Fi radio has one too, and the F50 has two of type
+    bluetooth, the combo chip's function and hci0's own); a hard block is a hardware/operator matter.
+    Returns the names of the Bluetooth rfkills, the unblocked ones first."""
+    radios = sorted((p for p in Path(root).glob("rfkill*") if (p / "type").read_text().strip() == "bluetooth"),
+                    key=lambda p: int(p.name[6:]) if p.name[6:].isdigit() else 0)
+    if not radios:
+        raise SystemExit("Bluetooth rfkill not found after hci0")
+    unblocked, left = [], []
+    for radio in radios:
+        if (radio / "hard").read_text().strip() != "0":
+            raise SystemExit(f"Bluetooth is hard-blocked (rfkill hard=1, {radio.name})")
+        if (radio / "soft").read_text().strip() == "0":
+            left.append(radio.name)
+            continue
+        (radio / "soft").write_text("0\n")
+        if (radio / "soft").read_text().strip() != "0":
+            raise SystemExit(f"Bluetooth rfkill unblock failed (soft is still 1, {radio.name})")
+        unblocked.append(radio.name)
+    return unblocked + left
+
+
 def kill_leftovers(runtime):
     """dbus-daemon, btattach and bluetoothd of this BlueZ left by a helper that was killed: they keep hci0."""
     for proc in Path("/proc").glob("[0-9]*"):
@@ -188,7 +212,9 @@ def main():
         start("btattach", [str(runtime / "usr/bin/btattach"), "-B", str(TTY), "-P", "h4"])
         start("bluetoothd", [str(runtime / "usr/bin/bluetoothd"), "-n", "-f", str(BUS / "bluez.conf")])
         wait_for(Path("/sys/class/bluetooth/hci0").exists, 15)
-        print("F50 Bluetooth ready", flush=True)
+        wait_for(lambda: any((p / "type").read_text().strip() == "bluetooth" for p in Path("/sys/class/rfkill").glob("rfkill*")), 5)
+        radios = unblock_rfkill()
+        print(f"F50 Bluetooth ready (rfkill {', '.join(radios)} unblocked)", flush=True)
         while not stopped:
             for name, child in children:
                 if child.poll() is not None:

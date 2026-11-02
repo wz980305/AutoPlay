@@ -122,3 +122,21 @@ class AttemptDeadlineTests(unittest.TestCase):
         self.assertEqual(attempt_deadline(180, now=WINDOW_LIMIT_SECONDS - 5, opened=0), WINDOW_LIMIT_SECONDS)
 
 if __name__=='__main__':unittest.main()
+
+
+class AgentGenerationGuardTest(unittest.TestCase):
+    """The BlueZ agent is a closure over a live bus and cannot run here; the guard against a cancelled attempt's
+    late reply confirming the next phone (DashPlay 2026.10.31) is checked in the source instead (sed-proof)."""
+
+    def test_cancel_invalidates_the_attempt_and_late_callbacks_check_the_generation(self):
+        import re
+        source = (Path(__file__).resolve().parents[2] / "scripts/onecloud/pairing_window.py").read_text()
+        cancel = re.search(r"def Cancel\(self\):(.*?)@method\(\)", source, re.S).group(1)
+        self.assertIn("attempt_generation += 1", cancel)
+        self.assertIn("selected, confirmed = None, False", cancel)
+        confirmation = re.search(r"async def RequestConfirmation\(.*?\n        @method\(\)", source, re.S).group(0)
+        self.assertIn("generation = attempt_generation", confirmation)
+        self.assertIn("generation == attempt_generation", confirmation, "the wait loop stops on Cancel")
+        self.assertIn("org.bluez.Error.Canceled", confirmation, "a cancelled attempt never clears the next one's prompt")
+        pair = re.search(r"async def pair\(path\):(.*?)\n    agent_path", source, re.S).group(1)
+        self.assertEqual(pair.count("if generation != attempt_generation:"), 2)

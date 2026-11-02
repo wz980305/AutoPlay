@@ -309,7 +309,11 @@ async def connect(bus, objects, adapter, args, stopped, owner):
         if opening not in done:
             opening.cancel()
             await asyncio.gather(opening, return_exceptions=True)
-            await recover_stale_link(bus, adapter, target)
+            # A timed-out ConnectProfile can leave a pending BlueZ request although the phone is disconnected;
+            # the next invitation then fails with br-connection-busy first (DashPlay 2026.10.26). Clear it now;
+            # the connected-link fallback stays for a link BlueZ still holds.
+            if not await clear_stale_request(bus, adapter, target):
+                await recover_stale_link(bus, adapter, target)
             raise BridgeError('RFCOMM connection timed out')
         hung_up.cancel()   # from here on stdin is the data plane
         fd = opening.result()

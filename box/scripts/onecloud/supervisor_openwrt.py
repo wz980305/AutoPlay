@@ -301,6 +301,8 @@ HELPER_REASONS = [   # the board helper's last log line -> a reason word for the
     (r"did not come up", "controller-timeout"),
     (r"missing .*run .* --setup", "bluez-missing"),
     (r"expected exactly one built-in Bluetooth rfkill", "rfkill"),
+    (r"Bluetooth rfkill not found after hci0|rfkill unblock failed", "rfkill"),
+    (r"Bluetooth is hard-blocked", "rfkill-hard"),
     (r"HCI controller already exists", "hci-busy"),
     (r"/var/lib/bluetooth belongs to something else", "storage-conflict"),
     (r"(dbus|btattach|bluetoothd) exited with", "daemon-exit"),

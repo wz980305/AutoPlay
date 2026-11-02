@@ -233,6 +233,10 @@ async def run_incoming(root, timeout):
     confirmed = False
     pairing = None
     error = ''
+    # One generation per confirmation attempt (DashPlay 2026.10.31): BlueZ has its own confirmation timeout and calls
+    # Cancel; a delayed reply or coroutine of the cancelled attempt must then neither confirm nor clear the next
+    # phone's request, or a stranger's phone could be confirmed by a stale "yes".
+    attempt_generation = 0
     opened = time.monotonic()
     deadline = opened + min(timeout, 180)
 
@@ -264,13 +268,16 @@ async def run_incoming(root, timeout):
             if (not device.startswith(adapter_path + '/dev_') or stopped.is_set() or
                     (selected is not None and selected != device) or busy()):
                 raise DBusError('org.bluez.Error.Rejected', 'Receiver busy')
+            generation = attempt_generation
             selected = device
             deadline = attempt_deadline(deadline, time.monotonic(), opened)
             request_id = secrets.token_urlsafe(20)
             device_props = await proxy(device, 'org.bluez.Device1')
             name = await device_props.get_alias()
+            if generation != attempt_generation:
+                raise DBusError('org.bluez.Error.Canceled', 'Request cancelled')
             save_json(status_file, {'phase':'confirm', 'name':name, 'passkey':f'{passkey:06d}', 'request_id':request_id})
-            while time.monotonic() < deadline and not stopped.is_set():
+            while time.monotonic() < deadline and not stopped.is_set() and generation == attempt_generation:
                 reply = read_json(confirm_file)
                 if reply.get('request_id') == request_id:
                     if reply.get('accepted') is True:
@@ -279,6 +286,9 @@ async def run_incoming(root, timeout):
                         return
                     break
                 await asyncio.sleep(0.25)
+            if generation != attempt_generation:
+                # Cancel() already reset the prompt for the next phone: this attempt must not touch it.
+                raise DBusError('org.bluez.Error.Canceled', 'Request cancelled')
             selected = None
             raise DBusError('org.bluez.Error.Rejected', 'Passkey not confirmed')
 
@@ -293,7 +303,14 @@ async def run_incoming(root, timeout):
 
         @method()
         def Cancel(self):
-            pass
+            nonlocal selected, confirmed, error, attempt_generation
+            # BlueZ's own confirmation timeout (or the phone giving up): invalidate the prompt at once, so a delayed
+            # reply from this attempt cannot confirm or clear the next phone's request.
+            attempt_generation += 1
+            selected, confirmed = None, False
+            error = '配对请求已取消或超时。请重新发起，并及时在手机和盒子页面确认相同的数字。'
+            save_json(status_file, {'phase': 'waiting', 'found': [], 'error': error})
+            confirm_file.unlink(missing_ok=True)
 
         @method()
         def Release(self):
@@ -301,13 +318,18 @@ async def run_incoming(root, timeout):
 
     async def pair(path):
         nonlocal selected, confirmed, error
+        generation = attempt_generation
         try:
             await (await proxy(path, 'org.bluez.Device1')).call_pair()
         except Exception:
+            if generation != attempt_generation:
+                return   # Cancel() already reported this attempt; the prompt belongs to the next one
             try:
                 done = await (await proxy(path, 'org.bluez.Device1')).get_paired()
             except Exception:
                 done = False
+            if generation != attempt_generation:
+                return
             if not done:
                 # Also when the page already confirmed: the iPhone never answered (it only shows the
                 # request while Settings > Bluetooth is open). Go back to the list instead of waiting.
