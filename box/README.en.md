@@ -10,7 +10,7 @@ This directory comes from [DashPlay](https://github.com/yizhixiaoheigou/DashPlay
 
 ## What you need
 
-A ZTE F50 (model MU300) **already flashed to [mu300-linux](https://github.com/dikeckaan/mu300-linux)'s OpenWrt image following that project's own documentation**. The unit we verified in the car shipped with stock firmware B13. Flashing, rooting and going back to Android are mu300-linux's business; this repository gives no such steps and makes no claim about which firmware versions can be flashed (`scripts/f50-install.py`, `scripts/f50-root-*` and `skills/autoplay-install/` are upstream DashPlay's old flow for stock B16 firmware, unused, and not this project's install route).
+A ZTE F50 (model MU300) **already flashed to [mu300-linux](https://github.com/dikeckaan/mu300-linux)'s OpenWrt image following that project's own documentation**. The unit we verified in the car shipped with stock firmware B13. Flashing, rooting and going back to Android are mu300-linux's business; this repository gives no such steps and makes no claim about which firmware versions can be flashed; upstream DashPlay's flashing scripts for stock B16 were removed on 2026-11-03.
 
 In the car: a SIM with data (certificate issuance and renewal, and the car's connectivity checks, depend on it); 5 V at 3 A or more from a port that stays powered through ignition, a short thick cable; a heatsink. And your own CarPlay accessory identity (below).
 
@@ -57,7 +57,7 @@ Tests use the standard library `unittest` only, no network:
 
 ```sh
 cd box
-python3 -m unittest discover -s tests/onecloud      # 263
+python3 -m unittest discover -s tests/onecloud      # 238
 python3 -m unittest discover -s tests/bluetooth     # test_bluez / test_recovery need dbus-next
 ```
 
@@ -66,7 +66,6 @@ python3 -m unittest discover -s tests/bluetooth     # test_bluez / test_recovery
 - `scripts/onecloud/` the programs on the box: `supervisor_openwrt.py` (supervision, status, retries), `supervision.py` (per-component restart policy), `status_model.py` (nine status domains), `run-receiver.py` (starts the JVM), `settings_page.py` / `settings_ui.py` (settings page), `pairing_window.py` (pairing), `tesla_openwrt.py` (connectivity checks), `own_domain.py` (DuckDNS / DNSPod + Let's Encrypt), `update.py` (update and rollback), `factory_reset.py`, `board_zte_f50.py` (F50 Bluetooth bring-up), `mu300_boot.py`, `viewer_port.py`
 - `linux/bt-bridge/` the iAP2 RFCOMM bridge over BlueZ D-Bus ([README](linux/bt-bridge/README.md))
 - `scripts/build-bundle.sh` builds the bundle; `scripts/scan-sensitive.py` scans for personal and secret material before publishing
-- `scripts/f50-*.py`, `scripts/prepare-*.py`, `skills/autoplay-install/` upstream DashPlay's flashing and install flow for stock B16, unused
 - `docs/` trim log, status model, test baseline
 - `tools/render_settings_states.py` renders the settings page's eight states to static HTML (for `receiver/web/scripts/ui-shots.mjs`)
 

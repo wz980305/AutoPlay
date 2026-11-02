@@ -38,7 +38,7 @@
 | 1.1.0（11-02） | 声音默认全部走特斯拉蓝牙，网页不再播音乐（ADR-14）；上游 10.26–11.01 的 F50 蓝牙 rfkill、配对代理代际、空闲宽限、AppCDS、证书申请等待网络等修复；失败原因代码 | `docs/AUDIO.md`、`receiver/docs/UNVERIFIED-KOTLIN.md` |
 | 1.2.0（11-02） | 两张页面按车机窗口形状核对；页内选项表替代原生下拉；二级菜单滚入视野；盒子页同一尺度、配对码首屏、页内确认屏（ADR-15） | `docs/UI-1.2.0.md` |
 
-此前列在"下一步"而已经做掉的：信道不在 36–48 / 149–165 时告警（`supervisor_openwrt.channel_warning`）、无边框按视口判断（`main.ts`）、上游 SKILL.md 替换为指向安装说明的短文、探测页之外的 Tesla 检测。
+此前列在"下一步"而已经做掉的：信道不在 36–48 / 149–165 时告警（`supervisor_openwrt.channel_warning`）、无边框按视口判断（`main.ts`）、上游 B16 刷机/装机脚本与 SKILL.md 按 ADR-11 删除（2026-11-03）、探测页之外的 Tesla 检测。
 
 **做了但没验证**：1.1.0 和 1.2.0 对接收端的 Kotlin 改动没有编译（`receiver/docs/UNVERIFIED-KOTLIN.md`）；`bluetooth` 声音模式在行驶中是否稳定听到导航播报；探测页还没在车上跑过（`docs/TESLA.md` §7 的表仍是空的）；没有长期浸泡数据。
 
@@ -62,7 +62,6 @@
 - [ ] WP2 剩下的：Wi-Fi 看门狗、hci0 复位时重跑蓝牙初始化、`/var/run/autoplay/session` 会话钩子（`autoplay-tune session on|off` 已就位）、`/healthz` 心跳。
 - [ ] WP3 剩下的：时区和 fake-hwclock 式的第二时间源；`e2fsck -n` 健康检查；证书到期日显示在投屏页。
 - [ ] 接收端侧的两个小项：`/time` 提示喂给时钟下限；`receiver-access.json` 挪进 tmpfs（H7）。
-- [ ] 上游 B16 刷机/装机脚本（`box/scripts/f50-*.py`、`prepare-*.py`、`skills/autoplay-install/downloads.json`）按 ADR-11 不是安装路线：决定删除还是明确标注后保留。
 - [ ] `--car-voice` 和 `receiver-access.json` 里的 `carMusic`/`tesla` 字段已无人读取，随下次接收端编译一起清掉。
 
 ### 界面

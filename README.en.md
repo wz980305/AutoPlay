@@ -36,7 +36,7 @@ Two things are not done. The 1.1.0 and 1.2.0 changes to the receiver's Kotlin we
 
 ## What you need
 
-**A ZTE F50**, model MU300. Ours shipped with stock firmware **B13** and runs [mu300-linux](https://github.com/dikeckaan/mu300-linux)'s OpenWrt 25.12 image (vendor 5.4 kernel). For flashing, rooting and going back to Android, use mu300-linux's own documentation only; this repository gives no such steps and makes no claim about which firmware versions can be flashed (`box/scripts/f50-*.py` and `prepare-*.py` are upstream DashPlay's old flashing flow for stock B16 firmware, unused, and not our install route). In the car, give it 5 V at 3 A or more from a port that stays powered through ignition, a short thick cable, a heatsink, and a spot out of the sun: heat and power are the two biggest risks of an F50 in a car.
+**A ZTE F50**, model MU300. Ours shipped with stock firmware **B13** and runs [mu300-linux](https://github.com/dikeckaan/mu300-linux)'s OpenWrt 25.12 image (vendor 5.4 kernel). For flashing, rooting and going back to Android, use mu300-linux's own documentation only; this repository gives no such steps and makes no claim about which firmware versions can be flashed; upstream DashPlay's flashing scripts for stock B16 were never used here and have been removed. In the car, give it 5 V at 3 A or more from a port that stays powered through ignition, a short thick cable, a heatsink, and a spot out of the sun: heat and power are the two biggest risks of an F50 in a car.
 
 **A SIM with data**, for the reasons above. **A domain of your own**: a DuckDNS subdomain, or a domain hosted at Tencent DNSPod (whether DuckDNS's update API is reachable over a Chinese SIM is unverified, which is why the DNSPod route exists).
 
@@ -64,7 +64,7 @@ The update tab cannot yet update anything online: `update.py` verifies release s
 
 `openwrt/` holds the package definitions for the apks above and the LuCI app, from openwrt-dashplay. `tools/` is new here: `probe/`, a single HTML file that measures the car browser's capabilities when opened in it; `f50/`, hardening and measurement scripts; `car/`, a method for measuring touch latency. `docs/` covers architecture, decisions, build, test, the Tesla specifics, audio, security and the two interface iterations.
 
-`docs/BUILD.md` says how to build and `docs/TEST.md` how to test (263 box-side unit tests, five viewer check scripts, the install script's and tools' own tests, all runnable on a desktop).
+`docs/BUILD.md` says how to build and `docs/TEST.md` how to test (238 box-side unit tests, five viewer check scripts, the install script's and tools' own tests, all runnable on a desktop).
 
 ## Origins and license
 

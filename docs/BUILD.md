@@ -85,7 +85,7 @@ scp out/*.apk root@100.96.0.1:/tmp/
 ssh root@100.96.0.1 'cd /tmp && apk add --allow-untrusted autoplay-jre-*_$(cat /etc/apk/arch).apk autoplay-[0-9]*.apk luci-app-autoplay-*.apk luci-i18n-autoplay-zh-cn-*.apk'
 ```
 
-包没有签名（WP9 的待办），所以要 `--allow-untrusted`。F50 的蓝牙用的是 `python3 /opt/autoplay/board_zte_f50.py --setup` 装进 `/opt/autoplay-bluez` 的私有 BlueZ，不是 `apk add bluez-daemon`（系统包会带入不匹配的 6.12 内核模块）。刷机、root 只看 mu300-linux 的文档（ADR-11）；上游 DashPlay 的 B16 装机脚本 `box/scripts/f50-install.py` 及其 `box/tools/` 依赖未被使用，也不是本项目的安装路线。随包的 `update-key.pem` 是上游的公钥，在项目有自己的发布密钥和软件源之前在线升级不可用。
+包没有签名（WP9 的待办），所以要 `--allow-untrusted`。F50 的蓝牙用的是 `python3 /opt/autoplay/board_zte_f50.py --setup` 装进 `/opt/autoplay-bluez` 的私有 BlueZ，不是 `apk add bluez-daemon`（系统包会带入不匹配的 6.12 内核模块）。刷机、root 只看 mu300-linux 的文档（ADR-11）；上游 DashPlay 的 B16 装机脚本已于 2026-11-03 从仓库删除。随包的 `update-key.pem` 是上游的公钥，在项目有自己的发布密钥和软件源之前在线升级不可用。
 
 ## 5. 工具（`tools/`）
 

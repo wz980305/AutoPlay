@@ -4,13 +4,13 @@
 
 ## [未发布] — 2026-11-03 — 发布到 GitHub 前的文档核对与隐私清理
 
-代码没有变（只改了两处用法文本和一句状态页提示）。
+功能代码没有变（只改了两处用法文本和一句状态页提示）；删掉了一组从未使用的上游脚本。
 
 - README（中英）重写为可以从头读到尾的说明，并对照代码订正：实测的 F50 原厂固件是 **B13**（按 mu300-linux 刷机），不再写"需要 B16"；视频是 H.264 / H.265；声音默认全走特斯拉蓝牙；三个页面的入口与用途；在线升级目前不可用；加入 2026-11-02 的实车照片（已去元数据、打码）。
 - 对照代码逐篇核对 `docs/`、`box/`、`openwrt/`、`receiver/`、`tools/` 的说明：uci 7 键 → 12 键、测试 225 → 263、四个 → 五个检查脚本、LuCI 标签页名、DuckDNS → DuckDNS / DNSPod、`AUTOPLAY_UPDATE_FEED`、`MUSIC_ELEMENT` → `PAGE_PLAYS_MUSIC`；把 0.1.0 时代的"尚未上车""不校验 Host""本地 CA"等现状描述改为 1.2.0 的实情；ADR-4/5/7/9 加"后续"注记；ROADMAP 补 0.1.1–1.2.0 已做、重排待办；SECURITY §1/§4 更新；AUDIT-0.1.1 与 UI-0.1.2 标为历史快照。
 - `receiver/README.md` 从上游 PlayPort 的 macOS 说明重写为本分叉的说明；`receiver/identity/README.md`、`receiver/NOTICE.md`、`box/README.md` 不再提示任何取得配件身份的途径（本项目不提供、不下载、不说明）。`box/skills/autoplay-install/SKILL.md`（上游 DashPlay 86 KB 的 B16/N1/玩客云装机向导，含下载共享身份的步骤）换成指向安装说明的短文。
 - 隐私：git 历史重写，一处个人邮箱改为 `autoplay@localhost`，CHANGELOG 中车主域名改为"车主自己的域名"；测试与工具里的示例蓝牙地址改用文档保留段；`.gitignore` 排除原始照片与视频目录。
-- 待定：`box/scripts/f50-*.py`、`prepare-*.py`、`skills/autoplay-install/downloads.json` 这组上游 B16 刷机/装机脚本按 ADR-11 不是安装路线、未被使用，是删除还是标注保留，待项目组决定。
+- 删除未使用的上游 B16 刷机/装机流程（项目组 2026-11-03 决定）：`box/scripts/f50-install.py`、`f50-backup.py`、`f50-root-plan.py`、`f50-root-bootstrap.sh`、`prepare-f50-*.py`、`prepare-mu300-panel-installer.py`、`verify-f50-tos-candidate.py`、`fetch-install-assets.py`、`install_progress.py`、`build-playport.sh`、`fetch-java.py`、`box/skills/`，连同 4 个测试文件；盒子侧测试 263 → 238。刷机只看 mu300-linux（ADR-11）。
 
 ## [1.2.0] — 2026-11-02 — 车机窗口比例下的界面；下拉与确认框不再交给浏览器
 

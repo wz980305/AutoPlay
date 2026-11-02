@@ -39,18 +39,12 @@ with its Maven dependencies (licenses inside each JAR):
 
 The Java runtime and the OpenWrt packaging are described in `openwrt/NOTICE.md`.
 
-## Tools the installer downloads but does not redistribute
+## Flashing tools (not part of this repository)
 
-`scripts/f50-install.py` and `skills/autoplay-install/downloads.json` pin, download and hash-check on
-the owner's computer: the OpenWrt build for the F50 from **mu300-linux**
-<https://github.com/dikeckaan/mu300-linux> (GPL-2.0 kernel, OpenWrt's licenses), the Root image and
-**Magisk** installer from <https://github.com/Xio-Shark/f50-b16> and <https://github.com/topjohnwu/Magisk>
-(GPL-3.0), Google's Android **platform-tools** (adb; Android SDK terms), and on Windows **Zadig**
-<https://zadig.akeo.ie/> (GPL-3.0) for the WinUSB driver. The installer's `flash` stage also expects the
-`spd_dump` and `lz4` binaries that DashPlay shipped under `tools/` (from **spreadtrum_flash**
-<https://github.com/TomKing062/spreadtrum_flash>, Unlicense, with **libusb** LGPL-2.1, and **lz4**
-<https://github.com/lz4/lz4>, GPL-2.0/BSD-2-Clause); they were not imported into this fork. None of these
-is in this repository.
+Flashing the F50 is done with **mu300-linux** <https://github.com/dikeckaan/mu300-linux> and the tools it
+documents; this repository neither ships nor downloads any of them. Upstream DashPlay's installer
+(`f50-install.py` and its helpers, with their pinned downloads of Root images, Magisk, platform-tools, Zadig,
+`spd_dump` and `lz4`) was carried along unused until 2026-11-03 and then removed.
 
 ## Accessory identity
 

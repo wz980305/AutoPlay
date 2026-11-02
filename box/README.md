@@ -10,7 +10,7 @@
 
 ## 需要什么
 
-一台中兴 F50（型号 MU300），**已经按 [mu300-linux](https://github.com/dikeckaan/mu300-linux) 的文档刷成它的 OpenWrt 镜像**。我们实测的那台原厂固件是 B13。刷机、root、回安卓只看 mu300-linux 自己的说明，本仓库不写这些步骤，也不判断哪个固件版本能刷（`scripts/f50-install.py`、`scripts/f50-root-*` 和 `skills/autoplay-install/` 是上游 DashPlay 面向 B16 原厂固件的旧流程，未被使用，也不是本项目的安装路线）。
+一台中兴 F50（型号 MU300），**已经按 [mu300-linux](https://github.com/dikeckaan/mu300-linux) 的文档刷成它的 OpenWrt 镜像**。我们实测的那台原厂固件是 B13。刷机、root、回安卓只看 mu300-linux 自己的说明，本仓库不写这些步骤，也不判断哪个固件版本能刷；上游 DashPlay 面向 B16 原厂固件的刷机脚本已于 2026-11-03 删除。
 
 车上还要：一张能上网的 SIM 卡（证书签发和续期、车机的联网检测都靠它）；5 V、3 A 以上、打火不断电的 USB 供电，短而粗的线；散热片。以及你自己的 CarPlay 认证文件（见下文）。
 
@@ -57,7 +57,7 @@ AUTOPLAY_VERSION=1.2.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 
 ```sh
 cd box
-python3 -m unittest discover -s tests/onecloud      # 263 个
+python3 -m unittest discover -s tests/onecloud      # 238 个
 python3 -m unittest discover -s tests/bluetooth     # test_bluez / test_recovery 需要 dbus-next
 ```
 
@@ -66,7 +66,6 @@ python3 -m unittest discover -s tests/bluetooth     # test_bluez / test_recovery
 - `scripts/onecloud/` 盒子上的程序：`supervisor_openwrt.py`（监管、状态、重试）、`supervision.py`（分组件重启策略）、`status_model.py`（九个状态域）、`run-receiver.py`（启动 JVM）、`settings_page.py` / `settings_ui.py`（设置页）、`pairing_window.py`（配对）、`tesla_openwrt.py`（联网检查）、`own_domain.py`（DuckDNS / DNSPod + Let's Encrypt）、`update.py`（升级与回退）、`factory_reset.py`、`board_zte_f50.py`（F50 蓝牙启动）、`mu300_boot.py`、`viewer_port.py`
 - `linux/bt-bridge/` BlueZ D-Bus 的 iAP2 RFCOMM 桥接（[说明](linux/bt-bridge/README.md)）
 - `scripts/build-bundle.sh` 打程序包；`scripts/scan-sensitive.py` 发布前的敏感信息扫描
-- `scripts/f50-*.py`、`scripts/prepare-*.py`、`skills/autoplay-install/` 上游 DashPlay 面向 B16 的刷机与装机流程，未使用
 - `docs/` 修剪记录、状态模型、测试基线
 - `tools/render_settings_states.py` 把设置页的八个状态渲染成静态 HTML（配合 `receiver/web/scripts/ui-shots.mjs` 截图）
 
