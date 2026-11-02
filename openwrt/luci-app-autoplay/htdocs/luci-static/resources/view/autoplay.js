@@ -123,7 +123,7 @@ return view.extend({
 		o.depends('dns_provider', 'duckdns');
 
 		o = s.taboption('reach', form.Value, 'own_domain', _('Own domain (DNSPod)'),
-			_('A full domain you manage in Tencent Cloud DNS (DNSPod), e.g. car.example.com. AutoPlay obtains the Let\'s Encrypt certificate with a DNS-01 challenge through the DNSPod API and answers the name locally for the Tesla, so no public A record is required. The Tesla opens https://car.example.com:18443/ without a warning.'));
+			_('A full domain you manage in Tencent Cloud DNS (DNSPod), e.g. car.example.com. AutoPlay obtains the Let\'s Encrypt certificate with a DNS-01 challenge through the DNSPod API and answers the name locally for the Tesla; also add an A record for it pointing at 100.96.0.1 in the DNSPod console, so the name resolves through a public resolver too. The Tesla opens https://car.example.com:18443/ without a warning.'));
 		o.placeholder = 'car.example.com';
 		o.depends('dns_provider', 'dnspod');
 

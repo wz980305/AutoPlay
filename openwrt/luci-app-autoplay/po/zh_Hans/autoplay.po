@@ -78,14 +78,41 @@ msgstr "无人观看多久后释放 iPhone（秒）"
 msgid "Without any page showing the picture for this long, wireless CarPlay ends and the iPhone stops sending its screen; opening the page invites it again (about 7 s). 0: never end it."
 msgstr "没有任何网页在看画面超过这个时间，就结束无线 CarPlay，iPhone 不再持续发送画面、不会发热；之后打开网页会重新邀请（约 7 秒出画面）。填 0 表示永不结束。"
 
-msgid "Own name (DuckDNS sub-domain)"
-msgstr "自己的域名（DuckDNS 子域名）"
+msgid "DuckDNS sub-domain"
+msgstr "DuckDNS 子域名"
 
-msgid "The address the Tesla opens. Sign up for free at duckdns.org, add a sub-domain and enter it with the token shown there. The name becomes that name (e.g. mycar.duckdns.org): AutoPlay points it at this box and obtains a free Let's Encrypt certificate, renewed automatically over the SIM, so the Tesla opens https://mycar.duckdns.org:18443/ without a warning. Without a name the Tesla opens https://autoplay.lan:18443/ with the box's own certificate; whether its warning page offers \"continue\" is not verified."
-msgstr "特斯拉打开的地址。在 duckdns.org 免费注册，添加一个子域名，把它和页面上显示的 token 填在这里。地址就变成这个名字（如 mycar.duckdns.org）：AutoPlay 把它指向这台盒子，并经 SIM 卡自动申请、续签免费的 Let's Encrypt 证书，特斯拉打开 https://mycar.duckdns.org:18443/ 不会有警告。不填时特斯拉打开 https://autoplay.lan:18443/，用盒子自带证书；它的警告页有没有「继续」尚未验证。"
+msgid "Sign up for free at duckdns.org, add a sub-domain and enter it with the token shown there. The name becomes that name (e.g. mycar.duckdns.org): AutoPlay points it at this box and obtains a free Let's Encrypt certificate, renewed automatically over the SIM, so the Tesla opens https://mycar.duckdns.org:18443/ without a warning."
+msgstr "在 duckdns.org 免费注册，添加一个子域名，把它和页面上显示的 token 填在这里。域名就是那个名字（例如 mycar.duckdns.org）：AutoPlay 把它指向这台盒子并申请免费的 Let's Encrypt 证书，经 SIM 卡自动续期，特斯拉打开 https://mycar.duckdns.org:18443/ 不会有警告。"
 
 msgid "DuckDNS token"
 msgstr "DuckDNS token"
+
+msgid "DNS provider"
+msgstr "DNS 服务商"
+
+msgid "DuckDNS"
+msgstr "DuckDNS"
+
+msgid "Tencent Cloud (DNSPod)"
+msgstr "腾讯云（DNSPod）"
+
+msgid "Which DNS service owns the name below. Without any name the Tesla opens https://autoplay.lan:18443/ with the box's own certificate; whether its warning page offers \"continue\" is not verified."
+msgstr "下面这个域名由哪家 DNS 服务商管理。不填域名时，特斯拉打开 https://autoplay.lan:18443/ 用的是盒子自己的证书；它的警告页是否提供「继续」尚未验证。"
+
+msgid "Own domain (DNSPod)"
+msgstr "自己的域名（DNSPod）"
+
+msgid "A full domain you manage in Tencent Cloud DNS (DNSPod), e.g. car.example.com. AutoPlay obtains the Let's Encrypt certificate with a DNS-01 challenge through the DNSPod API and answers the name locally for the Tesla; also add an A record for it pointing at 100.96.0.1 in the DNSPod console, so the name resolves through a public resolver too. The Tesla opens https://car.example.com:18443/ without a warning."
+msgstr "你在腾讯云 DNS（DNSPod）里管理的完整域名，例如 car.example.com。AutoPlay 通过 DNSPod API 完成 DNS-01 验证申请 Let's Encrypt 证书，并在本地为特斯拉解析这个域名；建议同时在 DNSPod 控制台加一条指向 100.96.0.1 的 A 记录。特斯拉打开 https://car.example.com:18443/ 不会有警告。"
+
+msgid "DNSPod API ID"
+msgstr "DNSPod API ID"
+
+msgid "In the DNSPod console (console.dnspod.cn) → Security settings → API Token → create a token; the ID is the number shown there."
+msgstr "在 DNSPod 控制台（console.dnspod.cn）→ 安全设置 → API Token → 创建一个 Token；ID 就是那里显示的数字。这个 Token 能改整个账号的解析记录，只填在自己掌控的盒子上。"
+
+msgid "DNSPod API token"
+msgstr "DNSPod API Token"
 
 msgid "Certificate"
 msgstr "证书"
@@ -120,14 +147,14 @@ msgstr "正在申请证书（联网后几分钟）"
 msgid "renewing the certificate"
 msgstr "正在续签证书"
 
-msgid "not obtained yet: check the SIM, the sub-domain and the token; retried every hour"
-msgstr "还没申请到：检查 SIM 卡、子域名和 token；每小时重试"
+msgid "not obtained yet: check the SIM and the DNS provider credentials; retried every hour"
+msgstr "还没申请到：检查 SIM 卡、域名和 DNS 服务商的凭证；每小时重试"
 
 msgid "waiting for the internet"
 msgstr "等待联网"
 
-msgid "DuckDNS record update failed, retrying"
-msgstr "更新 DuckDNS 解析失败，继续重试"
+msgid "DNS record update failed, retrying"
+msgstr "更新域名解析失败，继续重试"
 
 msgid "Updating:"
 msgstr "正在升级："
