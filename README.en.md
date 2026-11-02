@@ -1,5 +1,7 @@
 # AutoPlay
 
+> **1.2.0 (2026-11-02):** both pages checked screen by screen at the Tesla browser's window shapes (773×601 windowed, 1256×706 borderless, 1256×560, 1920×1200, phone); the viewer's five native `<select>` dropdowns became a large in-page option sheet and second-level menus scroll themselves into view; the box settings page moved to the same type and touch scale, shows the passkey and its buttons above the fold, and confirms "remove iPhone" / "install update" on a screen of its own instead of the browser's `confirm()` box. Same features as 1.1.0. See [`docs/UI-1.2.0.md`](docs/UI-1.2.0.md).
+
 > **1.1.0 (2026-11-02):** every sound goes over the Tesla's Bluetooth by default (new uci `audio_route_navigation`; `carplay` keeps prompts on the page), the page never plays music; DashPlay 10.26-11.01's F50 Bluetooth, idle-grace, AppCDS and certificate-issuance fixes brought in. Four Kotlin files changed without a compiler (`receiver/docs/UNVERIFIED-KOTLIN.md`). See [`docs/AUDIO.md`](docs/AUDIO.md) and [`CHANGELOG.md`](CHANGELOG.md).
 
 > **1.0.1 (2026-11-02):** wrap-up of 1.0.0: tests and Chinese LuCI strings for the DNSPod provider, two stale assertions fixed, the install script keeps an owner's 149-165 channel, real-car facts recorded in the docs; new [`docs/AUDIO.md`](docs/AUDIO.md) on which sounds go over Bluetooth and which through the page. Same features as 1.0.0.

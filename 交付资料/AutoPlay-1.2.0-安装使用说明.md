@@ -1,7 +1,7 @@
-# AutoPlay 1.1.0 安装 / 卸载 / 使用说明
+# AutoPlay 1.2.0 安装 / 卸载 / 使用说明
 
 > 适用：中兴 F50（MU300，已 Root + OpenWrt 25.12，内核 5.4）上的无线 CarPlay，画面投到特斯拉车机浏览器。
-> 1.0.0 是**首个在特斯拉车内实测通过的版本**（无线 CarPlay 画面、触摸、导航播报已验证）；1.0.1 是它的收尾；**1.1.0 把声音默认全部交给特斯拉蓝牙**（见第三节），并引入 DashPlay 10.26–11.01 的可靠性修复。接收端四个 Kotlin 文件在 1.1.0 里未经编译，第一次构建时留意 `receiver/docs/UNVERIFIED-KOTLIN.md`。
+> 1.0.0 是**首个在特斯拉车内实测通过的版本**（无线 CarPlay 画面、触摸、导航播报已验证）；1.0.1 是它的收尾；**1.1.0 把声音默认全部交给特斯拉蓝牙**（见第三节），并引入 DashPlay 10.26–11.01 的可靠性修复；**1.2.0 只改界面**：两张页面按特斯拉的窗口形状核对，下拉与确认框改在页内画（见第六节），功能与 1.1.0 相同。接收端四个 Kotlin 文件自 1.1.0 起未经编译，第一次构建时留意 `receiver/docs/UNVERIFIED-KOTLIN.md`。
 
 ---
 
@@ -20,12 +20,12 @@ cd receiver && ./gradlew :server:installDist
 # 编译投屏页
 cd web && npm ci && npm run build
 # 打程序包
-AUTOPLAY_VERSION=1.1.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
+AUTOPLAY_VERSION=1.2.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 # 用 Docker SDK 打 apk
 sh openwrt/scripts/build-packages.sh out/ autoplay-bundle.tar
 ```
 
-产物在 `out/`：`autoplay-1.1.0-r1.apk`、`autoplay-jre-*_<架构>.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk`。
+产物在 `out/`：`autoplay-1.2.0-r1.apk`、`autoplay-jre-*_<架构>.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk`。
 
 ### 3. 装到 F50（手动路线）
 ```sh
@@ -120,4 +120,12 @@ apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
 - 蓝牙必须用私有 BlueZ，**不要 `apk add bluez-daemon`**（会带入不匹配的 6.12 内核模块）。
 - **1.1.0 上车第一件事**：开一段导航，确认播报从车机扬声器出来、第一个字没被吃掉；来电、Siri 照常。听不到就切回页面播报（第三节）。
 - 盒子需长期有 SIM（证书续期 + 特斯拉联网检测）。
+- **1.2.0 上车看一眼界面**：设置 → 夜间模式弹出的是页内选项表（大字、可点）而不是浏览器的小下拉；盒子页点一部手机 → 「删除此 iPhone…」出现确认屏而不是浏览器弹窗。若选项表没有出现，把车机浏览器版本记到 `docs/TESLA.md` 并反馈。
 - **在线升级目前不可用**：`update.py` 校验发布签名，而项目还没有自己的发布密钥和软件源（仓库里的公钥仍是上游 DashPlay 的），设置页「程序更新」会报找不到或拒绝。升级请按第一节手动 `apk add` 新包（配对、证书、认证身份都在 `/opt/autoplay/` 下保留）；勿手动覆盖 `/opt/autoplay/{state,identity}`。
+
+## 六、1.2.0 的界面变化（`docs/UI-1.2.0.md`）
+
+- 投屏页设置里的五个下拉（夜间模式、语言、CarPlay 内容大小、帧率、视频编码）改为页内选项表：点行 → 居中列表，每项一行，当前项打勾，「取消」关闭。
+- 二级菜单（画质与兼容、连接与兼容性、备用控制；盒子页的手机行）打开时自动滚进视野。
+- 盒子设置页（`http://100.96.0.1:18080/`）字号和按钮尺寸与投屏页一致；添加 iPhone 时整页只显示配对码和「一致 / 不一致」；「删除此 iPhone…」「立即升级」先进入确认屏再执行，没有浏览器弹窗。
+- 操作和地址都没有变化；不需要重新配对或重新申请证书。

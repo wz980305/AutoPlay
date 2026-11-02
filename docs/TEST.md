@@ -31,6 +31,16 @@ npm test
 node scripts/build-esbuild.mjs                                   # 或 npm run build
 ```
 
+### 两张页面的截图（1.2.0，`docs/UI-1.2.0.md`）
+
+```sh
+cd receiver/web && npm run build:offline
+python3 ../../box/tools/render_settings_states.py out/box-states              # 盒子设置页 8 个状态 → 静态 HTML
+CHROME=/path/to/chromium node scripts/ui-shots.mjs out/ui-shots [viewer|box]  # 特斯拉 773×601、1256×706、1256×560、1920×1200、手机
+```
+
+需要 `playwright-core` 和一个 Chromium；全部本地 mock，不碰盒子和手机。每个形状打印标签/说明字号、行高和有无横向溢出。
+
 四个检查脚本用 `typescript` 即时编译被测模块，在 Node 里模拟 DOM 表面：输入控制器（含 30ms 最短按压、补发抬起）、音频时间线、车载模式和特斯拉默认值、状态提示（`status.ts`）、duck 渐变、浏览器检测。`check-flac.mjs` 随有线代码删除。这三步在 0.1.0 合并时都通过。
 
 ### 接收端
