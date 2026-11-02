@@ -201,7 +201,9 @@ class SignedReleaseTests(unittest.TestCase):
             self.server.put(base + file, data)
             sums.append(f'{sha(data)}  {file}')
             entries[name] = {'file': file, 'sha256': sha(data), 'size': len(data)}
-        self.server.put(base + 'SHA256SUMS', ('\n'.join(sums) + '\n').encode())
+        sums_data = ('\n'.join(sums) + '\n').encode()
+        self.server.put(base + 'SHA256SUMS', sums_data)
+        self.server.put(base + 'SHA256SUMS.sig', self.sign(sums_data))
         jre_entry = entries.pop('autoplay-jre', {'file': 'x', 'sha256': '0', 'size': 1})
         return {'base': self.server.base + base, 'packages': entries,
                 'jre': {'version': jre, 'files': {'aarch64_generic': jre_entry}}}
@@ -221,6 +223,29 @@ class SignedReleaseTests(unittest.TestCase):
         self.publish(manifest)
         with self.assertRaisesRegex(update.UpdateError, '签名不对'):
             update.latest_manifest(self.root, True, self.dir / 'other.pub')
+
+    def test_rollback_packages_require_an_authentic_checksum_manifest(self):
+        packages = {name: b'old package' for name in update.OPENWRT_PACKAGES}
+        self.openwrt_release('2026.10.19.1', packages)
+        files = update.previous_packages('2026.10.19.1', (), self.dir / 'cache', key=self.pub)
+        self.assertEqual(len(files), 3)
+        base = 'owrt/v2026.10.19.1/'
+        manifest = self.server.root / base / 'SHA256SUMS'
+        # A mirror can replace both an APK and its plain hash; the old signature must still reject it.
+        name = 'autoplay-2026.10.19.1-r1.apk'
+        self.server.put(base + name, b'malicious package')
+        manifest.write_text(manifest.read_text().replace(sha(b'old package') + '  ' + name,
+                                                        sha(b'malicious package') + '  ' + name))
+        with self.assertRaisesRegex(update.UpdateError, '签名不对'):
+            update.previous_packages('2026.10.19.1', (), self.dir / 'tampered', key=self.pub)
+        self.assertFalse((self.dir / 'tampered').exists())
+
+    def test_unsigned_legacy_rollback_release_is_rejected(self):
+        self.openwrt_release('2026.10.19.1', {name: b'old' for name in update.OPENWRT_PACKAGES})
+        (self.server.root / 'owrt/v2026.10.19.1/SHA256SUMS.sig').unlink()
+        with self.assertRaisesRegex(update.UpdateError, '已停止'):
+            update.previous_packages('2026.10.19.1', (), self.dir / 'unsigned', key=self.pub)
+        self.assertFalse((self.dir / 'unsigned').exists())
 
     def test_the_mirror_is_used_when_github_fails(self):
         self.publish({'format': 1, 'version': '2026.10.20', 'online': True})

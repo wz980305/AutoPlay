@@ -5,6 +5,8 @@
 #    (RFC 6598) is not private. Set once here; the service never moves it at run time (it only warns when it
 #    is elsewhere). The first install drops an SSH session on the old address, as the old `tesla` stage did.
 #    Uninstalling does not put the previous address back.
+#  - the Wi-Fi 5 GHz radio is CN / channel 149: a Tesla sees 36-48 and 149-165 only, and the vendor image ships
+#    country TR, whose rules have no 149-165, with the channel list locked to 36-48.
 #  - settings of older releases that are constants now are dropped from autoplay.main.
 #  - the DNS records older releases kept for the own name (dhcp.dashplay, dhcp.dashplay6, a local-only server
 #    entry, the rebind_domain whitelist) go: the name is answered by the service's own address= record.
@@ -20,6 +22,15 @@ if [ "$(uci -q get network.lan.proto)" = static ]; then
 			;;
 	esac
 fi
+
+# Wi-Fi for a Tesla: the CN 5 GHz domain on channel 149 (a Tesla sees 36-48 and 149-165 only). The vendor image
+# ships country TR (no 149-165) and locks channels to 36-48; move once at install.
+for radio in $(uci -q show wireless | sed -n "s/^wireless\.\(radio[0-9]*\)\.band='5g'$/wireless.\1/p"); do
+	[ "$(uci -q get "$radio.country")" = CN ] || { uci -q set "$radio.country=CN"; wifi_changed=1; }
+	[ "$(uci -q get "$radio.channel")" = 149 ] || { uci -q set "$radio.channel=149"; wifi_changed=1; }
+	[ -z "$(uci -q get "$radio.channels")" ] || { uci -q delete "$radio.channels"; wifi_changed=1; }
+done
+[ -n "$wifi_changed" ] && { uci commit wireless; changed="$changed wireless"; }
 
 for option in wifi settings_port java name bluetooth_service dbus_address public_ipv6 shared_lan car_music car_voice \
 		tesla_mode answer_tesla_checks external_ssid external_key external_security external_channel external_network; do
@@ -47,6 +58,12 @@ case "$changed" in
 		;;
 	*)
 		[ -n "$dns_changed" ] && ( /etc/init.d/dnsmasq reload >/dev/null 2>&1 </dev/null & )
+		;;
+esac
+case "$changed" in
+	*wireless*)
+		( sleep 2; wifi reload ) >/dev/null 2>&1 </dev/null &
+		echo "autoplay: Wi-Fi set to CN / channel 149 (Tesla)"
 		;;
 esac
 exit 0

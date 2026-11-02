@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest.mock import patch
@@ -31,7 +32,7 @@ class StatusModelTests(unittest.TestCase):
         self.assertTrue(status.set("bluetooth", "starting", "powering", retry_in=20), "an extra changed")
         clock[0] = 1030
         self.assertFalse(status.set("bluetooth", "starting", "powering", retry_in=20), "nothing changed: since stays")
-        self.assertEqual(status.domain("bluetooth")["since"], 1020)
+        self.assertEqual(status.domain("bluetooth")["since"], 1010, 'telemetry changes do not reset state age')
         with self.assertRaises(KeyError):
             status.set("receiver", "on")
 
@@ -54,6 +55,48 @@ class StatusModelTests(unittest.TestCase):
             self.assertNotIn("warning", read(path))
             self.assertEqual(read(path)["bluetooth"]["state"], "unknown")
             self.assertEqual(read(path / "missing"), {})
+
+    def test_failed_publication_can_be_retried(self):
+        import status_model
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'status.json'
+            status = Status(path)
+            with patch.object(status_model.state_files, 'save_json', side_effect=OSError('full')):
+                status.set('system', 'ok')
+            self.assertFalse(path.exists())
+            status.write()
+            self.assertEqual(read(path)['system']['state'], 'ok')
+
+    def test_concurrent_publications_cannot_leave_an_older_snapshot(self):
+        import status_model
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'status.json'
+            status = Status(path)
+            entered, release = threading.Event(), threading.Event()
+            original = status_model.state_files.save_json
+            calls = []
+            def save(target, body, **kwargs):
+                calls.append(body['system']['state'])
+                if len(calls) == 1:
+                    entered.set()
+                    release.wait(2)
+                original(target, body, **kwargs)
+            with patch.object(status_model.state_files, 'save_json', side_effect=save):
+                old = threading.Thread(target=lambda: status.set('system', 'starting'))
+                old.start()
+                self.assertTrue(entered.wait(2))
+                new = threading.Thread(target=lambda: status.set('system', 'ok'))
+                new.start()
+                release.set()
+                old.join(2); new.join(2)
+            self.assertFalse(old.is_alive() or new.is_alive())
+            self.assertEqual(read(path)['system']['state'], 'ok')
+
+    def test_removed_metadata_is_not_kept_in_the_published_state(self):
+        status = Status()
+        status.set('bluetooth', 'starting', 'powering', retry_in=20)
+        status.set('bluetooth', 'starting', 'powering')
+        self.assertNotIn('retry_in', status.domain('bluetooth'))
 
 
 class PageBannerTests(unittest.TestCase):

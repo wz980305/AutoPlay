@@ -1,5 +1,7 @@
 # AutoPlay
 
+> **1.0.0 (2026-11-02):** The first release validated in a Tesla. Adds Tencent Cloud (DNSPod) support for the own-domain certificate (alongside DuckDNS), and pins the 5 GHz Wi-Fi to China / channel 149 (the vendor image ships country TR, whose rules have no 149–165, which is why a Tesla could not see the hotspot). Receiver, web and OpenWrt package versions are now 1.0.0. Earlier 0.1.x notes below are historical.
+
 [中文](README.md)
 
 AutoPlay is a GPL-3.0 hard fork of [PlayPort](https://github.com/youcci/playport) and [DashPlay](https://github.com/yizhixiaoheigou/DashPlay) / [openwrt-dashplay](https://github.com/yizhixiaoheigou/openwrt-dashplay) with exactly one target: a **ZTE F50** pocket router running OpenWrt ([mu300-linux](https://github.com/dikeckaan/mu300-linux), vendor 5.4 kernel, Unisoc T760), powered from a car USB port, receiving wireless CarPlay from an iPhone and showing it in a **Tesla's** built-in browser.

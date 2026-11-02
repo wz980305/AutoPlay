@@ -17,7 +17,7 @@
 ```sh
 cd /tmp
 apk update
-apk add --allow-untrusted autoplay-jre-*_$(cat /etc/apk/arch).apk autoplay-2*.apk luci-app-autoplay-*.apk luci-i18n-autoplay-zh-cn-*.apk
+apk add --allow-untrusted autoplay-jre-*_$(cat /etc/apk/arch).apk autoplay-[0-9]*.apk luci-app-autoplay-*.apk luci-i18n-autoplay-zh-cn-*.apk
 python3 /opt/autoplay/board_zte_f50.py --setup     # F50 自己的 BlueZ（见下）
 ```
 

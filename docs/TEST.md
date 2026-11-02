@@ -1,6 +1,6 @@
 # 测试
 
-分四层：台式机上能跑的单元测试和检查脚本；盒子上的台架测试；车上的验收清单；长期的浸泡。本里程碑只跑过第一层。
+分四层：台式机上能跑的单元测试和检查脚本；盒子上的台架测试；车上的验收清单；长期的浸泡。0.1.1 本轮完成的测试范围、计数和未通过项目详见 `AUDIT-0.1.1.md`；以下保留原台架/实车验收方案。
 
 ## 1. 台式机
 
@@ -8,7 +8,7 @@
 
 ```sh
 # 本仓库的工具
-python3 -m unittest tools/f50/test_measure_report.py
+python3 -m unittest discover -s tools/f50
 
 # 盒子侧：设置页、状态模型、守护（supervision）、升级日志与回滚、证书退避、时钟下限、出厂重置、平台、诊断、装机脚本
 cd box && python3 -m unittest discover -s tests/onecloud        # 225 个，通过（0.1.0 合并时在本机跑过）
@@ -25,7 +25,7 @@ cd box && python3 -m unittest discover -s tests/bluetooth       # 没有 dbus-ne
 cd receiver/web
 mkdir -p node_modules && ln -sfn /opt/npm-tools/node_modules/typescript node_modules/typescript   # 没有 npm install 时
 tsc --noEmit -p tsconfig.offline.json
-node check.mjs && node check-audio.mjs && node check-car.mjs && node check-browser.mjs
+npm test
 node scripts/build-esbuild.mjs                                   # 或 npm run build
 ```
 
@@ -34,7 +34,7 @@ node scripts/build-esbuild.mjs                                   # 或 npm run b
 ### 接收端
 
 ```sh
-cd receiver && ./gradlew build          # 编译两个模块并跑测试；本里程碑没有做过这一步
+cd receiver && ./gradlew build          # 编译两个模块并跑测试；0.1.1 已完成
 ```
 
 见 `docs/BUILD.md` 的警告：Kotlin 侧改动未编译，第一次跑之前先读 `receiver/docs/UNVERIFIED-KOTLIN.md`，它按文件列出了编译风险和"失去最后一个调用者"的预期警告。

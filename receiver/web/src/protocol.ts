@@ -109,7 +109,7 @@ export interface ServerMessage {
   message?: string;
 }
 
-/** Parses one binary WebSocket payload into a typed wire message. */
+/** Parses a binary WebSocket payload. Byte payloads are read-only views of the received buffer (no frame copy). */
 export function parseWireMessage(buffer: ArrayBuffer): WireMessage | null {
   if (buffer.byteLength < 2) return null;
   const view = new DataView(buffer);
@@ -117,14 +117,14 @@ export function parseWireMessage(buffer: ArrayBuffer): WireMessage | null {
   const type = bytes[0];
   switch (type) {
     case WireType.VideoConfig: {
-      if (buffer.byteLength < 12) return null;
+      if (buffer.byteLength < 11) return null;
       return {
         kind: 'video-config',
         streamType: bytes[1],
         codec: bytes[2],
         width: view.getUint32(3, true),
         height: view.getUint32(7, true),
-        codecData: bytes.slice(11),
+        codecData: bytes.subarray(11),
       };
     }
     case WireType.VideoFrame: {
@@ -133,21 +133,22 @@ export function parseWireMessage(buffer: ArrayBuffer): WireMessage | null {
         kind: 'video-frame',
         streamType: bytes[1],
         keyframe: (bytes[2] & 1) === 1,
-        data: bytes.slice(11),
+        data: bytes.subarray(11),
       };
     }
     case WireType.AudioConfig: {
       if (buffer.byteLength < 9) return null;
       const nameLength = bytes[8];
       const descriptionStart = 9 + nameLength;
+      if (descriptionStart > bytes.length) return null;
       return {
         kind: 'audio-config',
         streamType: bytes[1],
         codec: bytes[2],
         sampleRate: view.getUint32(3, true),
         channels: bytes[7],
-        name: new TextDecoder().decode(bytes.slice(9, descriptionStart)),
-        description: bytes.slice(descriptionStart),
+        name: new TextDecoder().decode(bytes.subarray(9, descriptionStart)),
+        description: bytes.subarray(descriptionStart),
       };
     }
     case WireType.AudioPacket: {
@@ -156,10 +157,11 @@ export function parseWireMessage(buffer: ArrayBuffer): WireMessage | null {
         kind: 'audio-packet',
         streamType: bytes[1],
         timestampUs: Number(view.getBigUint64(2, true)),
-        data: bytes.slice(10),
+        data: bytes.subarray(10),
       };
     }
     case WireType.ScreenActive:
+      if (bytes.length < 3) return null;
       return { kind: 'screen-active', streamType: bytes[1], active: bytes[2] === 1 };
     case WireType.AudioStopped:
       return { kind: 'audio-stopped', streamType: bytes[1] };

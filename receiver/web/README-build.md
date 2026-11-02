@@ -8,7 +8,7 @@ JVM from `web/dist`. It can be built two ways; both produce the same `dist/` lay
 
 ```sh
 cd receiver/web
-npm install            # typescript + vite from the registry
+npm ci                 # exact versions from package-lock.json
 npm run build          # = tsc && vite build  → dist/ (minified, hashed names)
 ```
 
@@ -28,7 +28,7 @@ sources, so an offline build is a faithful stand-in for testing in a car.
 ```sh
 tsc --noEmit -p tsconfig.offline.json     # src/ only (tsconfig.json also covers vite.config.ts, which needs
                                           # node_modules/vite to resolve)
-node check.mjs && node check-audio.mjs && node check-car.mjs && node check-browser.mjs
+npm test               # original checks plus check-runtime.mjs
 ```
 
 The `check*.mjs` scripts import `typescript` as a bare module. Without `npm install`, point them at a preinstalled

@@ -87,6 +87,7 @@ function render() {
   el<HTMLSelectElement>('language').value = language;
   el('app').dataset.state = state;
   volume.setAttribute('aria-label', t('volume'));
+  el('audio-status').textContent = t(audio.isPlaying ? 'playing' : 'paused');
   el('connection-text').textContent = t(state);
   el('connection-hint').textContent = hintFor();
   // The box's own page is no help while the box itself does not answer.
@@ -97,6 +98,7 @@ function render() {
   document.querySelectorAll<HTMLButtonElement>('[data-command]').forEach(b => { b.disabled = !active; });
   const night = isNight(parseNightMode(nightSelect.value), new Date(), darkQuery.matches);
   el('night-status').textContent = `${t('nightNow')}${t(night ? 'nightOn' : 'nightOff')}`;
+  el('night-schedule-hint').hidden = nightSelect.value !== 'schedule';
   el('night-status').title = t(darkQuery.matches ? 'browserDark' : 'browserLight');
 }
 function fit() {
@@ -278,7 +280,10 @@ el('audio-unlock').onclick = () => { void unlock(); };
 function setVolume() { audio.setVolume(Number(volume.value) / 100); el('volume-value').textContent = `${volume.value}%`; localStorage.setItem('playport-master',volume.value); }
 volume.oninput = setVolume; setVolume();
 function openPanel() {
-  if (!panel.open) { panel.classList.remove('closing'); panel.showModal(); }
+  if (!panel.open) {
+    for (const id of ['toast', 'error-banner']) el('settings-notices').append(el(id));
+    panel.classList.remove('closing'); panel.showModal();
+  }
   void loadDisplay();
 }
 /** Leave along the path it came in (to the right), unless motion is reduced. */
@@ -288,8 +293,23 @@ function closePanel() {
   panel.classList.add('closing');
   window.setTimeout(() => { panel.classList.remove('closing'); panel.close(); }, 200);
 }
+// Page navigation changes only host controls; it never changes the video viewport or display settings.
+const settingsPages = panel.querySelectorAll<HTMLElement>('[data-settings-content]');
+panel.querySelectorAll<HTMLButtonElement>('[data-settings-page]').forEach(button => {
+  button.onclick = () => {
+    for (const page of settingsPages) page.hidden = page.dataset.settingsContent !== button.dataset.settingsPage;
+    panel.querySelectorAll<HTMLButtonElement>('[data-settings-page]').forEach(item => {
+      item.setAttribute('aria-current', item === button ? 'page' : 'false');
+    });
+    panel.querySelector<HTMLElement>('.settings-body')!.scrollTop = 0;
+  };
+});
 el('btn-settings').onclick = openPanel;
 el('btn-close').onclick = closePanel;
+// Native modal dialogs are in the top layer: keep notices with the controls that triggered them.
+panel.addEventListener('close', () => {
+  for (const id of ['toast', 'error-banner']) el('app').append(el(id));
+});
 panel.addEventListener('cancel', event => { event.preventDefault(); closePanel(); });
 el('dismiss-error').onclick = () => error('');
 el<HTMLSelectElement>('language').onchange = event => { setLanguage((event.target as HTMLSelectElement).value); render(); };
@@ -349,14 +369,19 @@ async function fetchDisplay(): Promise<Display | null> {
 }
 async function loadDisplay() {
   if (displayBusy || !token) return;
-  el('display-status').textContent = t('loading');
+  setDisplayStatus('loading');
   const loaded = await fetchDisplay();
-  if (!loaded) { el('display-status').textContent = t('loadFail'); return; }
+  if (!loaded) { setDisplayStatus('loadFail'); return; }
   display = loaded; showDisplay(); fit(); scheduleAuto();
+}
+function setDisplayStatus(key: Key) {
+  const status = el('display-status');
+  status.dataset.i18n = key; status.textContent = t(key);
 }
 function showDisplay() {
   if (!display) return;
   el<HTMLSelectElement>('fps').value = String(display.fps); el<HTMLSelectElement>('ui-scale').value = String(display.uiScale);
+  delete el('display-status').dataset.i18n;
   el('display-status').dataset.codec = display.hevc ? 'H.265' : 'H.264';
   el('display-status').textContent = `${display.width} × ${display.height} / ${display.fps} fps / ${display.hevc ? 'H.265' : 'H.264'}${display.pending ? ` · ${t('nextSession')}` : ''}`;
 }
@@ -365,7 +390,8 @@ function endExpectRestart() { expectRestart = false; window.clearTimeout(expectT
 async function saveDisplay(target: Display, how: { defer?: boolean; reason: string }): Promise<boolean> {
   if (displayBusy || !token) return false;
   displayBusy = true; el<HTMLButtonElement>('apply').disabled = true; el<HTMLFieldSetElement>('display-fields').disabled = true;
-  el('display-status').textContent = t('applying');
+  for (const id of ['codec', 'performance-mode', 'allow-2560']) el<HTMLInputElement | HTMLSelectElement>(id).disabled = true;
+  setDisplayStatus('applying');
   // A renegotiation is coming: hold the layout from now, the session's end may arrive before this answer.
   const restart = active && !how.defer && (!display || !sameStream(display, target));
   if (restart) { expectRestart = true; window.clearTimeout(expectTimer); expectTimer = window.setTimeout(() => { endExpectRestart(); fit(); }, DISPLAY_HOLD_MS); }
@@ -373,10 +399,12 @@ async function saveDisplay(target: Display, how: { defer?: boolean; reason: stri
     const r = await fetch(`/api/display?token=${encodeURIComponent(token)}`, { method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ ...target, defer: how.defer === true, reason: how.reason }) });
     const body = await r.json() as {ok?:boolean; deferred?:boolean}; if (!r.ok || !body.ok) throw new Error();
-    if (body.deferred) { if (display) display.pending = true; el('display-status').textContent = t('deferred'); return true; }
-    display = { ...target, pending: false }; el('display-status').textContent = t('applied'); return true;
-  } catch { if (restart) { endExpectRestart(); fit(); } el('display-status').textContent = t('applyFail'); return false; }
-  finally { displayBusy=false; el<HTMLButtonElement>('apply').disabled=false; el<HTMLFieldSetElement>('display-fields').disabled=false; render(); }
+    if (body.deferred) { if (display) display.pending = true; setDisplayStatus('deferred'); return true; }
+    display = { ...target, pending: false }; setDisplayStatus('applied'); return true;
+  } catch { if (restart) { endExpectRestart(); fit(); } setDisplayStatus('applyFail'); return false; }
+  finally { displayBusy=false; el<HTMLButtonElement>('apply').disabled=false; el<HTMLFieldSetElement>('display-fields').disabled=false;
+    for (const id of ['codec', 'performance-mode', 'allow-2560']) el<HTMLInputElement | HTMLSelectElement>(id).disabled = false;
+    render(); }
 }
 function scheduleAuto() {
   window.clearTimeout(autoTimer);
@@ -438,7 +466,7 @@ function pageEvent(ev: number) {
   connection.send({type:'stats',stats:{ev,hidden:document.hidden?1:0,borderless:teslaBorderless()?1:0,width:screen.clientWidth,height:screen.clientHeight,...viewport()}});
 }
 /** Which page build runs (raised with each build tried in the car). */
-const BUILD = 202610221200;
+const BUILD = 202610310112;
 /** What the browser says of the space it gives the page, to find the car's bar over a fullscreen page (2026-10-13):
  *  window, visual viewport (and its offset), screen, available screen, outer window, pixel ratio. */
 function viewport(): Record<string, number> {
@@ -557,4 +585,7 @@ nightSelect.onchange = () => { localStorage.setItem('f50-night-mode', nightSelec
 darkQuery.addEventListener('change', () => { syncNight(); render(); });
 window.setInterval(() => { syncNight(); if (panel.open) render(); }, 30000);
 
-el('browser-check-show').onclick = () => (window as unknown as { F50BrowserCheck: { show(): void } }).F50BrowserCheck.show();
+el('browser-check-show').onclick = () => {
+  panel.close();
+  (window as unknown as { F50BrowserCheck: { show(): void } }).F50BrowserCheck.show();
+};

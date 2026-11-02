@@ -4,13 +4,13 @@ package com.shilapi.xcertplay.airplay
 class PairingStore(private val onSave: ((String, ByteArray) -> Unit)? = null) {
     private val entries = HashMap<String, ByteArray>()
 
-    fun save(identifier: String, longTermPublicKey: ByteArray) {
+    @Synchronized fun save(identifier: String, longTermPublicKey: ByteArray) {
         val copy = longTermPublicKey.copyOf()
         entries[identifier] = copy
         onSave?.invoke(identifier, copy)
     }
 
-    fun get(identifier: String): ByteArray? = entries[identifier]?.copyOf()
+    @Synchronized fun get(identifier: String): ByteArray? = entries[identifier]?.copyOf()
 
-    fun clear() = entries.clear()
+    @Synchronized fun clear() = entries.clear()
 }

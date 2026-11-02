@@ -5,6 +5,13 @@ import org.junit.Assert.assertSame
 import org.junit.Test
 
 class ScreenCodecTest {
+    @Test fun overflowingNalLengthLeavesPayloadUntouched() {
+        val payload = byteArrayOf(0x7f, 0xff.toByte(), 0xff.toByte(), 0xff.toByte(), 0x65, 1)
+        val original = payload.copyOf()
+        assertSame(payload, ScreenCodec.lengthPrefixedToAnnexB(payload))
+        assertArrayEquals(original, payload)
+    }
+
     @Test
     fun validLengthPrefixesBecomeAnnexBInPlace() {
         val first = byteArrayOf(0x40, 0x01)

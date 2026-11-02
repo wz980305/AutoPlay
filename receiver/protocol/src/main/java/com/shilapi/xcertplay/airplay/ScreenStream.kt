@@ -158,7 +158,7 @@ object ScreenCodec {
         while (offset + 4 <= payload.size) {
             val length = readU32Be(payload, offset)
             offset += 4
-            if (length <= 0 || offset + length > payload.size) return payload
+            if (length <= 0 || length > payload.size - offset) return payload
             offset += length
         }
         if (offset != payload.size) return payload

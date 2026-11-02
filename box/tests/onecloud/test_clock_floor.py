@@ -40,6 +40,13 @@ class ClockFloorTests(unittest.TestCase):
             self.assertFalse(clock_floor.touch(tmp, now=now + 10))
             self.assertTrue(clock_floor.touch(tmp, now=now + 3700))
 
+    def test_a_backward_clock_update_does_not_lower_the_saved_floor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            now = 1_790_000_000
+            self.assertTrue(clock_floor.write(tmp, now))
+            self.assertFalse(clock_floor.write(tmp, now - 3600))
+            self.assertEqual(clock_floor.read(tmp), now)
+
 
 if __name__ == '__main__':
     unittest.main()

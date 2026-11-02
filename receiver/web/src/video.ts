@@ -8,6 +8,7 @@ interface DecoderState {
   frameIntervalUs: number;
   width: number;
   height: number;
+  needsKeyframe: boolean;
 }
 
 interface HevcCandidate {
@@ -90,8 +91,8 @@ export class VideoPlayer {
     // The phone repeats its codec config with every keyframe the box asks for (after frames were dropped to
     // stay current): the running decoder takes that keyframe as it is, and a new one only blanks the picture.
     if (this.state?.decoder.state === 'configured' && sameConfig(this.lastConfig, message)) return;
-    const generation = ++this.generation;
     this.close();
+    const generation = this.generation;
     this.lastConfig = message;
     if (typeof VideoDecoder === 'undefined') {
       this.onError(
@@ -123,8 +124,13 @@ export class VideoPlayer {
       optimizeForLatency: true,
       ...(descriptionPresent ? { description: message.codecData } : {}),
     };
-    const decoder = this.createDecoder();
-    decoder.configure(config);
+    const decoder = this.createDecoder(generation);
+    try {
+      decoder.configure(config);
+    } catch (error) {
+      decoder.close();
+      throw error;
+    }
     if (generation !== this.generation) {
       decoder.close();
       return;
@@ -147,7 +153,7 @@ export class VideoPlayer {
       const support = await VideoDecoder.isConfigSupported(config).catch(() => null);
       if (generation !== this.generation) return;
       if (!support?.supported) continue;
-      const decoder = this.createDecoder();
+      const decoder = this.createDecoder(generation);
       try {
         decoder.configure(config);
       } catch (error) {
@@ -155,6 +161,8 @@ export class VideoPlayer {
         continue;
       }
       this.adopt(decoder, config, candidate.description !== undefined, message);
+      // The keyframe sent immediately after the config may have arrived while the support probe was pending.
+      this.requestKeyframe();
       return;
     }
     this.onError(
@@ -174,6 +182,7 @@ export class VideoPlayer {
       frameIntervalUs: Math.round(1_000_000 / 60),
       width: message.width,
       height: message.height,
+      needsKeyframe: true,
     };
     this.resizeCanvas(message.width, message.height);
     this.onResolutionChange(message.width, message.height);
@@ -192,22 +201,21 @@ export class VideoPlayer {
     if (before < 60 && held > 250 && gap < 60) { this.stall.stalls++; this.stall.stallMaxMs = Math.max(this.stall.stallMaxMs, Math.round(held)); }
     this.lastGaps = [held, gap];
     this.lastArrivalAt = now;
-    const data = state.usesDescription ? annexBToAvcc(message.data) : message.data;
-    if (data.length === 0) return;
+    if (message.data.length === 0) return;
     const oldest = this.arrivals.size >= BEHIND_FRAMES ? this.arrivals.values().next().value : undefined;
     const behind = oldest !== undefined && now - oldest > BEHIND_MS;
     if (message.keyframe) {
       if (this.skipping || behind) this.catchUp(state);
-    } else if (this.skipping || behind) {
+    } else if (state.needsKeyframe || this.skipping || behind) {
       this.skipping = true;
       this.stall.skipped++;
       // Not asked while the page is hidden (the car shows something else): the next frame once shown asks.
-      if (now - this.keyframeAskedAt >= KEYFRAME_ASK_MS && !document.hidden) {
-        this.keyframeAskedAt = now;
-        this.onRequestKeyframe();
-      }
+      this.requestKeyframe();
       return;
     }
+    // Do not scan/copy payloads that the backlog gate will discard.
+    const data = state.usesDescription ? annexBToAvcc(message.data) : message.data;
+    state.needsKeyframe = false;
     state.timestampUs += state.frameIntervalUs;
     this.arrivals.set(state.timestampUs, this.lastArrivalAt);
     if (this.arrivals.size > 120) this.arrivals.delete(this.arrivals.keys().next().value!);
@@ -221,6 +229,14 @@ export class VideoPlayer {
       );
     } catch (error) {
       this.fail(`Video decode failed: ${describeError(error)}`);
+    }
+  }
+
+  private requestKeyframe(): void {
+    const now = performance.now();
+    if (now - this.keyframeAskedAt >= KEYFRAME_ASK_MS && !document.hidden) {
+      this.keyframeAskedAt = now;
+      this.onRequestKeyframe();
     }
   }
 
@@ -238,9 +254,15 @@ export class VideoPlayer {
   }
 
   close(): void {
+    // Also invalidate a pending isConfigSupported() promise, even before a decoder has been adopted.
+    this.generation++;
     const state = this.state;
     this.state = null;
     this.arrivals.clear();
+    this.keyframeAskedAt = -Infinity;
+    this.lastArrivalAt = 0;
+    this.lastGaps = [Infinity, Infinity];
+    this.decodeLatencyMs = 0;
     this.clearWatchdog();
     if (state) {
       try {
@@ -268,16 +290,16 @@ export class VideoPlayer {
     this.onRequestKeyframe();
   }
 
-  private createDecoder(): VideoDecoder {
+  private createDecoder(generation: number): VideoDecoder {
     return new VideoDecoder({
       output: (frame) => {
         try {
-          this.paint(frame);
+          if (generation === this.generation) this.paint(frame);
         } finally {
           frame.close();
         }
       },
-      error: (error) => this.fail(`Video decoder error: ${error.message}`),
+      error: (error) => { if (generation === this.generation) this.fail(`Video decoder error: ${error.message}`); },
     });
   }
 

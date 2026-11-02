@@ -89,6 +89,8 @@ class SettingsPage:
         page = self
 
         class Handler(BaseHTTPRequestHandler):
+            timeout = 10   # incomplete requests must not keep a worker thread forever
+
             def log_message(self, *_):   # keep tokens/passwords out of the journal
                 pass
 
@@ -135,11 +137,23 @@ class SettingsPage:
             def do_POST(self):
                 if not self._allowed():
                     return self._send(403, "forbidden")
-                length = int(self.headers.get("Content-Length") or 0)
+                lengths = self.headers.get_all("Content-Length", [])
+                if self.headers.get("Transfer-Encoding") or len(lengths) > 1:
+                    return self._send(400, "invalid request framing")
+                raw_length = lengths[0] if lengths else "0"
+                if not raw_length.isascii() or not raw_length.isdecimal():
+                    return self._send(400, "invalid content length")
+                length = int(raw_length)
                 if length > MAX_BODY:
                     return self._send(413, "too large")
-                form = {k: v[0] for k, v in urllib.parse.parse_qs(self.rfile.read(length).decode(),
-                                                                 keep_blank_values=True).items()}
+                try:
+                    body = self.rfile.read(length)
+                    if len(body) != length:
+                        return self._send(400, "incomplete body")
+                    form = {k: v[0] for k, v in urllib.parse.parse_qs(body.decode(),
+                                                                     keep_blank_values=True).items()}
+                except (UnicodeDecodeError, TimeoutError):
+                    return self._send(400, "invalid body")
                 try:
                     result = page.apply(self.path, form)
                 except ValueError as error:

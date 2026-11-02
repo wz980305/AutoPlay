@@ -1,12 +1,16 @@
 # AutoPlay
 
+> **1.0.0（2026-11-02）：** 首个在特斯拉车内实测通过的版本。新增腾讯云（DNSPod）自有域名证书支持（与 DuckDNS 并存），无线固定为中国区 CN / 信道 149（特斯拉搜不到热点的根因是厂商镜像国家码 TR 不含 149–165）。接收端、网页包、OpenWrt 包版本统一为 1.0.0。下文 0.1.x 说明是历史记录。
+
 [English](README.en.md)
+
+> **0.1.1 更新（2026-10-31）：** 本版已完成 JDK 21 接收端编译与回归、前端类型检查/构建、盒子侧本机回归，并修复媒体恢复、配对持久化、状态与安装边界问题。完整结果与限制见 [0.1.1 审计报告](docs/AUDIT-0.1.1.md)。当前是本机验证过的工程测试版，尚未安装到 F50 或特斯拉。用户的 **F50 B13 不受现有 B16 刷机路径支持**；不得绕过内核校验。下文部分 0.1.0 说明是历史记录。
 
 AutoPlay 是 [PlayPort](https://github.com/youcci/playport) + [DashPlay](https://github.com/yizhixiaoheigou/DashPlay) / [openwrt-dashplay](https://github.com/yizhixiaoheigou/openwrt-dashplay) 的 GPL-3.0 硬分叉，只做**一个**目标：
 
 > 一台刷了 OpenWrt（[mu300-linux](https://github.com/dikeckaan/mu300-linux) 的 `mu300-linux` 镜像，厂商 5.4 内核，紫光展锐 T760）的**中兴 F50** 随身 WiFi，接车上 USB 供电，接收 iPhone 的无线 CarPlay，把画面显示在**特斯拉**车机自带的浏览器里。
 
-**状态：工程骨架，未上车验证。** 0.1.0 里程碑在上游 2026-10-25 的快照（DashPlay `e3beae4`、openwrt-dashplay `5f17702`、PlayPort `9a0882d` + 63 个补丁）之上，已经落地了三件事：接收端按"只做 F50 + 特斯拉"裁剪并修了审计里的一批问题（`receiver/docs/TRIM-LOG.md`）；盒子侧删掉其他平台和模式、改成特斯拉常量、补上分组件守护、状态模型、升级日志与回滚、证书状态、出厂重置，软件包改名 `autoplay`（`box/docs/TRIM-LOG.md`、`box/docs/STATUS-MODEL.md`）；本仓库的工具和文档。**没有验证的：** Kotlin 侧的改动没有编译过（编写环境没有 Gradle 和网络，`receiver/docs/UNVERIFIED-KOTLIN.md` 逐文件列出要看什么）；没有在任何一台 F50 上安装运行过；没有在任何一辆车上跑过。验证过的只有：网页端 `tsc` 无错、esbuild 能构建、四个 `check*.mjs` 通过；盒子侧 225 个单元测试通过；工具的语法检查、单元测试和探测页的无头渲染。把它当成一份带代码的设计文档，而不是能直接装的产品。
+**状态：0.1.1 工程测试版，未上车验证。** 已完成接收端编译与本机回归、前端构建和盒子软件测试；基线、具体计数、缺陷清单和剩余风险见 [`docs/AUDIT-0.1.1.md`](docs/AUDIT-0.1.1.md)。本轮以原 0.1.0（提交 `7d8bcca`）为基线，保留 F50 + 特斯拉架构，修复媒体恢复、配对落盘、设置请求、状态并发、安装门禁与回滚签名等问题。F50 B13、AMD Model 3P、iPhone 15 Pro / iOS 27.2 尚未跑过端到端测试，本版不能作为已验证的刷机镜像或成品使用。
 
 **这不是 Apple 认证产品。** 运行需要用户自己提供配件认证身份；仓库、包、文档、测试里都不含身份材料，也不会自动下载。公开流传的共享身份随时可能被撤销（见 `NOTICE.md`、`docs/SECURITY.md`）。
 

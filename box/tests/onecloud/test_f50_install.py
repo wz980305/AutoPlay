@@ -171,7 +171,7 @@ class InstallerTests(unittest.TestCase):
     def test_each_stage_keeps_a_progress_file_the_assistant_can_read(self):
         # 2026-10-17: people waited minutes in silence and unplugged; the stage's state is in WORK/progress/f50-<stage>.json
         import json
-        with tempfile.TemporaryDirectory() as d, patch.dict(os.environ), patch.object(sys, 'argv', ['f50-install.py', 'flash', d]):
+        with tempfile.TemporaryDirectory() as d, patch.dict(os.environ), patch.object(sys, 'argv', ['f50-install.py', 'flash', d, '--stock-build', 'B16']):
             self.assertEqual(install.main(), 1)
             s = json.loads((Path(d) / 'progress' / 'f50-flash.json').read_text(encoding='utf-8'))
         self.assertEqual((s['state'], s['title'], s['expected_s'], s['safe_to_unplug']), ('failed', 'F50 备份并 Root', 480, False))

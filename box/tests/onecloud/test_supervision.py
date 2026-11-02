@@ -256,6 +256,18 @@ class BluetoothManagerTests(unittest.TestCase):
         self.assertEqual(self.platform.stopped, ["bluetooth"])
         self.assertEqual(self.status.domain("bluetooth")["reason"], "hci-lost")
 
+    def test_success_from_an_exited_helper_does_not_mark_the_new_helper_powered(self):
+        self.manager.start()
+        done = threading.Thread(target=lambda: None); done.start(); done.join()
+        self.manager.attempt = (done, [True], self.manager.generation)
+        self.platform.child('bluetooth').returncode = 1
+        self.manager.tick()
+        self.clock.advance(5)
+        self.manager.tick()
+        self.manager.tick()
+        self.assertFalse(self.manager.powered)
+        self.assertEqual(self.status.state('bluetooth'), 'starting')
+
 
 class ReceiverManagerTests(unittest.TestCase):
     def setUp(self):
@@ -275,6 +287,16 @@ class ReceiverManagerTests(unittest.TestCase):
         self.manager.tick()
         wait_threads(self.manager, "probing")
         self.manager.tick()
+
+    def test_old_probe_does_not_cancel_the_replacement_jvms_startup_grace(self):
+        self.manager.launch(self.network, True)
+        done = threading.Thread(target=lambda: None); done.start(); done.join()
+        self.manager.probing = (done, [True], self.manager.generation)
+        self.manager.relaunch(why='test replacement')
+        deadline = self.manager.liveness.next_at
+        self.manager.tick()
+        self.assertEqual(self.status.state('system'), 'starting')
+        self.assertEqual(self.manager.liveness.next_at, deadline)
 
     def test_an_exit_restarts_only_the_receiver_with_backoff(self):
         self.manager.launch(self.network, True)

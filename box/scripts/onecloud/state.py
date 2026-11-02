@@ -43,12 +43,20 @@ def save_json(path, value, sync=True):
     # A temporary file of its own per call: two threads saving the same file wrote into one .tmp and the second
     # rename failed (DashPlay review 2026-10-12).
     fd, temporary = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
-    os.fchmod(fd, 0o600)
-    with os.fdopen(fd, "w") as out:
-        json.dump(value, out)
-        out.flush()
+    try:
+        with os.fdopen(fd, "w") as out:
+            json.dump(value, out)
+            out.flush()
+            if sync:
+                os.fsync(out.fileno())
+        Path(temporary).replace(path)
         if sync:
-            os.fsync(out.fileno())
-    Path(temporary).replace(path)
-    if sync:
-        os.sync()   # the root fs commits only every 120 s; state must survive switching the car off
+            # Persist the rename as well as the contents. A system-wide sync flushes unrelated log,
+            # package and filesystem traffic and can stall a live CarPlay session on a slow SD card.
+            directory = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+    finally:
+        Path(temporary).unlink(missing_ok=True)

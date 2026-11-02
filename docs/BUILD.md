@@ -2,7 +2,7 @@
 
 三个可构建的部分：接收端（JVM）、投屏页（web）、OpenWrt 包（apk）。盒子上的 Python（`box/`）不需要构建，但要打进程序包。
 
-> **重要：** 本里程碑的 Kotlin 改动没有编译过（编写环境没有 Gradle 和网络）。`receiver/docs/UNVERIFIED-KOTLIN.md` 逐文件列出改了什么、编译风险在哪、先看什么；第一次 `./gradlew build` 之前先读它，编译错误优先按那份清单排查。网页端已验证：`tsc` 无错、esbuild 能构建、四个 `check*.mjs` 通过。
+> **0.1.1 验证：** 接收端已用 Temurin 21.0.13 与 Gradle 9.5.0 完成构建和测试，前端用锁文件中的 TypeScript/Vite 构建成功。见 `AUDIT-0.1.1.md`。`receiver/docs/UNVERIFIED-KOTLIN.md` 保留为 0.1.0 历史清单；硬件行为仍待验证。
 
 ## 1. 接收端（`receiver/`）
 
@@ -11,7 +11,7 @@
 ```sh
 cd receiver
 ./gradlew build                        # 先编译两个模块并跑测试（UNVERIFIED-KOTLIN.md 要求的第一步）
-./gradlew :server:installDist          # 产物：server/build/install/playport/{bin,lib}
+./gradlew :server:installDist          # 产物：server/build/install/server/{bin,lib}
 ```
 
 `:server:installDist` 生成的 `lib/` 就是盒子上 `/opt/autoplay/playport/lib/` 的内容；启动类 `com.playport.server.MainKt`，盒子上由 `run-receiver.py` 以 `-Xms64m -Xmx384m`、`-XX:+ExitOnOutOfMemoryError`、`-XX:ErrorFile=<state>`、AppCDS 启动。kxml2 依赖随有线代码一起去掉了；`protocol/build.gradle.kts` 是改过的文件之一。
@@ -26,7 +26,7 @@ cd receiver
 
 ```sh
 cd receiver/web
-npm install                             # typescript + vite
+npm ci                                  # 使用提交的锁文件
 npm run build                           # tsc && vite build → dist/（压缩、带哈希文件名）
 ```
 
@@ -61,10 +61,10 @@ mkdir -p node_modules && ln -sfn /opt/npm-tools/node_modules/typescript node_mod
 OpenWrt 包解开到 `/opt/autoplay` 的内容是 `autoplay-bundle-<版本>.tar`，由 `box/scripts/build-bundle.sh` 从本仓库打出（先完成第 1、2 节）：
 
 ```sh
-sh box/scripts/build-bundle.sh autoplay-bundle.tar      # RECEIVER=<路径> 指定接收端构建目录，默认 ../receiver
+AUTOPLAY_VERSION=0.1.1 sh box/scripts/build-bundle.sh autoplay-bundle.tar      # RECEIVER=<路径> 指定接收端构建目录，默认 ../receiver
 ```
 
-需要主机上有：接收端的 `installDist` 产物和 `web/dist/`、`javac` 21、pip、curl、unzip。它只打包 git 已提交的文件，另下载两份固定哈希的依赖：dbus-next 0.2.3（蓝牙桥）和 acme.sh 3.1.6（DuckDNS 证书）；`scan-sensitive.py` 的检查会拒绝打进个人文件。
+需要主机上有：接收端的 `installDist` 产物和 `web/dist/`、`javac` 21、pip、curl、unzip。它从经过审核的源码目录枚举顶层 Python 模块（不再依赖 `.git`，新增模块不会遗漏），另下载两份固定哈希的依赖：dbus-next 0.2.3（蓝牙桥）和 acme.sh 3.1.6（DuckDNS 证书）；`scan-sensitive.py` 的检查会拒绝打进个人文件。
 
 ## 4. OpenWrt 包（`openwrt/`）
 
@@ -82,7 +82,7 @@ sh openwrt/scripts/bump-autoplay.sh <版本> autoplay-bundle-<版本>.tar   # �
 
 ```sh
 scp out/*.apk root@100.96.0.1:/tmp/
-ssh root@100.96.0.1 'cd /tmp && apk add --allow-untrusted autoplay-jre-*_$(cat /etc/apk/arch).apk autoplay-2*.apk luci-app-autoplay-*.apk luci-i18n-autoplay-zh-cn-*.apk'
+ssh root@100.96.0.1 'cd /tmp && apk add --allow-untrusted autoplay-jre-*_$(cat /etc/apk/arch).apk autoplay-[0-9]*.apk luci-app-autoplay-*.apk luci-i18n-autoplay-zh-cn-*.apk'
 ```
 
 包没有签名（WP9 的待办），所以要 `--allow-untrusted`。F50 的蓝牙用的是装机脚本 `box/scripts/f50-install.py` 的 `autoplay` 阶段装进 `/opt/autoplay-bluez` 的私有 BlueZ，不是 `apk add bluez-daemon`（系统包会带入不匹配的 6.12 内核模块）。装机脚本的 `check`/`flash` 阶段需要 `box/tools/` 里固定版本的 `spd_dump`/`lz4`，这些二进制没有导入本仓库，要从 DashPlay 的检出里拿；`box/skills/autoplay-install/SKILL.md` 也还没按本仓库重写。

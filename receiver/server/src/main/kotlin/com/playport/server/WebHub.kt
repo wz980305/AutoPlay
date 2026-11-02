@@ -11,6 +11,7 @@ import io.ktor.server.plugins.origin
 import io.ktor.server.request.receiveText
 import io.ktor.server.request.uri
 import io.ktor.server.response.respondText
+import io.ktor.server.response.respondFile
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
@@ -98,7 +99,7 @@ data class ServerMessage(
     val ms: Long? = null,
 )
 
-private class WsClient(
+internal class WsClient(
     val channel: Channel<Frame>,
 ) {
     val imageReady = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -109,6 +110,12 @@ private class WsClient(
     val queuedBytes = AtomicLong(0)
     fun offer(frame: Frame) = channel.trySend(frame).also {
         if (it.isSuccess) queuedBytes.addAndGet(frame.data.size.toLong())
+    }
+    /** A missing delta invalidates every following delta until a keyframe is actually accepted. */
+    fun offerVideo(frame: Frame, keyframe: Boolean): Boolean {
+        val accepted = offer(frame).isSuccess
+        imageReady.set(accepted && (keyframe || imageReady.get()))
+        return accepted
     }
     val keyframeRequested = AtomicLong(0)
     val id = nextClientId.incrementAndGet()
@@ -207,14 +214,12 @@ class WebHub(
                 client.videoDropped.incrementAndGet()
                 continue
             }
-            if (keyframe) {
-                client.imageReady.set(true)
-            } else if (!client.imageReady.get()) {
+            if (!keyframe && !client.imageReady.get()) {
                 // Every viewer starts decoding at a keyframe; drop deltas until one arrives.
                 maybeRequestKeyframe(client, type)
                 continue
             }
-            if (client.offer(Frame.Binary(true, frame)).isSuccess) {
+            if (client.offerVideo(Frame.Binary(true, frame), keyframe)) {
                 client.videoSent.incrementAndGet()
                 client.bytesSent.addAndGet(frame.size.toLong())
             } else {
@@ -490,7 +495,7 @@ class WebHub(
                     )
                     return@get
                 }
-                call.respondText(Files.readString(file), contentTypeFor(file.fileName.toString()))
+                call.respondFile(file.toFile())
             }
         }
     }
@@ -501,17 +506,6 @@ class WebHub(
         client.touchDown = false
         log.info("viewer client={} {} with a finger down: lifting it", client.id, why)
         inputHandler?.invoke(ClientMessage(type = "touch-release"))
-    }
-
-    private fun contentTypeFor(name: String): io.ktor.http.ContentType = when {
-        name.endsWith(".html") -> io.ktor.http.ContentType.Text.Html
-        name.endsWith(".js") -> io.ktor.http.ContentType.Text.JavaScript
-        name.endsWith(".css") -> io.ktor.http.ContentType.Text.CSS
-        name.endsWith(".svg") -> io.ktor.http.ContentType.Image.SVG
-        name.endsWith(".png") -> io.ktor.http.ContentType.Image.PNG
-        name.endsWith(".json") -> io.ktor.http.ContentType.Application.Json
-        name.endsWith(".wasm") -> io.ktor.http.ContentType.Application.OctetStream
-        else -> io.ktor.http.ContentType.Application.OctetStream
     }
 
     private fun displayJson(): String = kotlinx.serialization.json.buildJsonObject {

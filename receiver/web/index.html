@@ -9,8 +9,8 @@
     <p id="connection-hint"></p>
     <div class="group actions">
       <a id="box-link" class="cell" href="/" hidden><span class="tile green"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.8" width="10" height="18.4" rx="2.6"/><path d="M10.8 5.2h2.4"/></svg></span><span class="main"><b data-i18n="boxLink"></b><span data-i18n="boxLinkHint"></span></span><span class="chev"></span></a>
-      <button id="welcome-fullscreen" class="cell" type="button"><span class="tile blue"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg></span><span class="main"><b id="welcome-fullscreen-text"></b><span id="welcome-fullscreen-hint"></span></span></button>
       <button id="btn-settings" class="cell" type="button" aria-haspopup="dialog" aria-controls="settings"><span class="tile gray"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></span><span class="main"><b data-i18n="playerSettings"></b></span><span class="chev"></span></button>
+      <button id="welcome-fullscreen" class="cell" type="button"><span class="tile blue"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg></span><span class="main"><b id="welcome-fullscreen-text"></b><span id="welcome-fullscreen-hint"></span></span></button>
     </div>
   </div></div>
   <div id="recovering" role="status" hidden><div class="notice"><span class="spinner" aria-hidden="true"></span><span id="recovering-text"></span></div></div>
@@ -19,32 +19,52 @@
   <button id="audio-unlock" class="unlock-bar" type="button" data-i18n="sound" hidden></button>
   <div id="error-banner" role="alert" hidden><b data-i18n="error"></b><details><summary data-i18n="technical"></summary><p id="error-text"></p></details><button id="dismiss-error" class="text" data-i18n="close"></button></div>
 </main>
-<dialog id="settings" aria-labelledby="settings-title"><header><h2 id="settings-title" data-i18n="settings" tabindex="-1" autofocus></h2><button id="btn-close" class="text" data-i18n="done"></button></header><div class="settings-body">
-  <div class="group">
-    <button id="fullscreen" class="cell" type="button"><span class="tile blue"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg></span><span class="main"><b id="fullscreen-text"></b><span id="fullscreen-hint"></span></span></button>
-    <a id="box-link-panel" class="cell" href="/" hidden><span class="tile green"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.8" width="10" height="18.4" rx="2.6"/><path d="M10.8 5.2h2.4"/></svg></span><span class="main"><b data-i18n="boxLink"></b><span data-i18n="boxLinkHintLive"></span></span><span class="chev"></span></a>
+<dialog id="settings" aria-labelledby="settings-title">
+  <header><h2 id="settings-title" data-i18n="settings" tabindex="-1" autofocus></h2><button id="btn-close" class="text" type="button" data-i18n="done"></button></header>
+  <div id="settings-notices" class="settings-notices"></div>
+  <div class="settings-layout">
+    <nav class="settings-nav" aria-labelledby="settings-nav-label"><span id="settings-nav-label" class="sr" data-i18n="settingsNav"></span><button id="nav-general" type="button" aria-controls="settings-general" aria-current="page" data-settings-page="general" data-i18n="commonTab"></button>
+<button id="nav-display" type="button" aria-controls="settings-display" aria-current="false" data-settings-page="display" data-i18n="displayTab"></button>
+<button id="nav-connection" type="button" aria-controls="settings-connection" aria-current="false" data-settings-page="connection" data-i18n="supportTab"></button></nav>
+    <div class="settings-body">
+      <section id="settings-general" class="settings-page" aria-labelledby="nav-general" data-settings-content="general">
+        <h3 class="group-title" data-i18n="volume"></h3>
+        <div class="group"><div class="cell volume"><svg class="ico dim" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M4 9h3l5-4v14l-5-4H4z"/></svg><input id="volume" type="range" min="0" max="100" value="100"/><svg class="ico dim" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9h3l5-4v14l-5-4H4z" fill="currentColor" stroke="none"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg><output id="volume-value">100%</output></div></div>
+        <p class="foot"><span data-i18n="volumeHint"></span> <span id="audio-status"></span></p>
+        <h3 class="group-title" data-i18n="appearance"></h3>
+        <div class="group"><label class="cell select-row"><span class="main"><b data-i18n="nightMode"></b><span id="night-status"></span></span><select id="night-mode" aria-describedby="night-status night-schedule-hint"><option value="schedule" data-i18n="nightSchedule"></option><option value="system" data-i18n="nightSystem"></option><option value="day" data-i18n="nightDay"></option><option value="night" data-i18n="nightNight"></option></select></label>
+<label class="cell select-row"><span class="main"><b data-i18n="language"></b></span><select id="language"><option value="zh">简体中文</option><option value="en">English</option></select></label></div>
+        <p id="night-schedule-hint" class="foot" data-i18n="nightScheduleHint"></p>
+        <p class="foot page-note" data-i18n="savedHere"></p>
+      </section>
+      <section id="settings-display" class="settings-page" aria-labelledby="nav-display" data-settings-content="display" hidden>
+        <h3 class="group-title" data-i18n="frameSettings"></h3>
+        <form id="display-form" class="group picture-form">
+          <fieldset id="display-fields">
+            <label class="cell select-row"><span class="main"><b data-i18n="ui"></b></span><select id="ui-scale" aria-describedby="ui-hint"><option value="75" data-i18n="smaller"></option><option value="85" data-i18n="small"></option><option value="100" data-i18n="standard"></option><option value="115" data-i18n="large"></option></select></label>
+            <p id="ui-hint" class="foot" data-i18n="uiHint"></p>
+            <label class="cell select-row"><span class="main"><b data-i18n="fps"></b></span><select id="fps"><option value="30">30 fps</option><option value="60">60 fps</option></select></label>
+          </fieldset>
+          <button id="apply" class="btn" type="submit" data-i18n="apply"></button>
+          <p id="display-status" class="foot" role="status" aria-live="polite"></p>
+        </form>
+        <div class="group spaced"><button id="fullscreen" class="cell" type="button"><span class="tile blue"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg></span><span class="main"><b id="fullscreen-text"></b><span id="fullscreen-hint"></span></span></button></div>
+        <div class="group spaced"><details><summary class="cell"><span class="main"><b data-i18n="advanced"></b><span data-i18n="advancedHint"></span></span><span class="chev"></span></summary><div class="inner advanced">
+          <label class="cell select-row"><span class="main"><b data-i18n="codec"></b><span data-i18n="codecHint"></span></span><select id="codec"><option value="auto" data-i18n="codecAuto"></option><option value="h264">H.264</option><option value="h265">H.265</option></select></label>
+          <label class="cell"><span class="main"><b data-i18n="performanceMode"></b><span data-i18n="performanceModeHint"></span></span><input id="performance-mode" class="switch" type="checkbox"/></label>
+<label class="cell"><span class="main"><b data-i18n="allow2560"></b><span data-i18n="allow2560Hint"></span></span><input id="allow-2560" class="switch" type="checkbox"/></label>
+<label class="cell"><span class="main"><b data-i18n="compatDisplay"></b><span data-i18n="compatDisplayHint"></span></span><input id="compat-display-on" class="switch" type="checkbox"/></label>
+<label class="cell"><span class="main"><b data-i18n="debugHud"></b><span data-i18n="debugHudHint"></span></span><input id="debug-hud-on" class="switch" type="checkbox"/></label>
+          <p class="foot" data-i18n="autoHint"></p>
+        </div></details></div>
+      </section>
+      <section id="settings-connection" class="settings-page" aria-labelledby="nav-connection" data-settings-content="connection" hidden>
+        <h3 class="group-title" data-i18n="supportTab"></h3>
+        <div class="group"><a id="box-link-panel" class="cell" href="/" hidden><span class="tile green"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.8" width="10" height="18.4" rx="2.6"/><path d="M10.8 5.2h2.4"/></svg></span><span class="main"><b data-i18n="boxLink"></b><span data-i18n="boxLinkHintLive"></span></span><span class="chev"></span></a>
+<details><summary class="cell"><span class="main"><b data-i18n="diagnostics"></b></span><span class="chev"></span></summary><div class="inner text"><p id="capabilities"></p><p id="stats"></p><p data-i18n="privacy"></p><button id="browser-check-show" class="btn plain" type="button" data-i18n="browserCheck"></button></div></details>
+<details><summary class="cell"><span class="main"><b data-i18n="fallback"></b><span data-i18n="fallbackHint"></span></span><span class="chev"></span></summary><div id="fallback-controls" class="inner"><button data-command="home" data-i18n="home"></button><button data-command="back" data-i18n="back"></button><button data-command="refresh" data-i18n="refresh"></button></div></details></div>
+      </section>
+    </div>
   </div>
-  <p class="group-title" data-i18n="volume"></p>
-  <div class="group"><div class="cell volume"><svg class="ico dim" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M4 9h3l5-4v14l-5-4H4z"/></svg><input id="volume" type="range" min="0" max="100" value="100"/><svg class="ico dim" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9h3l5-4v14l-5-4H4z" fill="currentColor" stroke="none"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg><output id="volume-value">100%</output></div></div>
-  <p class="foot"><span data-i18n="volumeHint"></span> <span id="audio-status"></span></p>
-  <p class="group-title" data-i18n="display"></p>
-  <div class="group">
-    <label class="cell"><span class="main"><b data-i18n="nightMode"></b><span id="night-status"></span></span><select id="night-mode"><option value="schedule" data-i18n="nightSchedule"></option><option value="system" data-i18n="nightSystem"></option><option value="day" data-i18n="nightDay"></option><option value="night" data-i18n="nightNight"></option></select></label>
-    <label class="cell"><span class="main"><b data-i18n="language"></b></span><select id="language"><option value="zh">简体中文</option><option value="en">English</option></select></label>
-  </div>
-  <div class="gap"></div>
-  <div class="group">
-    <details><summary class="cell"><span class="main"><b data-i18n="advanced"></b><span data-i18n="advancedHint"></span></span><span id="display-status" class="value" role="status"></span><span class="chev"></span></summary><div class="inner advanced">
-      <label class="cell"><span class="main"><b data-i18n="performanceMode"></b><span data-i18n="performanceModeHint"></span></span><input id="performance-mode" class="switch" type="checkbox"/></label>
-      <label class="cell"><span class="main"><b data-i18n="allow2560"></b><span data-i18n="allow2560Hint"></span></span><input id="allow-2560" class="switch" type="checkbox"/></label>
-      <label class="cell"><span class="main"><b data-i18n="compatDisplay"></b><span data-i18n="compatDisplayHint"></span></span><input id="compat-display-on" class="switch" type="checkbox"/></label>
-      <label class="cell"><span class="main"><b data-i18n="debugHud"></b><span data-i18n="debugHudHint"></span></span><input id="debug-hud-on" class="switch" type="checkbox"/></label>
-      <form id="display-form"><fieldset id="display-fields"><div class="pair"><label><span data-i18n="ui"></span><select id="ui-scale"><option value="75" data-i18n="smaller"></option><option value="85" data-i18n="small"></option><option value="100" data-i18n="standard"></option><option value="115" data-i18n="large"></option></select></label><label><span data-i18n="fps"></span><select id="fps"><option value="30">30 fps</option><option value="60">60 fps</option></select></label></div><div class="pair"><label><span data-i18n="codec"></span><select id="codec"><option value="auto" data-i18n="codecAuto"></option><option value="h264">H.264</option><option value="h265">H.265</option></select></label></div></fieldset><button id="apply" class="btn" data-i18n="apply"></button></form>
-      <p class="foot" data-i18n="autoHint"></p>
-    </div></details>
-    <details><summary class="cell"><span class="main"><b data-i18n="diagnostics"></b></span><span class="chev"></span></summary><div class="inner text"><p id="capabilities"></p><p id="stats"></p><p data-i18n="privacy"></p><button id="browser-check-show" class="btn plain" type="button" data-i18n="browserCheck"></button></div></details>
-    <details><summary class="cell"><span class="main"><b data-i18n="fallback"></b><span data-i18n="fallbackHint"></span></span><span class="chev"></span></summary><div id="fallback-controls" class="inner"><button data-command="home" data-i18n="home"></button><button data-command="back" data-i18n="back"></button><button data-command="refresh" data-i18n="refresh"></button></div></details>
-  </div>
-  <p class="foot" data-i18n="savedHere"></p>
-</div></dialog>
+</dialog>
 <script type="module" src="/src/boot.ts"></script></body></html>

@@ -51,7 +51,7 @@ object Wire {
         height: Int,
         codecData: ByteArray,
     ): ByteArray {
-        val buffer = ByteBuffer.allocate(12 + codecData.size).order(ByteOrder.LITTLE_ENDIAN)
+        val buffer = ByteBuffer.allocate(11 + codecData.size).order(ByteOrder.LITTLE_ENDIAN)
         buffer.put(VIDEO_CONFIG)
         buffer.put(streamType.toByte())
         buffer.put(videoCodecId(codec))

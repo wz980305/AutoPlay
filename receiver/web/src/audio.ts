@@ -277,9 +277,12 @@ export class AudioEngine {
   }
 
   stopAll(): void {
+    window.clearInterval(this.duckTimer);
+    this.duckLevel = 1;
     for (const streamType of this.streams.keys()) this.closeStream(streamType);
     this.retainedMusic?.close(); this.retainedMusic = null;
     this.lastAudioAt = -Infinity;
+    this.sleepWhenIdle();
   }
 
   private closeStream(streamType: number): void {
@@ -324,7 +327,8 @@ export class AudioEngine {
     if (!this.unlocked || payload.length < 2) return;
     const sampleCount = Math.floor(payload.length / 2);
     const channels = Math.max(1, state.channels);
-    const frames = Math.max(1, Math.floor(sampleCount / channels));
+    const frames = Math.floor(sampleCount / channels);
+    if (frames === 0) return;
     const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
     const buffer = this.context.createBuffer(channels, frames, state.sampleRate);
     for (let channel = 0; channel < channels; channel += 1) {

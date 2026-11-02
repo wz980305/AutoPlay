@@ -44,7 +44,7 @@ build() { make "$@" V=s >/tmp/build.log 2>&1 || { grep -B5 -A5 "ERROR:\|Hash mis
 # A local bundle has its own hash; set it for this package only (the JRE keeps the one in its Makefile).
 build package/autoplay/compile ${LOCAL_HASH:+PKG_HASH=$LOCAL_HASH}
 build package/luci-app-autoplay/compile package/autoplay-jre/compile
-cp bin/packages/*/autoplay/autoplay-2*.apk bin/packages/*/autoplay/luci-*.apk /out/
+cp bin/packages/*/autoplay/autoplay-[0-9]*.apk bin/packages/*/autoplay/luci-*.apk /out/
 # The JRE package names no architecture in its file name: give each copy its own.
 for jre in bin/packages/*/autoplay/autoplay-jre-*.apk; do cp "$jre" "/out/$(basename "$jre" .apk)_x86_64.apk"; done
 for arch in $JRE_ARCHES; do

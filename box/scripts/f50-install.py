@@ -2,10 +2,10 @@
 """ZTE F50 from stock B16 to OpenWrt with AutoPlay, one command per stage (Apple Silicon Mac or Windows x64).
 
     python3 f50-install.py check    WORK            tools, pinned downloads, free space
-    python3 f50-install.py flash    WORK            full backup and Root in ONE download-mode session
+    python3 f50-install.py flash    WORK --stock-build B16  full backup and Root (B16 only)
     python3 f50-install.py openwrt  WORK            OpenWrt on the SD card, Android B kept
     python3 f50-install.py autoplay WORK            AutoPlay packages and Bluetooth (the LAN becomes 100.96.0.1)
-    python3 f50-install.py identity WORK [DIR]      CarPlay identity (DIR, or from DiPlay's release) onto the box
+    python3 f50-install.py identity WORK DIR        install the owner's local CarPlay identity
     python3 f50-install.py tesla    WORK [--country CC --channel N]   checks, optional Wi-Fi country/channel
 
 WORK is the install directory of the skill (skills/autoplay-install/SKILL.md); this stage's files go to WORK/f50.
@@ -19,7 +19,6 @@ the SD card, boot_a and 32 bytes of misc (the installer of OpenWrt) is ever writ
 """
 import argparse
 import hashlib
-import io
 import json
 import os
 from pathlib import Path
@@ -50,7 +49,6 @@ TESLA_LAN = '100.96.0.1'
 B16 = 'F50_FLYMODEM_ZYV1.0.0B16'
 # The fork's package releases (set when AutoPlay publishes them; the DashPlay feed carries the old package names).
 FEED = os.environ.get('AUTOPLAY_FEED', 'https://api.github.com/repos/yizhixiaoheigou/openwrt-autoplay/releases/latest')
-DIPLAY = 'https://api.github.com/repos/shihabal3amri/DiPlay/releases'
 CHECK_IDENTITY = '''set -eu
 umask 077
 cd /opt/autoplay/identity/offline-mfi
@@ -300,6 +298,7 @@ def check(w, args):
 
 def flash(w, args):
     w.needs('check')
+    require_stock_build(getattr(args, 'stock_build', None))
     backup, session = w.f50 / 'backup', w.f50 / 'root-session'
     require(not backup.exists() and not session.exists(),
             'a backup or Root session is already in WORK/f50: a second run needs a person to look first')
@@ -550,7 +549,7 @@ def autoplay(w, args):
         w.push(host, path, f'/tmp/autoplay-install/{name}')
     # Installing moves the LAN to 100.96.0.1/24 (the package's uci-defaults: a Tesla's browser opens no private
     # address), which drops this SSH session: run apk apart from it and find the box again on the new address.
-    w.ssh(host, 'cd /tmp/autoplay-install && (apk add --allow-untrusted autoplay-jre-*.apk autoplay-2*.apk luci-*.apk '
+    w.ssh(host, 'cd /tmp/autoplay-install && (apk add --allow-untrusted autoplay-jre-*.apk autoplay-[0-9]*.apk luci-*.apk '
                 '> /tmp/autoplay-install.log 2>&1 </dev/null &) ; echo started', timeout=60)
     say(f'installing; the box moves to {TESLA_LAN} (a few minutes)')
     if host != TESLA_LAN and not wait_port(TESLA_LAN, 22, 600):
@@ -582,44 +581,24 @@ def autoplay(w, args):
     say(f'{version} running, Bluetooth on; settings page http://{host}:18080/')
 
 
-def fetch_identity(out):
-    """The two files from the newest DiPlay APK that has them (pre-releases included), checked by the API digest."""
-    def get(url):
-        with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'AutoPlay-install'}), timeout=120) as r:
-            return r.read()
-    releases = json.loads(get(DIPLAY))
-    for release in sorted(releases, key=lambda x: x.get('published_at') or '', reverse=True):
-        if release.get('draft'):
-            continue
-        for asset in release['assets']:
-            if not (asset['name'].startswith('DiPlay-') and asset['name'].endswith('.apk')):
-                continue
-            want = asset.get('digest') or ''
-            require(want.startswith('sha256:'), 'DiPlay asset without SHA-256: review its release')
-            data = get(asset['browser_download_url'])
-            require('sha256:' + hashlib.sha256(data).hexdigest() == want, 'DiPlay APK SHA-256 mismatch')
-            with zipfile.ZipFile(io.BytesIO(data)) as z:
-                names = ['identity.pk8', 'certificate.p7b']
-                if not all('assets/offline-mfi/' + n in z.namelist() for n in names):
-                    continue
-                out.mkdir(mode=0o700)
-                for n in names:
-                    fd = os.open(out / n, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_BINARY', 0), 0o600)
-                    with os.fdopen(fd, 'wb') as f:
-                        f.write(z.read('assets/offline-mfi/' + n))
-            (out / 'source.json').write_text(json.dumps(
-                {'tag': release['tag_name'], 'url': asset['browser_download_url'], 'sha256': want[7:]}) + '\n')
-            return release['tag_name']
-    raise Stop('no DiPlay release carries the identity')
+def require_stock_build(build):
+    """Early operator check, followed by the mandatory backed-up kernel hash check before writes.
+
+    This declaration does not prove the device version and must never replace f50-root-plan.py.
+    B13 is deliberately unsupported until its own boot chain has been reviewed.
+    """
+    require(build in ('B16', B16),
+            'only the audited B16 boot chain is supported; B13/unknown firmware must not use this flash route. '
+            'Read the stock build first; --stock-build B16 does not bypass the kernel hash check.')
 
 
 def identity(w, args):
     w.needs('autoplay')
     host = w.state().get('autoplay', {}).get('host', TESLA_LAN)
-    source = Path(args.dir) if args.dir else w.root / 'identity-private'
-    if not (source / 'identity.pk8').exists():
-        require(not args.dir, f'no identity.pk8 in {source}')
-        say(f'identity from DiPlay {fetch_identity(source)} (a shared experimental identity; keep it private)')
+    require(getattr(args, 'dir', None), 'supply a local identity directory; automatic shared identity downloads are disabled')
+    source = Path(args.dir)
+    for name in ('identity.pk8', 'certificate.p7b'):
+        require((source / name).is_file() and (source / name).stat().st_size > 0, f'missing or empty {name} in {source}')
     remote = '/opt/autoplay/identity/offline-mfi'
     present = w.ssh(host, f'cd {remote} 2>/dev/null && sha256sum identity.pk8 certificate.p7b', check=False)
     mine = {n: digest(source / n) for n in ('identity.pk8', 'certificate.p7b')}
@@ -675,8 +654,10 @@ def main():
     for name in ('check', 'flash', 'openwrt', 'autoplay', 'identity', 'tesla'):
         q = sub.add_parser(name)
         q.add_argument('work')
+        if name == 'flash':
+            q.add_argument('--stock-build', required=True, help='verified stock firmware; only B16 is supported')
         if name == 'identity':
-            q.add_argument('dir', nargs='?')
+            q.add_argument('dir')
         if name == 'tesla':
             q.add_argument('--country', help='Wi-Fi country code, e.g. CN')
             q.add_argument('--channel', type=int, help='5 GHz channel the Tesla sees: 36-48 or 149-165 (CN: 149)')

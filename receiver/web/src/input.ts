@@ -62,7 +62,15 @@ export class InputController {
 
   private readonly onPointerDown = (event: PointerEvent): void => {
     event.preventDefault();
-    if (this.surface.inert || (event.button !== undefined && event.button !== 0) || this.pointers.size >= MAX_CONTACTS) return;
+    if (this.surface.inert || (event.button !== undefined && event.button !== 0)) return;
+    // A mouse reuses its pointer ID: finish a pending minimum-length tap before accepting its next press.
+    const previous = this.pointers.get(event.pointerId);
+    if (previous) {
+      if (!previous.liftTimer) return;
+      window.clearTimeout(previous.liftTimer);
+      this.lift(event.pointerId);
+    }
+    if (this.pointers.size >= MAX_CONTACTS) return;
     this.surface.focus({ preventScroll: true });
     this.surface.setPointerCapture(event.pointerId);
     const x = this.normalizeX(event.clientX), y = this.normalizeY(event.clientY);
@@ -74,7 +82,7 @@ export class InputController {
 
   private readonly onPointerMove = (event: PointerEvent): void => {
     const pointer = this.pointers.get(event.pointerId);
-    if (!pointer) return;
+    if (!pointer || pointer.liftTimer) return;
     event.preventDefault();
     pointer.x = this.normalizeX(event.clientX);
     pointer.y = this.normalizeY(event.clientY);

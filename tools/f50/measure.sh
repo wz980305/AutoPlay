@@ -51,7 +51,13 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-STATE=${OUT%/*}/.measure-state
+for value in "$INTERVAL" "$FLUSH" "$MAX_TMP_BYTES"; do
+    case $value in ''|*[!0-9]*) echo 'measure: interval, flush and MAX_TMP_BYTES must be positive integers' >&2; exit 2 ;; esac
+    [ "$value" -gt 0 ] 2>/dev/null || { echo 'measure: interval, flush and MAX_TMP_BYTES must be positive integers' >&2; exit 2; }
+done
+case $OUT in */*) ;; *) OUT=./$OUT ;; esac
+# Multiple captures in one directory must never share delta or persistence offsets.
+STATE=${OUT}.state
 mkdir -p "${OUT%/*}" "$STATE" 2>/dev/null
 have() { command -v "$1" >/dev/null 2>&1; }
 rd() { cat "$1" 2>/dev/null; }
@@ -110,7 +116,9 @@ netdev_fields() {  # wlan0 rx/tx byte deltas
     cur=$(grep -E '^ *wlan0:' "$SYS/proc/net/dev" 2>/dev/null | sed 's/^ *wlan0: *//' | awk '{ print $1 " " $9 }')
     prev=$(rd "$STATE/netdev.prev")
     if [ -n "$cur" ] && [ -n "$prev" ]; then
-        printf ',%s,%s' "$(( ${cur%% *} - ${prev%% *} ))" "$(( ${cur##* } - ${prev##* } ))"
+        rx=$(( ${cur%% *} - ${prev%% *} )); tx=$(( ${cur##* } - ${prev##* } ))
+        # wlan0 recreation resets counters. A negative delta is not negative traffic.
+        if [ "$rx" -ge 0 ] && [ "$tx" -ge 0 ]; then printf ',%s,%s' "$rx" "$tx"; else printf ',,'; fi
     else
         printf ',,'
     fi
@@ -164,7 +172,7 @@ BOOT=$(cut -c1-8 "$SYS/proc/sys/kernel/random/boot_id" 2>/dev/null); BOOT=${BOOT
 PFILE=$PERSIST/measure-$BOOT.csv
 # FLUSHED: how many bytes of $OUT are already in $PFILE. Kept in tmpfs so a respawned logger does not re-append.
 FLUSHED=0
-if [ -s "$PFILE" ] && [ -s "$STATE/flushed" ]; then FLUSHED=$(rd "$STATE/flushed"); fi
+if [ -s "$PFILE" ] && [ -s "$STATE/flushed" ]; then FLUSHED=$(rd "$STATE/flushed" | tr -d '[:space:]'); fi
 case $FLUSHED in ''|*[!0-9]*) FLUSHED=0 ;; esac
 flush() {  # append the lines written since the last flush to the persistent copy
     [ -n "$PERSIST" ] || return 0
@@ -180,7 +188,7 @@ rotate() {  # keep the tmpfs file bounded: flush, then keep header + last 1000 l
     sz=$(wc -c < "$OUT" 2>/dev/null || echo 0)
     [ "$sz" -gt "$MAX_TMP_BYTES" ] 2>/dev/null || return 0
     flush
-    { head -n1 "$OUT"; tail -n 1000 "$OUT"; } > "$OUT.tmp" && mv -f "$OUT.tmp" "$OUT"
+    { head -n1 "$OUT"; sed '1d' "$OUT" | tail -n 1000; } > "$OUT.tmp" && mv -f "$OUT.tmp" "$OUT"
     FLUSHED=$(wc -c < "$OUT" 2>/dev/null || echo 0)
     echo "$FLUSHED" > "$STATE/flushed" 2>/dev/null
 }

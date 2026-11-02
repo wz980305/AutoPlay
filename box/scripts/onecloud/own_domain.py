@@ -25,11 +25,14 @@ import time
 import urllib.parse
 import urllib.request
 
-from state import tesla_reaches
+from state import tesla_reaches, save_json
 
 SUFFIX = ".duckdns.org"
 DOMAIN = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
 TOKEN = re.compile(r"[A-Za-z0-9-]{16,64}")   # DuckDNS shows a UUID
+FQDN = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+")
+DNSPOD_ID = re.compile(r"\d{3,16}")              # DNSPod API ID (a number)
+DNSPOD_TOKEN = re.compile(r"[A-Za-z0-9]{16,64}")  # DNSPod API Token
 RENEW_DAYS = 30            # Let's Encrypt certificates last 90 days
 RECORD_REFRESH = 1800      # seconds between DuckDNS updates once one succeeded
 RECORD_RETRY = 60
@@ -52,6 +55,14 @@ def sub_domain(text):
     return domain
 
 
+def fqdn(text):
+    """'Car.Example.com' -> 'car.example.com'; ValueError when not a full domain name."""
+    domain = (text or "").strip().lower().rstrip(".")
+    if not FQDN.fullmatch(domain):
+        raise ValueError("域名格式不对：形如 car.example.com，只能包含字母、数字、连字符和点。")
+    return domain
+
+
 def check_token(token):
     token = (token or "").strip()
     if not TOKEN.fullmatch(token):
@@ -59,8 +70,24 @@ def check_token(token):
     return token
 
 
+def check_dnspod_id(text):
+    value = (text or "").strip()
+    if not DNSPOD_ID.fullmatch(value):
+        raise ValueError("DNSPod ID 格式不对：在 DNSPod 控制台「API Token」里复制 ID。")
+    return value
+
+
+def check_dnspod_token(text):
+    value = (text or "").strip()
+    if not DNSPOD_TOKEN.fullmatch(value):
+        raise ValueError("DNSPod Token 格式不对：在 DNSPod 控制台「API Token」里复制 Token。")
+    return value
+
+
 def name_of(config):
-    return config["domain"] + SUFFIX if config else None
+    if not config:
+        return None
+    return config["domain"] if config.get("provider") == "dnspod" else config["domain"] + SUFFIX
 
 
 def forget_certificate(state):
@@ -70,7 +97,10 @@ def forget_certificate(state):
 
 
 def update_record(config, address, timeout=15):
-    """Point the name at address (private addresses allowed). True when DuckDNS answered OK."""
+    """Point the name at address (private addresses allowed). The DNSPod A record is managed in its console and
+    the box answers the name locally for the Tesla (OfflineChecks), so there is nothing to update here."""
+    if config.get("provider") == "dnspod":
+        return True
     query = urllib.parse.urlencode({"ip": address, "domains": config["domain"], "token": config["token"]})
     with urllib.request.urlopen("https://www.duckdns.org/update?" + query, timeout=timeout) as response:
         return response.read(16).strip() == b"OK"
@@ -109,10 +139,12 @@ def write_status(state, **fields):
     except (OSError, ValueError):
         old = {}
     value = dict(old if isinstance(old, dict) else {}, **fields)
-    fd, temporary = tempfile.mkstemp(prefix=".own-domain.", dir=state)
-    with os.fdopen(fd, "w") as out:
-        json.dump(value, out)
-    Path(temporary).replace(path)
+    try:
+        save_json(path, value, sync=False)
+    except OSError:
+        # A full/read-only card must not silently kill the certificate maintenance thread. Its
+        # network checks and retry timer can still recover; status publication is best effort.
+        pass
 
 
 def read_status(state):
@@ -184,14 +216,17 @@ class Maintainer(threading.Thread):
 
     def check_certificate(self):
         """Seconds until the next look."""
-        if certificate_for(self.state, self.name, RENEW_DAYS):
-            self.cert_failures = 0
-            write_status(self.state, name=self.name, phase="ready")
-            return CERT_CHECK
-        renewing = certificate_for(self.state, self.name)
-        write_status(self.state, name=self.name, phase="renewing" if renewing else "issuing")
         try:
+            # OpenSSL can time out or fail to start too, not just acme.sh. These failures must use
+            # the same retry policy instead of ending the only renewal thread for this boot.
+            if certificate_for(self.state, self.name, RENEW_DAYS):
+                self.cert_failures = 0
+                write_status(self.state, name=self.name, phase="ready")
+                return CERT_CHECK
+            renewing = certificate_for(self.state, self.name)
+            write_status(self.state, name=self.name, phase="renewing" if renewing else "issuing")
             self.obtain()
+            until = end_date(self.state)
         except InterruptedError:
             return CERT_CHECK
         except Exception as error:   # no internet, DuckDNS or Let's Encrypt refused; texts may carry the token
@@ -203,7 +238,7 @@ class Maintainer(threading.Thread):
             return delay
         self.cert_failures = 0
         write_status(self.state, name=self.name, phase="ready")
-        self.say(f"certificate for {self.name} installed until {end_date(self.state)}; used from the next start")
+        self.say(f"certificate for {self.name} installed until {until}; used from the next start")
         return CERT_CHECK
 
     def obtain(self):
@@ -215,9 +250,13 @@ class Maintainer(threading.Thread):
         fd = os.open(home / "autoplay.lock", os.O_RDWR | os.O_CREAT, 0o600)
         with os.fdopen(fd, "a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if self.config.get("provider") == "dnspod":
+                dns, extra_env = ["--dns", "dns_dp"], {"DP_Id": self.config["id"], "DP_Key": self.config["token"]}
+            else:
+                dns, extra_env = ["--dns", "dns_duckdns"], {"DuckDNS_Token": self.config["token"]}
             # 2: acme.sh still has a certificate it considers current; install that one.
-            if self.acme(["--issue", "--dns", "dns_duckdns", "--dnssleep", str(DNS_SLEEP), "-d", self.name,
-                          "--keylength", "ec-256"], log) not in (0, 2):
+            if self.acme(["--issue", *dns, "--dnssleep", str(DNS_SLEEP), "-d", self.name,
+                          "--keylength", "ec-256"], log, extra_env) not in (0, 2):
                 raise RuntimeError("acme.sh could not obtain the certificate")
             with tempfile.TemporaryDirectory(dir=home) as scratch:
                 chain, key = Path(scratch) / "fullchain.pem", Path(scratch) / "key.pem"
@@ -238,12 +277,14 @@ class Maintainer(threading.Thread):
         key.replace(own / "key.pem")
         chain.replace(own / "fullchain.pem")
 
-    def acme(self, arguments, log):
-        """acme.sh in its own process group, cancelled when the service stops; the token only in its environment."""
+    def acme(self, arguments, log, extra_env=None):
+        """acme.sh in its own process group, cancelled when the service stops; the credentials only in its environment."""
         home = self.state / "acme"
         command = [str(self.root / "acme" / "acme.sh"), "--home", str(self.root / "acme"), "--config-home", str(home),
                    "--cert-home", str(home / "certs"), *arguments, "--server", ACME_SERVER, "--no-color"]
-        env = dict(os.environ, DuckDNS_Token=self.config["token"])
+        env = dict(os.environ)
+        if extra_env:
+            env.update(extra_env)
         fd = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         with os.fdopen(fd, "ab") as out, subprocess.Popen(
                 command, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,

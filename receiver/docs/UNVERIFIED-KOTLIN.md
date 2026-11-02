@@ -1,5 +1,7 @@
 # Kotlin changed without compiling (branch `receiver-trim`, 2026-10-26)
 
+> Superseded for compilation by 0.1.1 (2026-10-31): both modules now build and local tests pass on JDK 21. Hardware-dependent checks below remain open. See `../../docs/AUDIT-0.1.1.md`. This document preserves the original 0.1.0 audit history.
+
 The machine this series was written on had no network: Gradle could not resolve the Kotlin plugin or any
 dependency, so **no Kotlin in this branch has been compiled or tested**. The web side was verified (`tsc`, esbuild,
 `check*.mjs`); the Kotlin side was kept mechanical, reviewed twice per commit, and every deletion was followed by a

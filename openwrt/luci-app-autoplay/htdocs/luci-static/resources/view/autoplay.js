@@ -103,15 +103,38 @@ return view.extend({
 		o.datatype = 'uinteger';
 		o.placeholder = '300';
 
-		// The one route verified on a Tesla (2026-10-14): a public name with a Let's Encrypt certificate. The box
-		// obtains it by DNS-01 over the SIM, so nothing has to reach it.
-		o = s.taboption('reach', form.Value, 'duckdns_domain', _('Own name (DuckDNS sub-domain)'),
-			_('The address the Tesla opens. Sign up for free at duckdns.org, add a sub-domain and enter it with the token shown there. The name becomes that name (e.g. mycar.duckdns.org): AutoPlay points it at this box and obtains a free Let\'s Encrypt certificate, renewed automatically over the SIM, so the Tesla opens https://mycar.duckdns.org:18443/ without a warning. Without a name the Tesla opens https://autoplay.lan:18443/ with the box\'s own certificate; whether its warning page offers "continue" is not verified.'));
+		// A public name with a Let's Encrypt certificate, obtained by DNS-01 over the SIM (nothing has to reach the
+		// box). Two providers: a free DuckDNS sub-domain, or a Tencent Cloud (DNSPod) domain.
+		o = s.taboption('reach', form.ListValue, 'dns_provider', _('DNS provider'));
+		o.value('duckdns', _('DuckDNS'));
+		o.value('dnspod', _('Tencent Cloud (DNSPod)'));
+		o.default = 'duckdns';
+		o.rmempty = false;
+		o.description = _('Which DNS service owns the name below. Without any name the Tesla opens https://autoplay.lan:18443/ with the box\'s own certificate; whether its warning page offers "continue" is not verified.');
+
+		o = s.taboption('reach', form.Value, 'duckdns_domain', _('DuckDNS sub-domain'),
+			_('Sign up for free at duckdns.org, add a sub-domain and enter it with the token shown there. The name becomes that name (e.g. mycar.duckdns.org): AutoPlay points it at this box and obtains a free Let\'s Encrypt certificate, renewed automatically over the SIM, so the Tesla opens https://mycar.duckdns.org:18443/ without a warning.'));
 		o.datatype = 'and(hostname,maxlength(63))';
 		o.placeholder = 'mycar';
+		o.depends('dns_provider', 'duckdns');
 
 		o = s.taboption('reach', form.Value, 'duckdns_token', _('DuckDNS token'));
 		o.password = true;
+		o.depends('dns_provider', 'duckdns');
+
+		o = s.taboption('reach', form.Value, 'own_domain', _('Own domain (DNSPod)'),
+			_('A full domain you manage in Tencent Cloud DNS (DNSPod), e.g. car.example.com. AutoPlay obtains the Let\'s Encrypt certificate with a DNS-01 challenge through the DNSPod API and answers the name locally for the Tesla, so no public A record is required. The Tesla opens https://car.example.com:18443/ without a warning.'));
+		o.placeholder = 'car.example.com';
+		o.depends('dns_provider', 'dnspod');
+
+		o = s.taboption('reach', form.Value, 'dnspod_id', _('DNSPod API ID'),
+			_('In the DNSPod console (console.dnspod.cn) → Security settings → API Token → create a token; the ID is the number shown there.'));
+		o.datatype = 'uinteger';
+		o.depends('dns_provider', 'dnspod');
+
+		o = s.taboption('reach', form.Value, 'dnspod_token', _('DNSPod API token'));
+		o.password = true;
+		o.depends('dns_provider', 'dnspod');
 
 		o = s.taboption('reach', form.DummyValue, '_certificate', _('Certificate'));
 		o.renderWidget = function() {
@@ -153,8 +176,8 @@ return view.extend({
 					else
 						certificate.textContent = own.name + ': ' + ({
 							ready: _('certificate installed'), issuing: _('obtaining the certificate (a few minutes online)'),
-							renewing: _('renewing the certificate'), retry: _('not obtained yet: check the SIM, the sub-domain and the token; retried every hour')
-						}[own.phase] || _('waiting for the internet')) + (own.record == 'failed' ? '; ' + _('DuckDNS record update failed, retrying') : '');
+							renewing: _('renewing the certificate'), retry: _('not obtained yet: check the SIM and the DNS provider credentials; retried every hour')
+						}[own.phase] || _('waiting for the internet')) + (own.record == 'failed' ? '; ' + _('DNS record update failed, retrying') : '');
 				});
 			}
 			poll.add(updateWarning, 10);

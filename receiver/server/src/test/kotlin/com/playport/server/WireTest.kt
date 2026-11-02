@@ -8,6 +8,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WireTest {
+    @Test fun videoConfigPreservesTheExactCodecDescription() {
+        val description = byteArrayOf(1, 100, 0, 31, 0xff.toByte())
+        val frame = Wire.videoConfig(110, VideoCodec.H264, 1920, 1080, description)
+        assertEquals(11 + description.size, frame.size)
+        assertArrayEquals(description, frame.copyOfRange(11, frame.size))
+    }
+
     @Test
     fun audioSpecificConfigMatchesAacLcProfiles() {
         assertArrayEquals(byteArrayOf(0x12, 0x10), Wire.audioSpecificConfig(44_100, 2))

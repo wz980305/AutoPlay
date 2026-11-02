@@ -19,7 +19,7 @@ lab() { docker exec "$name" sh -c "$1"; }
 for _ in $(seq 30); do lab 'ubus list network >/dev/null 2>&1' && break; sleep 1; done
 
 echo "== install (unsigned local packages; dependencies from downloads.openwrt.org)"
-lab 'apk update >/dev/null && apk add --allow-untrusted /pkgs/autoplay-jre-*_x86_64.apk /pkgs/autoplay-2*.apk \
+lab 'apk update >/dev/null && apk add --allow-untrusted /pkgs/autoplay-jre-*_x86_64.apk /pkgs/autoplay-[0-9]*.apk \
      /pkgs/luci-app-autoplay-*.apk /pkgs/luci-i18n-autoplay-zh-cn-*.apk 2>&1 | tail -3'
 lab '/usr/lib/autoplay-jre/bin/java -version 2>&1 | head -1'
 lab 'python3 /opt/autoplay/supervisor_openwrt.py --root /opt/autoplay --check'

@@ -18,18 +18,21 @@ lib="$playport/server/build/install/server/lib"
 ACME_VERSION=3.1.6
 ACME_SHA256=c7d68b021cfd6380ea83a82962abde5b484779fee0b97d38681dfa1396bbc8d7
 DUCKDNS_SHA256=8be535b8d6270b7a37671da954d89c896df7af29c2f38d5029054ec315fe77af
-[ -s "$lib/server-0.1.0.jar" ] || { echo "build the receiver first (:server:installDist)" >&2; exit 1; }
+DNSPOD_SHA256=a4b5b70c81235a033c6892359b09000097b88a0792b7029d14653a5494d282de
+set -- "$lib"/server-*.jar
+[ "$#" = 1 ] && [ -s "$1" ] || { echo "build the receiver first (:server:installDist); expected one server jar" >&2; exit 1; }
+[ -s "$playport/web/dist/index.html" ] || { echo "build the web viewer first" >&2; exit 1; }
 stage=$(mktemp -d "${TMPDIR:-/tmp}/autoplay-bundle.XXXXXX")
 work=$(mktemp -d "${TMPDIR:-/tmp}/autoplay-build.XXXXXX")
 trap 'rm -rf "$stage" "$work"' EXIT
 sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
 
 # Program.
-# Committed files only: work in progress in the tree must not ship.
-for file in $(git -C "$repo" ls-files 'scripts/onecloud/*.py') scripts/onecloud/tls.security \
-            scripts/onecloud/update-key.pem; do   # update.py checks release manifests with this public key
-    case "$file" in scripts/onecloud/*/*) continue ;; esac   # the top level only, as on the box
-    cp "$repo/$file" "$stage/"
+# Explicit source paths also work in a source archive without .git and include new modules.
+# Build only from the reviewed release tree; git ls-files never guaranteed committed contents.
+for file in "$repo"/scripts/onecloud/*.py "$repo/scripts/onecloud/tls.security" \
+            "$repo/scripts/onecloud/update-key.pem"; do
+    cp "$file" "$stage/"
 done
 mkdir -p "$stage/playport/server/build/install/server" "$stage/playport/web" "$stage/identity/offline-mfi" \
     "$stage/state/receiver" "$stage/launcher" "$stage/linux-bt-bridge/deps" "$stage/acme/dnsapi"
@@ -54,9 +57,11 @@ curl -fsSL -o "$work/acme.tar.gz" "https://github.com/acmesh-official/acme.sh/ar
 tar -xzf "$work/acme.tar.gz" -C "$work"
 cp "$work/acme.sh-$ACME_VERSION/acme.sh" "$stage/acme/acme.sh"
 cp "$work/acme.sh-$ACME_VERSION/dnsapi/dns_duckdns.sh" "$stage/acme/dnsapi/dns_duckdns.sh"
+cp "$work/acme.sh-$ACME_VERSION/dnsapi/dns_dp.sh" "$stage/acme/dnsapi/dns_dp.sh"
 cp "$work/acme.sh-$ACME_VERSION/LICENSE.md" "$stage/acme/LICENSE.md"
 [ "$(sha256 "$stage/acme/acme.sh")" = "$ACME_SHA256" ] || { echo "acme.sh hash mismatch" >&2; exit 1; }
 [ "$(sha256 "$stage/acme/dnsapi/dns_duckdns.sh")" = "$DUCKDNS_SHA256" ] || { echo "dns_duckdns.sh hash mismatch" >&2; exit 1; }
+[ "$(sha256 "$stage/acme/dnsapi/dns_dp.sh")" = "$DNSPOD_SHA256" ] || { echo "dns_dp.sh hash mismatch" >&2; exit 1; }
 chmod 755 "$stage/acme/acme.sh"
 
 # The release this bundle is (prepare-release.sh sets it): the settings page and the diagnostics show it.

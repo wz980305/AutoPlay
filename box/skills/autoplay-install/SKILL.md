@@ -3,6 +3,9 @@ name: autoplay-install
 description: 帮完全不懂技术的用户把 DashPlay（网页 CarPlay）装到斐讯 N1、玩客云、ZTE F50 或其他 OpenWrt 路由器上，从识别硬件、下载刷机包、刷机、放入用户自己的 CarPlay 认证文件，到上车使用和排错，一步步做完；只有插拔电源、按按钮、在手机或车机上点选这类必须本人动手的事才请用户做。用户说“帮我装 DashPlay”“我买了 N1/玩客云/F50，想用网页 CarPlay”时使用。
 ---
 
+> AutoPlay 0.1.1 compatibility notice: this legacy guide has not been fully ported. Do not use its old identity-download or N1/DashPlay steps. `f50-install.py flash` now requires `--stock-build B16`; B13 is unsupported and the backed-up kernel hash must still match. `identity WORK DIR` requires both locally supplied identity files. Follow the current `docs/AUDIT-0.1.1.md` and `docs/BUILD.md` before any device operation.
+
+
 # DashPlay 装机向导（给 AI 助手）
 
 **刷机风险：会清空选定存储；F50 Root 会降低启动校验，最坏需要拆机短接。先核对型号、备份和具体写入范围，再动手。**

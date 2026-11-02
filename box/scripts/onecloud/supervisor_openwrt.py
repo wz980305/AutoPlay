@@ -57,6 +57,9 @@ DEFAULTS = {"enabled": "1",
             # A DuckDNS sub-domain and its token: the name becomes <sub-domain>.duckdns.org, with a Let's Encrypt
             # certificate the router obtains and renews itself (own_domain.py). Empty: off.
             "duckdns_domain": "", "duckdns_token": "",
+            # A Tencent Cloud (DNSPod) name instead: dns_provider=dnspod with a full domain and the DNSPod API
+            # ID/token; the certificate is issued with a DNS-01 challenge through acme.sh's dns_dp hook.
+            "dns_provider": "", "own_domain": "", "dnspod_id": "", "dnspod_token": "",
             # Look for a new release once a day (update.py; installed only when someone clicks it), and the URL
             # prefixes tried after GitHub (read by update.py itself).
             "update_check": "1", "update_mirror": ""}
@@ -229,11 +232,21 @@ def refresh_network_warning(lan_device, status, base_warning="", path=None):
 
 
 def own_config(config):
-    """The DuckDNS sub-domain and token from uci, or None when off or invalid (then said once, never fatal)."""
-    if not config["duckdns_domain"]:
+    """The own name and its DNS provider from uci, or None when off or invalid (then said once, never fatal)."""
+    if config.get("dns_provider") == "dnspod":
+        if not config.get("own_domain"):
+            return None
+        try:
+            return {"domain": own_domain.fqdn(config["own_domain"]), "provider": "dnspod",
+                    "id": own_domain.check_dnspod_id(config.get("dnspod_id", "")),
+                    "token": own_domain.check_dnspod_token(config.get("dnspod_token", ""))}
+        except ValueError:
+            print("autoplay.main.own_domain/dnspod_id/dnspod_token invalid: own name off", flush=True)
+            return None
+    if not config.get("duckdns_domain"):
         return None
     try:
-        return {"domain": own_domain.sub_domain(config["duckdns_domain"]),
+        return {"domain": own_domain.sub_domain(config["duckdns_domain"]), "provider": "duckdns",
                 "token": own_domain.check_token(config["duckdns_token"])}
     except ValueError:
         print("autoplay.main.duckdns_domain/duckdns_token invalid: own name off", flush=True)
@@ -328,6 +341,7 @@ class BluetoothManager:
         self.schedule = supervision.Schedule(clock=clock)
         self.powered = False
         self.attempt = None      # the running power attempt: [thread, result]
+        self.generation = 0
         self.on_powered = None
         self.helper_started_at = None
 
@@ -335,6 +349,7 @@ class BluetoothManager:
         return [sys.executable, str(self.root / "board_zte_f50.py"), "--state", str(self.state)]
 
     def start(self):
+        self.generation += 1
         self.platform.start("bluetooth", self.command())
         self.restarter.started()
         self.helper_started_at = self.clock()
@@ -389,10 +404,12 @@ class BluetoothManager:
             return
         # Not powered yet: try when the schedule says so, off the main loop.
         if self.attempt is not None:
-            thread, result = self.attempt
+            thread, result, generation = self.attempt
             if thread.is_alive():
                 return
             self.attempt = None
+            if generation != self.generation:
+                return   # the result belongs to a helper that exited; never mark its replacement powered
             if result and result[0]:
                 self.powered = True
                 self.schedule.reset()
@@ -412,7 +429,7 @@ class BluetoothManager:
             result = []
             thread = threading.Thread(target=lambda: result.append(self.power_once()), name="bluetooth-power", daemon=True)
             thread.start()
-            self.attempt = (thread, result)
+            self.attempt = (thread, result, self.generation)
 
 
 class ReceiverManager:
@@ -426,6 +443,7 @@ class ReceiverManager:
         self.liveness = supervision.Liveness(limit=3, every=10.0, clock=clock)
         self.probe = probe or self.http_probe
         self.probing = None
+        self.generation = 0
         self.network = None
         self.wireless = True
         self.wanted = False
@@ -445,6 +463,7 @@ class ReceiverManager:
             return False
 
     def launch(self, network, wireless, wait=False):
+        self.generation += 1
         self.network, self.wireless, self.wanted = network, wireless, True
         self.platform.start("receiver", self.command(network, wireless, wait))
         self.restarter.started()
@@ -475,10 +494,12 @@ class ReceiverManager:
                 self.launch(self.network, self.wireless)
             return
         if self.probing is not None:
-            thread, result = self.probing
+            thread, result, generation = self.probing
             if thread.is_alive():
                 return
             self.probing = None
+            if generation != self.generation:
+                return   # do not cancel the new JVM's startup grace with a result from the old one
             alive = bool(result and result[0])
             if self.liveness.record(alive):
                 self.say("receiver answers no HTTP for 30 s: restarting it")
@@ -495,7 +516,7 @@ class ReceiverManager:
             result = []
             thread = threading.Thread(target=lambda: result.append(self.probe()), name="receiver-probe", daemon=True)
             thread.start()
-            self.probing = (thread, result)
+            self.probing = (thread, result, self.generation)
 
 
 # The service ----------------------------------------------------------------------------------------------
@@ -772,8 +793,9 @@ def main():
             if not have_identity and identity_ok():
                 request_reexec("MFi identity added")
                 continue
-            if WAN_UP_FILE.exists():   # a hotplug event (WAN up, NTP sync): the Maintainer wakes itself from it
-                clock_floor.touch(state)
+            # Rate-limited internally. Persist hourly even without WAN/NTP events (or when the
+            # certificate thread consumed the shared wake file before this loop saw it).
+            clock_floor.touch(state)
             bluetooth.tick()
             receiver.tick()
             if time.monotonic() >= next_check:

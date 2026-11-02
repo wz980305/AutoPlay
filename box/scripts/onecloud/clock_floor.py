@@ -12,6 +12,7 @@ channel the receiver does not offer the box today: a receiver-side task (docs/ST
 import os
 from pathlib import Path
 import time
+import state as state_files
 
 FILE = "clock-floor"
 WRITE_EVERY = 3600
@@ -33,12 +34,12 @@ def write(state, now=None):
     if now < EARLIEST:
         return False
     path = Path(state) / FILE
+    floor = read(state)
+    if floor is not None and now <= floor:
+        return False
     try:
-        temporary = path.with_name(path.name + ".tmp")
-        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as out:
-            out.write(f"{now}\n")
-        temporary.replace(path)
+        # A JSON integer is also the plain decimal accepted by read(); persist file and rename.
+        state_files.save_json(path, now)
         return True
     except OSError:
         return False
@@ -64,7 +65,7 @@ _last_touch = [0.0]
 def touch(state, now=None, every=WRITE_EVERY):
     """Periodic/event update of the floor, rate-limited to one write per `every` seconds."""
     current = now if now is not None else time.time()
-    if current - _last_touch[0] < every and _last_touch[0]:
+    if 0 <= current - _last_touch[0] < every and _last_touch[0]:
         return False
     if write(state, current):
         _last_touch[0] = current

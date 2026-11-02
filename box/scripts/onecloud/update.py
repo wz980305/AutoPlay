@@ -258,16 +258,20 @@ def forbidden_in_plan(simulation):
     return sorted({name for name in names if FORBIDDEN.match(name)})
 
 
-def previous_packages(version, prefixes, work, names=OPENWRT_PACKAGES):
-    """The installed release's three packages (to go back to), checked against that release's SHA256SUMS. `work` is
+def previous_packages(version, prefixes, work, names=OPENWRT_PACKAGES, key=KEY):
+    """The installed release's packages, checked against Ed25519-signed SHA256SUMS. `work` is
     the persistent cache (CACHE), so a power cut mid-install still finds them at the next start (recover).
     names: the package names of that release (LEGACY_PACKAGES for a DashPlay box being moved over)."""
     base = PREVIOUS_FEED.format(version=version)
     try:
-        sums = fetch(base + "SHA256SUMS", prefixes, limit=1 << 16).decode()
+        data = fetch(base + "SHA256SUMS", prefixes, limit=1 << 16)
+        signature = fetch(base + "SHA256SUMS.sig", prefixes, limit=4096)
     except NotFound:
         raise UpdateError(f"找不到当前版本 {version} 的安装包（它不是正式发布的版本），升级失败时无法退回，已停止。"
                           "请按装机说明手动升级") from None
+    if not verify(data, signature, key):
+        raise UpdateError("回滚包校验清单的签名不对，无法信任回滚包，已停止升级")
+    sums = data.decode()
     files = []
     for line in sums.splitlines():
         digest, _, name = line.partition("  ")
@@ -352,7 +356,7 @@ def write_journal(root, **fields):
     save(journal_path(root), {**fields, "at": int(time.time())})
 
 
-def install_openwrt(root, manifest, status, work):
+def install_openwrt(root, manifest, status, work, key=KEY):
     current = current_version(root, True)
     if not current:
         raise UpdateError("没有找到已安装的 autoplay 软件包")
@@ -371,7 +375,7 @@ def install_openwrt(root, manifest, status, work):
     shutil.rmtree(cache, ignore_errors=True)
     cache.mkdir(mode=0o700, parents=True, exist_ok=True)
     status("downloading", f"正在下载当前版本 {current} 的安装包（升级失败时用来退回）")
-    previous = previous_packages(current, prefixes, cache, LEGACY_PACKAGES if legacy else OPENWRT_PACKAGES)
+    previous = previous_packages(current, prefixes, cache, LEGACY_PACKAGES if legacy else OPENWRT_PACKAGES, key)
     status("downloading", f"正在下载 {manifest['version']}（{sum(f['size'] for f in wanted.values()) // 1048576} MB）")
     files = []
     for entry in wanted.values():
@@ -492,7 +496,7 @@ def install(root, openwrt=None, key=KEY):
         status("backup", "正在备份配对、证书和设置")
         saved = backup(root, openwrt)
         with tempfile.TemporaryDirectory(prefix="autoplay-update.") as work:
-            install_openwrt(root, manifest, status, work)
+            install_openwrt(root, manifest, status, work, key)
         status("done", f"已升级到 {manifest['version']}", version=manifest["version"], backup=str(saved))
         check(root, openwrt, key, manifest)
         return 0

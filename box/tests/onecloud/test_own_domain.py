@@ -135,6 +135,19 @@ class MaintainerTests(unittest.TestCase):
         self.assertTrue(worker.woken())
         self.assertFalse(wake.exists(), "consumed")
 
+    def test_openssl_timeout_retries_instead_of_killing_the_worker(self):
+        worker = self.maintainer()
+        with patch.object(own_domain, 'certificate_for', side_effect=subprocess.TimeoutExpired('openssl', 30)):
+            self.assertEqual(worker.check_certificate(), own_domain.CERT_RETRIES[0])
+            self.assertEqual(worker.check_certificate(), own_domain.CERT_RETRIES[1])
+        self.assertEqual(own_domain.read_status(self.state)['reason'], 'TimeoutExpired')
+
+    def test_full_state_disk_does_not_end_certificate_maintenance(self):
+        with patch.object(own_domain, 'save_json', side_effect=OSError('full')):
+            own_domain.write_status(self.state, name=self.name, phase='retry')
+            with patch.object(own_domain, 'certificate_for', return_value=True):
+                self.assertEqual(self.maintainer().check_certificate(), own_domain.CERT_CHECK)
+
     def test_certificate_state_for_the_status_model(self):
         self.assertEqual(own_domain.certificate_state(self.state, None)["state"], "self_signed")
         self.assertEqual(own_domain.certificate_state(self.state, self.name)["state"], "issuing")

@@ -33,19 +33,23 @@ class Status:
             raise KeyError(domain)
         with self.lock:
             entry = self.domains[domain]
-            changed = entry["state"] != state or entry.get("reason") != reason \
-                or any(entry.get(key) != value for key, value in extra.items())
+            state_changed = entry["state"] != state or entry.get("reason") != reason
+            replacement = {"state": state, "reason": reason,
+                           "since": round(self.clock()) if state_changed else entry["since"], **extra}
+            changed = entry != replacement
             if changed:
-                self.domains[domain] = {"state": state, "reason": reason, "since": round(self.clock()), **extra}
+                self.domains[domain] = replacement
         if changed:
             self.write()
         return changed
 
     def domain(self, name):
-        return dict(self.domains[name])
+        with self.lock:
+            return dict(self.domains[name])
 
     def state(self, domain):
-        return self.domains[domain]["state"]
+        with self.lock:
+            return self.domains[domain]["state"]
 
     # Flat keys (the settings page's needs) --------------------------------------------------
 
@@ -95,12 +99,14 @@ class Status:
             text = json.dumps(body, sort_keys=True, ensure_ascii=False)
             if text == self.written:
                 return
-            self.written = text
             body["updated"] = round(self.clock())
-        try:
-            state_files.save_json(self.path, body, sync=False)
-        except OSError:
-            pass
+            # Keep commits ordered across the diagnostics and supervisor threads. Publishing outside
+            # this lock lets an older snapshot overwrite a newer one. Failed writes must remain retryable.
+            try:
+                state_files.save_json(self.path, body, sync=False)
+            except OSError:
+                return
+            self.written = text
 
 
 def read(path):

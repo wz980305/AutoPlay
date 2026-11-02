@@ -28,7 +28,9 @@ class StandaloneTests(unittest.TestCase):
         self.assertIsInstance(platform_api.get_platform(), ow.OpenWrtPlatform)
 
     def test_boot_id_reads_the_kernel(self):
-        self.assertEqual(ow.OpenWrtPlatform.boot_id(), Path('/proc/sys/kernel/random/boot_id').read_text().strip())
+        with patch.object(ow.Path, 'read_text', return_value='test-boot-id\n') as read:
+            self.assertEqual(ow.OpenWrtPlatform.boot_id(), 'test-boot-id')
+            read.assert_called_once_with()
 
 
 class ChildTests(unittest.TestCase):
@@ -99,18 +101,27 @@ class StateTests(unittest.TestCase):
     def test_save_json_replaces_atomically_and_syncs_only_when_asked(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'x.json'
-            with patch.object(state.os, 'sync') as sync, patch.object(state.os, 'fsync') as fsync:
+            with patch.object(state.os, 'sync', create=True) as sync, patch.object(state.os, 'fsync') as fsync:
                 state.save_json(path, {'a': 1}, sync=False)
                 self.assertEqual(sync.call_count, 0)
                 self.assertEqual(fsync.call_count, 0)
                 state.save_json(path, {'a': 2})
-                self.assertEqual(sync.call_count, 1)
-                self.assertEqual(fsync.call_count, 1)
+                self.assertEqual(sync.call_count, 0, 'never flush unrelated filesystems')
+                self.assertEqual(fsync.call_count, 2, 'persist file contents and its parent directory')
             self.assertEqual(json.loads(path.read_text()), {'a': 2})
             self.assertEqual(oct(path.stat().st_mode & 0o777), '0o600')
             self.assertFalse(path.with_suffix('.tmp').exists())
             self.assertEqual(state.load_json(path), {'a': 2})
             self.assertEqual(state.load_json(path.with_name('missing.json'), {}), {})
+
+    def test_serialization_failure_keeps_the_previous_file_and_removes_temporary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'x.json'
+            state.save_json(path, {'a': 1}, sync=False)
+            with self.assertRaises(TypeError):
+                state.save_json(path, {'bad': object()})
+            self.assertEqual(state.load_json(path), {'a': 1})
+            self.assertEqual(list(Path(directory).iterdir()), [path])
 
     def test_shared_lan_and_tesla_reach(self):
         self.assertEqual(str(state.SHARED_LAN), '100.96.0.1/24')
