@@ -1,5 +1,4 @@
-import { MusicOutput } from './music-output';
-import { MUSIC_ELEMENT } from './flags';
+import { PAGE_PLAYS_MUSIC } from './flags';
 import { audioStartTime } from './audio-timing';
 import { AudioCodec, type AudioConfigMessage, type AudioPacketMessage } from './protocol';
 
@@ -8,28 +7,25 @@ interface StreamState {
   sampleRate: number;
   channels: number;
   name: string;
-  music: MusicOutput | null;
   decoder: AudioDecoder | null;
   nextPlayTime: number;
   gain: GainNode;
 }
 
 
-/** Decodes and plays CarPlay audio streams (AAC-LC, Opus, LPCM) via Web Audio. */
+/** Decodes and plays CarPlay audio streams (AAC-LC, Opus, LPCM) via Web Audio: navigation prompts and alerts. Music
+ *  (audioType "media") is dropped (flags.ts PAGE_PLAYS_MUSIC); the page is told once per session (onDroppedMusic). */
 export class AudioEngine {
   private readonly context: AudioContext;
   private readonly gain: GainNode;
   private readonly streams = new Map<number, StreamState>();
   private readonly streamGains = new Map<string, number>();
-  private retainedMusic: MusicOutput | null = null;
-  private retainedConfig = "";
   private unlocked = false;
   private masterVolume = 1;
   private lastAudioAt = -Infinity;
 
   get isPlaying(): boolean {
-    return Array.from(this.streams.values()).some(s => s.music?.playing) ||
-      (this.context.state === 'running' && performance.now() - this.lastAudioAt < 1800);
+    return this.context.state === 'running' && performance.now() - this.lastAudioAt < 1800;
   }
 
   /** Navigation prompts and alerts (audioType "default") boosted by this much through a limiter: in a Tesla the
@@ -44,12 +40,19 @@ export class AudioEngine {
   private idleTimer = 0;
   private sleeping = false;
 
-  constructor(private readonly onError: (message: string) => void, options: { promptBoost?: number; idleClose?: boolean } = {}) {
+  /** Music the iPhone still sends (type 102 AAC, type 100 "media"): dropped, counted, and the page told once. */
+  private readonly onDroppedMusic: () => void;
+  private droppedMusicStreams = 0;
+  private toldAboutMusic = false;
+
+  constructor(private readonly onError: (message: string) => void,
+              options: { promptBoost?: number; idleClose?: boolean; onDroppedMusic?: () => void } = {}) {
     this.context = new AudioContext({ latencyHint: 'interactive' });
     this.gain = this.context.createGain();
     this.gain.connect(this.context.destination);
     this.promptBoost = Math.min(8, Math.max(1, options.promptBoost ?? 1));
     this.idleClose = options.idleClose ?? false;
+    this.onDroppedMusic = options.onDroppedMusic ?? (() => {});
   }
 
   /** idleClose: open the output for a stream, close it again when none is left. */
@@ -71,12 +74,12 @@ export class AudioEngine {
   }
 
   /** The iPhone's duckAudio/unduckAudio (media_performance_audit #2): the music's gain goes to [level] (1 = as sent)
-   *  over [durationMs], on the Web Audio media gain and, with the music element (MUSIC_ELEMENT), on its volume. A music
-   *  stream that starts while ducked starts ducked. Counted for the viewer log (duckReport). */
+   *  over [durationMs] on the Web Audio media gain. With music dropped on this page (PAGE_PLAYS_MUSIC) there is
+   *  nothing to duck; the command is still counted for the viewer log (duckReport), which shows how often the
+   *  iPhone asks. */
   private duckLevel = 1;
   private ducks = 0;
   private unducks = 0;
-  private duckTimer = 0;
   duck(level: number, durationMs: number): void {
     const target = Math.min(1, Math.max(0, level)), seconds = Math.min(5000, Math.max(0, durationMs)) / 1000;
     if (target < 1) this.ducks++; else this.unducks++;
@@ -88,18 +91,6 @@ export class AudioEngine {
       gain.cancelScheduledValues(now); gain.setValueAtTime(gain.value, now);
       gain.linearRampToValueAtTime(this.streamGainValue('media'), now + seconds);
     }
-    // The media element has no ramp of its own: a few steps over the same time.
-    window.clearInterval(this.duckTimer);
-    const elements = Array.from(this.streams.values()).filter(s => s.music).map(s => s.music!);
-    if (!elements.length) return;
-    const steps = Math.max(1, Math.round(seconds * 20)), from = elements.map(m => m.currentVolume);
-    const to = this.masterVolume * (this.streamGains.get('media') ?? 1) * target;
-    let step = 0;
-    this.duckTimer = window.setInterval(() => {
-      step++;
-      elements.forEach((m, i) => m.volume(from[i] + (to - from[i]) * step / steps));
-      if (step >= steps) window.clearInterval(this.duckTimer);
-    }, Math.max(16, (seconds * 1000) / steps));
   }
   duckReport(): Record<string, number> {
     const out: Record<string, number> = {};
@@ -122,12 +113,12 @@ export class AudioEngine {
   }
 
   get isUnlocked(): boolean {
-    return this.unlocked && (this.context.state === 'running' || this.sleeping) && Array.from(this.streams.values()).every(s => !s.music || s.music.unlocked);
+    return this.unlocked && (this.context.state === 'running' || this.sleeping);
   }
 
   /** Must run inside a user gesture so the browser allows audio playback. */
   async unlock(): Promise<void> {
-    await Promise.all([this.context.resume(), ...Array.from(this.streams.values()).flatMap(s => s.music ? [s.music.unlock()] : [])]);
+    await this.context.resume();
     this.unlocked = this.context.state === 'running';
     this.sleeping = false;
     if (this.streams.size === 0) this.sleepWhenIdle();
@@ -136,7 +127,6 @@ export class AudioEngine {
   setVolume(volume: number): void {
     this.masterVolume = Math.min(1, Math.max(0, volume));
     this.gain.gain.value = this.masterVolume;
-    for (const state of this.streams.values()) state.music?.volume(this.masterVolume * (this.streamGains.get(state.name) ?? 1) * this.duckLevel);
   }
 
   setStreamGain(name: string, value: number): void {
@@ -153,6 +143,13 @@ export class AudioEngine {
 
   handleConfig(message: AudioConfigMessage): void {
     this.closeStream(message.streamType);
+    // Music never plays here (flags.ts PAGE_PLAYS_MUSIC): no stream state, so its packets are ignored in
+    // handlePacket; the page is told once so the driver picks the Tesla in the iPhone's Control Center.
+    if (!PAGE_PLAYS_MUSIC && message.name === 'media') {
+      this.droppedMusicStreams++;
+      if (!this.toldAboutMusic) { this.toldAboutMusic = true; this.onDroppedMusic(); }
+      return;
+    }
     this.wake();
     const streamGain = this.context.createGain();
     streamGain.gain.value = this.streamGainValue(message.name);
@@ -162,25 +159,11 @@ export class AudioEngine {
       sampleRate: message.sampleRate,
       channels: message.channels,
       name: message.name,
-      music: null,
       decoder: null,
       nextPlayTime: 0,
       gain: streamGain,
     };
-    // Music through a media element (MUSIC_ELEMENT, flags.ts): AAC (stream 102) as sent. LPCM (prompts, alerts,
-    // "media" PCM) stays on Web Audio for low latency; without the element AAC decodes into Web Audio below.
-    const kind = MUSIC_ELEMENT && message.name === 'media' && message.codec === AudioCodec.AacLc ? 'aac' : null;
-    if (kind && MusicOutput.supported(kind)) {
-      try {
-        state.music = (this.retainedMusic && this.retainedConfig === MusicOutput.key(message, kind) ? this.retainedMusic : new MusicOutput(message, this.onError, kind));
-        if (this.retainedMusic && this.retainedMusic !== state.music) this.retainedMusic.close();
-        this.retainedMusic = null;
-        state.music.volume(this.masterVolume * (this.streamGains.get(state.name) ?? 1) * this.duckLevel);
-        this.streams.set(message.streamType, state);
-        void state.music.unlock().catch(() => {});
-        return;
-      } catch (error) { this.onError(`Music output configuration: ${describeError(error)}`); }
-    }
+    // Prompts and alerts: LPCM straight into Web Audio; AAC-LC/Opus through WebCodecs.
     if (message.codec === AudioCodec.AacLc || message.codec === AudioCodec.Opus) {
       if (typeof AudioDecoder === 'undefined') {
         this.onError(
@@ -226,7 +209,6 @@ export class AudioEngine {
   handlePacket(message: AudioPacketMessage): void {
     const state = this.streams.get(message.streamType);
     if (!state) return;
-    if (state.music) { state.music.packet(message.data); return; }
     if (state.decoder) {
       try {
         state.decoder.decode(
@@ -247,14 +229,6 @@ export class AudioEngine {
   }
 
   stopStream(streamType: number): void {
-    const state = this.streams.get(streamType);
-    if (state?.music) {
-      this.retainedMusic?.close();
-      this.retainedMusic = state.music;
-      this.retainedConfig = state.music.configKey;
-      state.music.pause();
-      state.music = null;
-    }
     this.closeStream(streamType);
     this.sleepWhenIdle();
   }
@@ -265,22 +239,17 @@ export class AudioEngine {
     return Array.from(this.streams.values(), s => ({ name: s.name, codec: codecs[s.codec] ?? String(s.codec), sampleRate: s.sampleRate, channels: s.channels }));
   }
 
-  /** Music element counters for the viewer log (music-output.ts). */
+  /** For the viewer log: music streams the iPhone opened here that were dropped (how often it still happens). */
   musicReport(): Record<string, number> {
-    const total: Record<string, number> = {};
-    for (const state of this.streams.values()) for (const [k, v] of Object.entries(state.music?.report() ?? {})) total[k] = (total[k] ?? 0) + v;
-    return total;
-  }
-
-  pauseMusic(): void {
-    for (const state of this.streams.values()) state.music?.pause();
+    if (!this.droppedMusicStreams) return {};
+    const out = { musicDropped: this.droppedMusicStreams };
+    this.droppedMusicStreams = 0;
+    return out;
   }
 
   stopAll(): void {
-    window.clearInterval(this.duckTimer);
     this.duckLevel = 1;
     for (const streamType of this.streams.keys()) this.closeStream(streamType);
-    this.retainedMusic?.close(); this.retainedMusic = null;
     this.lastAudioAt = -Infinity;
     this.sleepWhenIdle();
   }
@@ -289,7 +258,6 @@ export class AudioEngine {
     const state = this.streams.get(streamType);
     if (!state) return;
     this.streams.delete(streamType);
-    state.music?.close();
     runCatchingDisconnect(state.gain);
     if (state.decoder) {
       try {

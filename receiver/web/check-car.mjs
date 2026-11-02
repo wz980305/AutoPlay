@@ -146,84 +146,30 @@ assert.equal(aspectChanged({width:1280,height:720},{width:1920,height:720}),true
   assert.equal(sizeWrites,writes,'but a canvas of the same size keeps showing the last picture');
   player.configure(config(1082,1280,0x41));await Promise.resolve();
   assert.equal(canvas.width,1082,'A new size resizes the canvas');assert.equal(canvas.height,1280); }
-{ // The music element keeps its own timeline: nothing moves it onto the song (F50 drive 2026-10-13: moving it seeked
-  // on every song change, threw appendBuffer errors on Chrome 120 and pulled the music back while the iPhone's
-  // position reports stalled). The song position reaches the car's card through the Media Session position state.
-  let clock=0;const realNow=performance.now;Object.defineProperty(performance,'now',{value:()=>clock,configurable:true,writable:true});
-  const log=[];
-  class Ranges {constructor(r){this.r=r;}get length(){return this.r.length;}start(i){return this.r[i][0];}end(i){return this.r[i][1];}}
-  const buffer={updating:false,ranges:[],timestampOffset:0,listeners:{},addEventListener(n,h){this.listeners[n]=h;},
-    get buffered(){return new Ranges(this.ranges);},appendBuffer(){if(this.updating)throw new Error('InvalidStateError: still processing');log.push('append');},remove(a,b){log.push(`remove ${a}-${b}`);this.ranges=[];}};
-  const source={readyState:'open',get duration(){return Infinity;},set duration(v){log.push(`duration ${v}`);},addEventListener(n,h){h();},addSourceBuffer(){return buffer;}};
-  globalThis.MediaSource=class {constructor(){return source;}};globalThis.URL.createObjectURL=()=>'blob:x';
-  const element={currentTime:0,paused:true,plays:0,setAttribute(){},removeAttribute(){},load(){},remove(){},addEventListener(){},play(){this.plays++;this.paused=false;return Promise.resolve();},pause(){this.paused=true;}};
-  globalThis.document={createElement:()=>element,body:{append(){}}};
-  const {MusicOutput}=await load('music-output',s=>'function aacInit(){return new Uint8Array(1);}function aacFragment(){return new Uint8Array(1);}\n'+s.replace(/^import .*?;$/gm,''));
-  const errors=[];const music=new MusicOutput({sampleRate:48000,channels:2,description:new Uint8Array()},m=>errors.push(m),'aac');
-  assert.deepEqual(log,['append'],'init segment');
-  assert.equal(music.follow,undefined,'No song timeline to follow');
-  element.paused=false;element.currentTime=600;buffer.ranges=[[599,600.6]];
-  for(let i=0;i<80;i++){clock+=21;music.packet(new Uint8Array(400));}
-  assert.ok(!log.some(x=>x.startsWith('remove 0-')||x.startsWith('duration')),'Playing on moves neither the timeline nor the duration');
-  assert.equal(element.currentTime,600,'and seeks nothing');assert.deepEqual(errors,[]);
-  // Behind the cushion: no faster playback (it crackled at song changes), only measured for the viewer log.
-  element.playbackRate=1;music.report();buffer.ranges=[[590,601.5]];for(let i=0;i<4;i++)music.packet(new Uint8Array(400));
-  assert.equal(element.playbackRate,1,'1.5 s behind: still normal speed');assert.equal(element.currentTime,600,'and no jump');
-  assert.deepEqual([music.report().musicLeadMaxMs,music.report().musicLeadMaxMs],[1500,undefined],'How far behind it played, for the viewer log');
-  element.plays=0;element.play=function(){this.plays++;return Promise.reject(Object.assign(new Error('blocked'),{name:'NotAllowedError'}));};
-  element.paused=true;element.currentTime=599;await music.unlock().catch(()=>{});
-  assert.equal(music.report().musicBlocked,1,'A play() the browser refused (no gesture) is counted for the viewer log');
-  element.play=function(){this.plays++;this.paused=false;return Promise.resolve();};
-  // A buffer busy for a few seconds is not a stuck one.
-  const stuck=[];const slow=new MusicOutput({sampleRate:48000,channels:2,description:new Uint8Array()},m=>stuck.push(m),'aac');
-  buffer.updating=true;for(let i=0;i<40*4;i++)slow.packet(new Uint8Array(400));
-  assert.deepEqual(stuck,[],'Forty fragments (3.4 s) waiting on a busy buffer close nothing');
-  for(let i=0;i<60*4;i++)slow.packet(new Uint8Array(400));
-  assert.deepEqual(stuck,['Music buffer is not advancing'],'but a buffer stuck for good still does');buffer.updating=false;
-  // Resuming after a pause whose buffer was played out: no step back (that replayed a second already heard).
-  const resumed=new MusicOutput({sampleRate:48000,channels:2,description:new Uint8Array()},()=>{},'aac');
-  element.paused=true;element.plays=0;element.currentTime=10;buffer.ranges=[[5,10]];
-  await resumed.unlock();
-  assert.equal(element.currentTime,10,'No step back');assert.equal(element.plays,0,'it waits for a cushion');assert.equal(resumed.unlocked,true);
-  buffer.ranges=[[5,11.2]];buffer.listeners.updateend();
-  assert.equal(element.plays,1,'and plays on once a second of new audio is in');
-  element.paused=true;element.currentTime=6;buffer.ranges=[[5,12]];await resumed.unlock();
-  assert.equal(element.currentTime,11,'A stale buffer still jumps forward to 1 s before its end');
-  Object.defineProperty(performance,'now',{value:realNow,configurable:true,writable:true}); }
-// Music must take exactly one route; voice/navigation keep the existing Web Audio path.
-const edges=[];let music;let packets=0;
-class Node {gain={value:1,cancelScheduledValues(){},setValueAtTime(v){this.value=v;},linearRampToValueAtTime(v,at){this.value=v;this.rampedTo=at;}};connect(to){edges.push(to);}disconnect(){}}
-globalThis.AudioContext=class {state='running';destination={speaker:true};createGain(){return new Node();}resume(){return Promise.resolve();}};
-globalThis.TestMusic=class {static supported(){return true;}static key(c){return JSON.stringify([c.sampleRate,c.channels,Array.from(c.description)]);}constructor(config){music=this;this.configKey=JSON.stringify([config.sampleRate,config.channels,Array.from(config.description)]);}unlocked=false;playing=false;configKey="";currentVolume=1;volumes=[];pause(){this.playing=false;this.paused=true;}volume(v){this.currentVolume=v;this.volumes.push(v);}unlock(){this.unlocked=true;this.unlocks=(this.unlocks??0)+1;return Promise.resolve();}packet(){packets++;}close(){this.closed=true;}};
-const {AudioEngine}=await load('audio',s=>s.replace(/^import .*?;$/gm,'')+'\nconst MusicOutput=globalThis.TestMusic;const MUSIC_ELEMENT=true;const AudioCodec={AacLc:1,Opus:2,Lpcm:3};\nfunction audioStartTime(){return 0;}');
-const audio=new AudioEngine(()=>{});assert.equal(edges.length,1);assert.equal(edges[0].speaker,true);
-audio.handleConfig({streamType:102,codec:1,name:'media',sampleRate:48000,channels:2,description:new Uint8Array([0x11,0x90])});
-audio.handlePacket({streamType:102,timestampUs:0,data:new Uint8Array([1,2])});assert.equal(packets,1);
-assert.equal(audio.isPlaying,false,'Do not claim playing before actual media playback');
-await audio.unlock();assert.equal(audio.isUnlocked,true);music.playing=true;assert.equal(audio.isPlaying,true);
-audio.stopStream(102);assert.equal(music.closed,undefined,"Pause retains native media element");assert.equal(music.paused,true);
-const pausedMusic=music;
-audio.handleConfig({streamType:102,codec:1,name:'media',sampleRate:48000,channels:2,description:new Uint8Array([0x11,0x90])});
-assert.equal(music,pausedMusic,'Resume reuses the native media element');assert.equal(audio.streams.get(102).music,pausedMusic,'as the stream\'s music');
-{ // Duck/unduck (media_performance_audit #2): the iPhone lowers the music under a prompt, the page ramps the media
-  // gain and the element's volume over the given time, and a music stream that starts while ducked starts ducked.
-  const intervals=[];globalThis.window=globalThis.window??{};window.setInterval=f=>{intervals.push(f);return intervals.length;};window.clearInterval=id=>{intervals[id-1]=null;};
-  const tick=()=>{for(let i=0;i<100&&intervals.some(Boolean);i++)intervals.forEach(f=>f&&f());};
-  music.volumes.length=0;audio.duck(0.2,500);tick();
-  assert.ok(music.volumes.length>=5&&Math.abs(music.volumes.at(-1)-0.2)<1e-9,'the element volume ramps down in steps to the level');
-  assert.equal(audio.streams.get(102).gain.gain.value,0.2,'and the media gain ramps to it');
-  assert.deepEqual(audio.duckReport(),{ducks:1},'counted for the viewer log');
-  audio.stopStream(102);audio.handleConfig({streamType:102,codec:1,name:'media',sampleRate:48000,channels:2,description:new Uint8Array([0x11,0x90])});
-  assert.equal(music.currentVolume,0.2,'a stream that starts while ducked starts ducked');
-  audio.duck(1,300);tick();assert.ok(Math.abs(music.currentVolume-1)<1e-9,'unduck brings it back');assert.deepEqual(audio.duckReport(),{unducks:1});
-  assert.deepEqual(audio.duckReport(),{},'counted afresh each report'); }
-audio.stopAll();assert.equal(music.closed,true);assert.equal(audio.isPlaying,false);
-const {aacInit,aacFragment}=await load('aac-mp4');
-const init=aacInit(48000,2,new Uint8Array([0x11,0x90]));
-function boxes(data){const result=[];for(let offset=0;offset<data.length;){const size=new DataView(data.buffer,data.byteOffset+offset,4).getUint32(0);assert.ok(size>=8&&offset+size<=data.length);result.push(new TextDecoder().decode(data.slice(offset+4,offset+8)));offset+=size;}return result;}
-assert.deepEqual(boxes(init),['ftyp','moov']);
-assert.deepEqual(boxes(aacFragment(1,0,[new Uint8Array([1,2,3])])),['moof','mdat']);
-assert.throws(()=>aacInit(48000,2,new Uint8Array()));
+{ // This page never plays music (1.1.0, flags.ts PAGE_PLAYS_MUSIC; DashPlay 2026-11-01 in a moving Tesla): a "media"
+  // stream opens no state, its packets go nowhere, the page is told once; prompts keep the Web Audio path; the iPhone's
+  // duck commands are only counted.
+  for(let i=0;i<10;i++)await Promise.resolve();   // let the previous block's pending H.265 adoption settle before VideoDecoder is swapped below
+  const edges=[];let packets=0;let told=0;
+  class Node {gain={value:1,cancelScheduledValues(){},setValueAtTime(v){this.value=v;},linearRampToValueAtTime(v,at){this.value=v;this.rampedTo=at;}};connect(to){edges.push(to);}disconnect(){}}
+  globalThis.AudioContext=class {state='running';currentTime=0;destination={speaker:true};createGain(){return new Node();}createDynamicsCompressor(){const n=new Node();n.threshold={};n.knee={};n.ratio={};n.attack={};n.release={};return n;}createBuffer(){return {copyToChannel(){},duration:0.02};}createBufferSource(){packets++;return {connect(){},disconnect(){},start(){},set buffer(b){}};}resume(){return Promise.resolve();}};
+  globalThis.window=globalThis.window??{};window.setTimeout=window.setTimeout??(()=>1);window.clearTimeout=window.clearTimeout??(()=>{});
+  const {AudioEngine}=await load('audio',s=>s.replace(/^import .*?;$/gm,'')+'\nconst PAGE_PLAYS_MUSIC=false;const AudioCodec={AacLc:1,Opus:2,Lpcm:3};\nfunction audioStartTime(now){return now;}');
+  const audio=new AudioEngine(()=>{},{promptBoost:3,onDroppedMusic:()=>told++});assert.equal(edges.length,1);assert.equal(edges[0].speaker,true);
+  audio.handleConfig({streamType:102,codec:1,name:'media',sampleRate:48000,channels:2,description:new Uint8Array([0x11,0x90])});
+  assert.equal(audio.streams.has(102),false,'no stream state for music');assert.equal(told,1,'the page is told');
+  audio.handlePacket({streamType:102,timestampUs:0,data:new Uint8Array([1,2])});assert.equal(packets,0,'its packets go nowhere');
+  audio.handleConfig({streamType:100,codec:3,name:'media',sampleRate:48000,channels:2,description:new Uint8Array()});
+  assert.equal(audio.streams.has(100),false,'"media" PCM on the main stream is music too');assert.equal(told,1,'told once per session');
+  assert.deepEqual(audio.musicReport(),{musicDropped:2},'counted for the viewer log');assert.deepEqual(audio.musicReport(),{},'afresh each report');
+  await audio.unlock();assert.equal(audio.isUnlocked,true);
+  audio.handleConfig({streamType:7,codec:3,name:'default',sampleRate:16000,channels:1,description:new Uint8Array()});
+  assert.ok(audio.streams.has(7),'navigation still plays on the page');
+  audio.handlePacket({streamType:7,timestampUs:0,data:new Uint8Array(320)});assert.equal(packets,1,'and its PCM is scheduled');
+  assert.deepEqual(audio.describe(),[{name:'default',codec:'PCM',sampleRate:16000,channels:1}]);
+  audio.duck(0.2,500);assert.deepEqual(audio.duckReport(),{ducks:1},'duck is counted, nothing to lower');
+  audio.duck(1,300);assert.deepEqual(audio.duckReport(),{unducks:1});assert.deepEqual(audio.duckReport(),{});
+  audio.stopStream(7);assert.equal(audio.streams.size,0);audio.stopAll();assert.equal(audio.isPlaying,false); }
 { // The pong waits behind every queued frame, so its round trip is how far the picture lags behind.
   const {LagProbe}=await load('lag');const probe=new LagProbe();
   probe.sent(0);probe.sent(1000);probe.pong(120);probe.pong(1900);
@@ -240,7 +186,7 @@ assert.equal(isNight('schedule',at(18,29),true),false);assert.equal(isNight('sch
 assert.equal(isNight('schedule',at(0,0),false),true);assert.equal(isNight('schedule',at(6,29),false),true);assert.equal(isNight('schedule',at(6,30),true),false);
 assert.equal(isNight('system',at(12,0),true),true);assert.equal(isNight('system',at(23,0),false),false);
 assert.equal(isNight('day',at(23,0),true),false);assert.equal(isNight('night',at(12,0),false),true);
-console.log('Car checks passed: aspect fit, hiccups, decode backlog, single music route, MP4 framing, night schedule.');
+console.log('Car checks passed: aspect fit, hiccups, decode backlog, music dropped (Tesla), night schedule.');
 { // View areas (2026-10-14): a window shape seen before is an area switch, never a reconnect.
   const windowed={width:1280,height:996}, full={width:1920,height:1080};
   const start={width:1280,height:996,hevc:true,fps:30};
@@ -365,13 +311,19 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
 { // Tesla-only build (flags.ts): the box's carMusic/tesla fields are constants now; boot reads the token and the
   // settings port only, and a stale receiver-access.json with the old fields changes nothing.
   const flags=await load('flags');
-  assert.deepEqual([flags.CAR_MUSIC,flags.TESLA,flags.MUSIC_ELEMENT,flags.PROMPT_BOOST],[true,true,true,3]);
+  assert.deepEqual([flags.CAR_MUSIC,flags.TESLA,flags.PAGE_PLAYS_MUSIC,flags.PROMPT_BOOST],[true,true,false,3]);
   const savedWindow=globalThis.window, savedFetch=globalThis.fetch, savedStorage=globalThis.localStorage;
   const stored={};globalThis.window={};globalThis.localStorage={setItem(k,v){stored[k]=v;}};
   const {access}=await load('boot',s=>s.replace(/^import .*?;$/gm,'const startup={mark(){}};').replace('async function access()', 'export async function access()'));
   globalThis.fetch=async()=>({ok:true,json:async()=>({token:'0123456789abcdef0123456789abcdef',settingsPort:18080,tesla:false,carMusic:false})});await access();
   assert.equal(stored['playport-token'],'0123456789abcdef0123456789abcdef');assert.equal(window.playportBoxSettingsPort,18080);
   assert.equal(window.playportCarMusic,undefined,'no runtime car flags any more');
+  assert.equal(window.playportPageAudio,true,'no audioRouteNavigation: the page plays prompts');
+  // audio_route_navigation=bluetooth (1.1.0): the page is silent and says so.
+  globalThis.window={};globalThis.fetch=async()=>({ok:true,json:async()=>({token:'0123456789abcdef0123456789abcdef',settingsPort:18080,audioRouteNavigation:'bluetooth'})});await access();
+  assert.equal(window.playportPageAudio,false);
+  globalThis.window={};globalThis.fetch=async()=>({ok:true,json:async()=>({token:'0123456789abcdef0123456789abcdef',settingsPort:18080,audioRouteNavigation:'carplay'})});await access();
+  assert.equal(window.playportPageAudio,true);
   globalThis.window=savedWindow;globalThis.fetch=savedFetch;globalThis.localStorage=savedStorage;
 }
 
@@ -408,6 +360,7 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
   globalThis.VideoDecoder=class {constructor(){this.state='unconfigured';this.decodeQueueSize=0;}configure(c){configs.push(c);this.state='configured';}decode(){}close(){this.state='closed';}};
   VideoDecoder.isConfigSupported=async()=>({supported:true});
   globalThis.window=globalThis.window??{};window.setTimeout=()=>1;window.clearTimeout=()=>{};
+  globalThis.document={hidden:false};   // requestKeyframe() after adoption reads document.hidden (until 1.0.1 a leftover of the music block)
   const {VideoPlayer}=await load('video',s=>s.replace(/^import .*?;$/gm,'')+'\nconst VideoCodec={H264:1,H265:2};function avcCodecString(){return "avc1.640028";}function annexBToAvcc(d){return d;}');
   const hvcC=new Uint8Array([1,1,0x60,0,0,0,0x90,0,0,0,0,0,0x5d]);
   for (const compat of [false,true]) {

@@ -38,6 +38,32 @@ import org.slf4j.LoggerFactory
 /** What the supervisor does about a wireless session nobody watches (CarPlayServer.idleAction). */
 enum class IdleAction { NONE, RELEASE, WAIT, RESUME }
 
+/**
+ * Supervisor-owned idle clock: every accepted connection gets a full grace period, including authentication
+ * (DashPlay 2026.10.29 `playport-idle-new-session-grace`). Before, one `viewerSeenAt` counted from boot: a first
+ * pairing that took longer than the wait, or a replacement phone, inherited the previous phone's idle time and was
+ * released at once, with no page having had a chance to open.
+ */
+internal class IdleReleaseTimer(startedAt: Long, private val releaseMs: Long) {
+    private var viewerSeenAt = startedAt
+    private var parked = false
+    private var observedSession: Any? = null
+
+    fun action(now: Long, viewerPresent: Boolean, session: Any?): IdleAction {
+        if (session != null && session !== observedSession) {
+            // Startup or the previous phone's idle time must not cut off a new pairing/authentication.
+            viewerSeenAt = now
+            parked = false
+        }
+        observedSession = session
+        if (viewerPresent) viewerSeenAt = now
+        val action = CarPlayServer.idleAction(now, viewerSeenAt, session != null, parked, releaseMs)
+        if (action == IdleAction.RELEASE) parked = true
+        if (action == IdleAction.RESUME) parked = false
+        return action
+    }
+}
+
 class CarPlayServer(val config: ServerConfig, private val configStore: ConfigStore? = null) : Closeable {
     private val log = LoggerFactory.getLogger("playport")
 
@@ -197,6 +223,9 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             oemLabel = "盒子设置",
             icons = listOf(AirPlayIcon(180, 180, checkNotNull(javaClass.getResourceAsStream("/f50-settings.png")).use { it.readBytes() })),
             appearanceUpdates = appearanceUpdatesFor(selectedPhone),
+            // audio_route_navigation=bluetooth: no audioFormats/audioLatencies and no audio feature bits, so the
+            // iPhone sets up no audio stream and plays everything itself or on the Tesla's Bluetooth (docs/AUDIO.md).
+            disableAudioOutput = config.audioOverBluetooth,
         )
 
     private val listener = object : AirPlaySessionListener {
@@ -528,17 +557,16 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         if (!config.wireless) return
         Thread({
             var absentChecks = 0
-            var viewerSeenAt = System.nanoTime() / 1_000_000   // the boot invitation has the full wait for a page
             val releaseMs = System.getenv("CARPLAY_IDLE_RELEASE_SECONDS")?.toLongOrNull()?.coerceAtLeast(0)?.times(1000)
                 ?: IDLE_RELEASE_MS
             if (releaseMs == 0L) log.info("idle release off: CarPlay stays connected without a viewer")
-            var parked = false
+            // The boot invitation has the full wait for a page; so does every connection accepted later (IdleReleaseTimer).
+            val idleTimer = IdleReleaseTimer(System.nanoTime() / 1_000_000, releaseMs)
             while (!closed.get()) {
                 try {
                     Thread.sleep(SUPERVISOR_INTERVAL_MS)
                     if (closed.get()) return@Thread
                     val now = System.nanoTime() / 1_000_000
-                    if (hub.viewerCount > 0) viewerSeenAt = now
                     // Learn the phone's Wi-Fi identity before an idle release can end its session: a phone invited
                     // right after pairing, with no page open, was released first and then never invited again,
                     // being unknown on this Wi-Fi (F50, 2026-10-19).
@@ -547,9 +575,8 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                             presenceLearned = presence("remember", peer, phone, activeSession?.controllerId.orEmpty())
                         }
                     }
-                    when (idleAction(now, viewerSeenAt, activeSession != null, parked, releaseMs)) {
+                    when (idleTimer.action(now, hub.viewerCount > 0, activeSession)) {
                         IdleAction.RELEASE -> {
-                            parked = true
                             log.info("no viewer for {} s: CarPlay released until a page opens", releaseMs / 1000)
                             synchronized(this@CarPlayServer) {
                                 ++wirelessGeneration
@@ -562,7 +589,6 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                         }
                         IdleAction.WAIT -> continue
                         IdleAction.RESUME -> {
-                            parked = false
                             log.info("a viewer opened the page: inviting the iPhone again")
                             restartWireless()
                             continue

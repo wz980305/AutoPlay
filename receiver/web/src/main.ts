@@ -5,7 +5,7 @@ import { VideoPlayer } from './video';
 import { Connection } from './ws';
 import { LagProbe } from './lag';
 import { suggestedResolution, windowResolution, areaSize, sameStream, frameRateCheck, type Area } from './display-fit';
-import { CAR_MUSIC, TESLA, MUSIC_ELEMENT, PROMPT_BOOST } from './flags';
+import { CAR_MUSIC, TESLA, PROMPT_BOOST } from './flags';
 import { statusHint } from './status';
 import { t, language, setLanguage, type Key } from './i18n';
 import { isNight, parseNightMode } from './night';
@@ -75,6 +75,9 @@ volume.value = String(Math.min(100, Math.max(0, Number(localStorage.getItem('pla
 
 /** Box settings page (pairing, hotspot), when the device startup announced one: same host, plain HTTP. */
 const boxPort = Number((window as unknown as { playportBoxSettingsPort?: number }).playportBoxSettingsPort) || 0;
+/** audio_route_navigation (boot.ts): false = the receiver offers the iPhone no audio, every sound is on the Tesla's
+ *  Bluetooth and this page keeps its audio output closed and its sound controls hidden (docs/AUDIO.md). */
+const pageAudio = (window as unknown as { playportPageAudio?: boolean }).playportPageAudio !== false;
 if (boxPort) for (const id of ['box-link', 'box-link-panel']) {
   const link = el<HTMLAnchorElement>(id);
   link.href = `http://${location.hostname}${boxPort === 80 ? '' : `:${boxPort}`}/`;
@@ -168,12 +171,12 @@ const video = new VideoPlayer(canvas, error, () => {
   lastPaintAt = now;
 }, () => send({ type:'keyframe' }), fit, compatDisplay);
 // Music over the car's Bluetooth (CAR_MUSIC, flags.ts; found in a Tesla, 2026-10-14): the steering wheel, media card
-// and volume are the car's own; this page plays prompts (boosted) and whatever else the iPhone still sends.
-// ?promptgain=1..8 overrides the boost. Music the iPhone still sends here is played: it sends music to one place at a
-// time, and after Siri from the CarPlay screen it sent it here for ~27 s before going back to the car's Bluetooth.
+// and volume are the car's own; this page plays prompts (boosted). ?promptgain=1..8 overrides the boost. Music the
+// iPhone still sends here (~27 s after Siri) is dropped and the driver told once (1.1.0; a moving Tesla answers a
+// page playing music with its "video is audio-only" banner, whose resize renegotiated CarPlay every ~10 s upstream).
 const carMusic = CAR_MUSIC;
 const promptGain = Math.min(8, Math.max(1, Number(new URLSearchParams(location.search).get('promptgain')) || PROMPT_BOOST));
-const audio = new AudioEngine(error, { promptBoost: promptGain, idleClose: carMusic });
+const audio = new AudioEngine(error, { promptBoost: promptGain, idleClose: carMusic, onDroppedMusic: () => toast(t('musicDropped')) });
 /** Music over the car's Bluetooth: the car's media card shows the page's title and address whenever the page sounds
  *  (Siri, prompts; a Tesla, 2026-10-14); name it instead. The last voice stream to start wins; the title goes back when none is left. */
 const voiceLabels: Record<string, Key> = { speechrecognition: 'voiceSiri', telephony: 'voiceCall', default: 'voicePrompt' };
@@ -270,7 +273,7 @@ function server(message: ServerMessage) {
   render();
 }
 async function unlock() {
-  if (audio.isUnlocked) return;
+  if (!pageAudio || audio.isUnlocked) return;   // Bluetooth route: never open an audio output the Tesla could take for a media source
   try { await audio.unlock(); } catch { /* Keep a truthful gesture hint; retry on next gesture. */ }
 }
 window.addEventListener('pointerdown', () => { void unlock(); });
@@ -481,17 +484,11 @@ window.addEventListener('resize', () => { window.clearTimeout(resizeTimer); resi
 window.setInterval(()=>{
   const now=performance.now(),fps=frames*1000/Math.max(1,now-lastStats);frames=0;lastStats=now;
   el('stats').textContent=painted?`${canvas.width} × ${canvas.height} / ${fps.toFixed(0)} fps / ${t('latency')} ${video.decodeLatencyMs.toFixed(0)} ms`:t('noStream');
-  el('audio-unlock').hidden=!active||!audioSeen||audio.isUnlocked;
+  el('audio-unlock').hidden=!pageAudio||!active||!audioSeen||audio.isUnlocked;
   el('audio-status').textContent=t(audio.isPlaying?'playing':'paused');
 },750);
-// Which browser the car runs and the music element's own timeline, which an OS media card may show instead of the song's.
+// Which browser the car runs.
 const chromeMajor=Number(/Chrome\/(\d+)/.exec(navigator.userAgent)?.[1] ?? 0),webView=/; wv\)/.test(navigator.userAgent)?1:0;
-function musicTimeline(): Record<string, number> {
-  if(!MUSIC_ELEMENT) return {};
-  const element=document.getElementById('carplay-music') as HTMLAudioElement|null;
-  if(!element) return {};
-  return {elTime:Math.round(element.currentTime),elDur:Number.isFinite(element.duration)?Math.round(element.duration):-1};
-}
 // Once a second while CarPlay runs: the pong comes back behind every frame still queued for this page.
 window.setInterval(()=>{ if (active) { lag.sent(performance.now()); connection.send({type:'ping'}); } },1000);
 /** Coming back after the car froze the browser (a Tesla away from it: reverse gear, another app; 2026-10-14). The
@@ -557,7 +554,7 @@ window.setInterval(()=>{
   send({type:'stats',stats:{fps:reportFrames/seconds,decodeMs:video.decodeLatencyMs,queue:video.decodeQueueSize,
     kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,borderless:teslaBorderless()?1:0,
     width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),...(musicBytes?{musicKbps:musicBytes*8/1000/seconds}:{}),
-    ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,desync:video.desynchronized,build:BUILD,webView,carMusic:carMusic?1:0,teslaMode:TESLA?1:0,promptGain,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...audio.farReport(),...audio.duckReport(),...musicTimeline(),...audio.musicReport(),...stalls,...lag.take(performance.now())}});
+    ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,desync:video.desynchronized,build:BUILD,webView,carMusic:carMusic?1:0,teslaMode:TESLA?1:0,promptGain,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...audio.farReport(),...audio.duckReport(),...audio.musicReport(),pageAudio:pageAudio?1:0,...stalls,...lag.take(performance.now())}});
   judgeDecoder(video.decodeLatencyMs, reportFrames/seconds);
   if (active) judgeFrameRate(stalls.caughtUp);
   reportFrames=0;reportBytes=0;reportStart=now;touchSum=0;touchCount=0;musicBytes=0;
@@ -585,6 +582,11 @@ nightSelect.onchange = () => { localStorage.setItem('f50-night-mode', nightSelec
 darkQuery.addEventListener('change', () => { syncNight(); render(); });
 window.setInterval(() => { syncNight(); if (panel.open) render(); }, 30000);
 
+// Bluetooth route (audio_route_navigation=bluetooth): the page has no sound of its own; say so where the slider was.
+if (!pageAudio) {
+  el('sound-settings').querySelectorAll<HTMLElement>(':scope > :not(#sound-on-car)').forEach(node => { node.hidden = true; });
+  el('sound-on-car').hidden = false;
+}
 el('browser-check-show').onclick = () => {
   panel.close();
   (window as unknown as { F50BrowserCheck: { show(): void } }).F50BrowserCheck.show();

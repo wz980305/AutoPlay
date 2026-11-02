@@ -28,9 +28,12 @@
 <button id="nav-connection" type="button" aria-controls="settings-connection" aria-current="false" data-settings-page="connection" data-i18n="supportTab"></button></nav>
     <div class="settings-body">
       <section id="settings-general" class="settings-page" aria-labelledby="nav-general" data-settings-content="general">
+        <div id="sound-settings">
         <h3 class="group-title" data-i18n="volume"></h3>
         <div class="group"><div class="cell volume"><svg class="ico dim" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M4 9h3l5-4v14l-5-4H4z"/></svg><input id="volume" type="range" min="0" max="100" value="100"/><svg class="ico dim" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9h3l5-4v14l-5-4H4z" fill="currentColor" stroke="none"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg><output id="volume-value">100%</output></div></div>
         <p class="foot"><span data-i18n="volumeHint"></span> <span id="audio-status"></span></p>
+        <p id="sound-on-car" class="foot" data-i18n="soundOnCar" hidden></p>
+        </div>
         <h3 class="group-title" data-i18n="appearance"></h3>
         <div class="group"><label class="cell select-row"><span class="main"><b data-i18n="nightMode"></b><span id="night-status"></span></span><select id="night-mode" aria-describedby="night-status night-schedule-hint"><option value="schedule" data-i18n="nightSchedule"></option><option value="system" data-i18n="nightSystem"></option><option value="day" data-i18n="nightDay"></option><option value="night" data-i18n="nightNight"></option></select></label>
 <label class="cell select-row"><span class="main"><b data-i18n="language"></b></span><select id="language"><option value="zh">简体中文</option><option value="en">English</option></select></label></div>

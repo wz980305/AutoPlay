@@ -51,6 +51,8 @@ const messages = {
   noStream: ['尚无音视频流', 'No media stream yet'], playing: ['音频正在播放', 'Audio playing'], paused: ['等待音频', 'Waiting for audio'],
   error: ['播放遇到问题', 'Playback problem'], technical: ['详细信息', 'Details'],
   savedHere: ['本页语言与音量保存在此浏览器。CarPlay 的语言跟随 iPhone。', 'This page’s language and volume are saved in this browser. CarPlay uses your iPhone’s language.'],
+  musicDropped: ['本页不播放音乐：请在 iPhone 控制中心把音频输出选为特斯拉。', 'This page does not play music: pick the Tesla as the audio output in the iPhone Control Center.'],
+  soundOnCar: ['所有声音（含导航播报）都走特斯拉蓝牙，音量在车上调；本页没有声音。', 'Every sound, navigation included, plays on the Tesla over Bluetooth; adjust the volume in the car. This page is silent.'],
   privacy: ['没有播报声音时，轻点屏幕开启。', 'If prompts are silent, tap the screen to enable sound.'],
 } as const;
 export type Key = keyof typeof messages;
