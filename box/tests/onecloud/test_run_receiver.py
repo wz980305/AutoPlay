@@ -29,7 +29,7 @@ class BrowserAccessTest(unittest.TestCase):
             self.assertFalse((dist / "receiver-access.js").exists())
             access = dist / "receiver-access.json"
             self.assertEqual(json.loads(access.read_text()),
-                             {"token": "0123456789abcdef0123456789abcdef", "settingsPort": 18080})
+                             {"token": "0123456789abcdef0123456789abcdef", "settingsPort": 18080, "audioRouteNavigation": "bluetooth"})
             self.assertEqual(access.stat().st_mode & 0o777, 0o644)
             self.assertEqual(sorted(p.name for p in dist.iterdir()), ["receiver-access.json"])
 
@@ -43,8 +43,15 @@ class BrowserAccessTest(unittest.TestCase):
 
     def test_tesla_mode_is_the_default_and_brings_the_car_music_with_it(self):
         # D8: the box is Tesla-only; the page reads both flags from receiver-access.json until its own trim.
-        self.assertEqual(self.page_flags(), {"carMusic": True, "tesla": True})
-        self.assertEqual(self.page_flags(tesla=False), {}, "a lab receiver without the flag")
+        self.assertEqual(self.page_flags(), {"carMusic": True, "tesla": True, "audioRouteNavigation": "bluetooth"})
+        self.assertEqual(self.page_flags(tesla=False), {"audioRouteNavigation": "bluetooth"}, "a lab receiver without the flag")
+
+    def test_the_audio_route_reaches_the_page_and_is_checked(self):
+        # 1.1.0 (uci audio_route_navigation): bluetooth (default) = the receiver offers no audio and the page shows no
+        # sound controls; carplay = the page plays prompts.
+        self.assertEqual(self.page_flags(audio_route="carplay")["audioRouteNavigation"], "carplay")
+        with self.assertRaises(ValueError):
+            self.page_flags(audio_route="page")
 
     def test_rejects_an_unexpected_token(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -18,7 +18,7 @@ SECRET_SUFFIXES = {".key", ".pk8", ".p12", ".pem"}
 IDENTITY_CONFIRMATION = "删除认证文件"
 RESET_CONFIRMATION = "重置"
 UCI_DEFAULTS = {"viewer_port": "", "idle_release": "300", "duckdns_domain": "", "duckdns_token": "",
-                "dns_provider": "", "own_domain": "", "dnspod_id": "", "dnspod_token": "",
+                "dns_provider": "", "own_domain": "", "dnspod_id": "", "dnspod_token": "", "audio_route_navigation": "bluetooth",
                 "update_check": "1", "update_mirror": ""}
 
 

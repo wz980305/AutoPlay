@@ -289,11 +289,12 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(read_config("")["idle_release"], "300")
         self.assertEqual(read_config("autoplay.main.idle_release='0'\n")["idle_release"], "0")
 
-    def test_eleven_keys_and_constants(self):
-        # 7 keys of the Tesla-only trim (D-list) + the 4 of the DNSPod provider (1.0.0): anything else is a constant.
-        self.assertEqual(sorted(DEFAULTS), ["dns_provider", "dnspod_id", "dnspod_token", "duckdns_domain", "duckdns_token",
-                                            "enabled", "idle_release", "own_domain", "update_check", "update_mirror",
-                                            "viewer_port"])
+    def test_twelve_keys_and_constants(self):
+        # 7 keys of the Tesla-only trim (D-list) + the 4 of the DNSPod provider (1.0.0) + the audio route (1.1.0):
+        # anything else is a constant.
+        self.assertEqual(sorted(DEFAULTS), ["audio_route_navigation", "dns_provider", "dnspod_id", "dnspod_token",
+                                            "duckdns_domain", "duckdns_token", "enabled", "idle_release", "own_domain",
+                                            "update_check", "update_mirror", "viewer_port"])
         self.assertEqual(SETTINGS_PORT, 18080)
         self.assertEqual(str(supervisor_openwrt.SHARED_LAN), "100.96.0.1/24")
         self.assertEqual(supervisor_openwrt.JAVA, "/usr/lib/autoplay-jre/bin/java")
@@ -313,6 +314,16 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(command[command.index("--java") + 1], supervisor_openwrt.JAVA)
         self.assertIn("--no-wireless", receiver_command(Path("/x"), network, Path("/h"), 18443, 300, wireless=False))
         self.assertIn("--bind-wait", receiver_command(Path("/x"), network, Path("/h"), 18443, 300, wait=True))
+        # The audio route (1.1.0, ADR-14): bluetooth unless uci says carplay; anything else is said and falls back.
+        self.assertEqual(command[command.index("--audio-route-navigation") + 1], "bluetooth")
+        page = receiver_command(Path("/x"), network, Path("/h"), 18443, 300, audio_route="carplay")
+        self.assertEqual(page[page.index("--audio-route-navigation") + 1], "carplay")
+        said = []
+        self.assertEqual(supervisor_openwrt.audio_route_of(read_config("autoplay.main.audio_route_navigation='CarPlay'\n"), said.append), "carplay")
+        self.assertEqual(supervisor_openwrt.audio_route_of(read_config(""), said.append), "bluetooth")
+        self.assertEqual(said, [])
+        self.assertEqual(supervisor_openwrt.audio_route_of(read_config("autoplay.main.audio_route_navigation='page'\n"), said.append), "bluetooth")
+        self.assertEqual(len(said), 1)
 
     def test_uci_options_override_defaults_and_unknown_keys_are_ignored(self):
         config = read_config("autoplay.main=autoplay\nautoplay.main.viewer_port='19000'\nautoplay.main.wifi='wwan'\n")

@@ -36,6 +36,7 @@ class FactoryResetTests(unittest.TestCase):
             self.assertIn(["uci", "set", "autoplay.main.duckdns_token="], calls)
             for key in ("dns_provider", "own_domain", "dnspod_id", "dnspod_token"):   # the DNSPod provider (1.0.0)
                 self.assertIn(["uci", "set", f"autoplay.main.{key}="], calls)
+            self.assertIn(["uci", "set", "autoplay.main.audio_route_navigation=bluetooth"], calls)   # 1.1.0
             self.assertIn(["uci", "commit", "autoplay"], calls)
             factory_reset.wipe(root, identity=True, uci=lambda argv, **kw: None)
             self.assertFalse((root / "identity/offline-mfi/identity.pk8").exists())

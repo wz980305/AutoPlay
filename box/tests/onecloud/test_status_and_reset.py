@@ -134,6 +134,19 @@ class PageBannerTests(unittest.TestCase):
         self.status.set("certificate", "ok", None, not_after="2027-01-01")
         self.assertNotIn("过期", self.page.render(""))
 
+    def test_the_sound_cell_follows_the_audio_route(self):
+        # 1.1.0 (ADR-14): the supervisor publishes uci audio_route_navigation; the page says what navigation does.
+        self.assertNotIn("导航播报", self.page.render(""), "nothing until the supervisor says which route is on")
+        self.status.update(audio_route="bluetooth")
+        html = self.page.render("")
+        self.assertIn("走特斯拉蓝牙", html)
+        self.assertIn("CarPlay 页面无声", html)
+        self.status.update(audio_route="carplay")
+        html = self.page.render("")
+        self.assertIn("在 CarPlay 页面", html)
+        self.assertIn("轻点页面一次开启声音", html)
+        self.assertNotIn("页面无声", html)
+
     def test_pairing_lost_tells_the_owner_to_re_add(self):
         self.status.set("phone", "pairing-lost", "pairing-lost")
         self.assertIn("请删除此 iPhone 后重新添加", self.page.render(""))

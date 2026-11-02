@@ -87,6 +87,18 @@ msgstr "在 duckdns.org 免费注册，添加一个子域名，把它和页面�
 msgid "DuckDNS token"
 msgstr "DuckDNS token"
 
+msgid "Navigation prompts"
+msgstr "导航播报"
+
+msgid "Over the Tesla's Bluetooth too (default): the box offers the iPhone no audio at all, so every sound, navigation included, plays on the Tesla over Bluetooth (or on the iPhone when it is not paired with the car) and the CarPlay page is silent. On the CarPlay page: the page plays navigation prompts (tap it once for sound; they are boosted and have their own volume there) while music, Siri and calls stay on the Tesla over Bluetooth; use it when prompts are not heard over Bluetooth."
+msgstr "也走特斯拉蓝牙（默认）：盒子不向 iPhone 提供任何音频，所有声音（含导航）都从特斯拉蓝牙播出（iPhone 没连车机蓝牙时会从 iPhone 自己发声），CarPlay 页面无声。在 CarPlay 页面：页面播放导航播报（上车后轻点页面一次开启声音，播报会放大并有自己的音量），音乐、Siri、通话仍走特斯拉蓝牙；经蓝牙听不到播报时用它。"
+
+msgid "On the CarPlay page"
+msgstr "在 CarPlay 页面"
+
+msgid "Over the Tesla's Bluetooth too"
+msgstr "也走特斯拉蓝牙"
+
 msgid "DNS provider"
 msgstr "DNS 服务商"
 

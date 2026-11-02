@@ -297,6 +297,19 @@ class SettingsPage:
         return cells + (f'<form method=post action=/update>{ui.hidden(nonce)}<button class="cell action" name=action '
                         f'value=check>检查更新</button></form><p class=note>{checked}</p>')
 
+    def audio_block(self):
+        """Where navigation prompts play (uci audio_route_navigation, LuCI sets it; docs/AUDIO.md). Music, Siri and
+        calls are on the Tesla's Bluetooth either way; this cell says what the page does with navigation."""
+        route = self.status().get("audio_route")
+        if not route:
+            return ""
+        if route == "carplay":
+            title, text = "在 CarPlay 页面", "上车后轻点页面一次开启声音；音乐、Siri、通话走特斯拉蓝牙。"
+        else:
+            title, text = "走特斯拉蓝牙", "盒子不向 iPhone 提供音频，所有声音从特斯拉蓝牙播出，CarPlay 页面无声。"
+        return (f'<div class=cell><span class=main><b>导航播报</b><span>{text} 在 LuCI「服务 → AutoPlay → iPhone」里更改。'
+                f'</span></span><span class=value>{title}</span></div>')
+
     def ddns_block(self):
         """The own DuckDNS name: LuCI sets it; this page only tells how it is going."""
         name = self.status().get("own_name")
@@ -429,6 +442,7 @@ class SettingsPage:
         presence = self.pairing.presence()
         phase = self.pairing.status().get("phase", "closed")
         reach = self.ddns_block()
+        audio = self.audio_block()
         advanced = ('<a class=cell href="/diag.txt"><span class=main><b>下载诊断记录</b>'
                     '<span>画面卡顿、断线时，把它交给 AI 助手或开发者分析</span></span><span class=chev></span></a>'
                     '<a class="cell destructive" href="/reset">恢复出厂设置…</a>')
@@ -436,7 +450,8 @@ class SettingsPage:
         body = (f'<h1 class=span>AutoPlay 设置</h1>{notice}{self.chain(devices, presence, phase)}<div>'
                 + self.entries_block(status, refresh)
                 + ui.group("网络", self.network_block())
-                + intro + ui.group("iPhone", block) + '</div><div>'
+                + intro + ui.group("iPhone", block)
+                + (ui.group("声音", audio) if audio else "") + '</div><div>'
                 + (ui.group("自己的网址", reach) if reach else "")
                 + ui.group("程序更新", self.update_block(nonce),
                            "每天自动检查一次，只提示不自动安装。升级前会备份配对、证书和设置，新版本起不来会自动退回。")

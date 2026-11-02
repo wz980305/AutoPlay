@@ -103,6 +103,15 @@ return view.extend({
 		o.datatype = 'uinteger';
 		o.placeholder = '300';
 
+		// Where navigation prompts play (1.1.0; docs/AUDIO.md, ADR-14). Music, Siri and calls are on the Tesla's
+		// Bluetooth either way (the receiver offers the iPhone no call or Siri audio). The names are DashPlay 2026.10.31's.
+		o = s.taboption('iphone', form.ListValue, 'audio_route_navigation', _('Navigation prompts'),
+			_('Over the Tesla\'s Bluetooth too (default): the box offers the iPhone no audio at all, so every sound, navigation included, plays on the Tesla over Bluetooth (or on the iPhone when it is not paired with the car) and the CarPlay page is silent. On the CarPlay page: the page plays navigation prompts (tap it once for sound; they are boosted and have their own volume there) while music, Siri and calls stay on the Tesla over Bluetooth; use it when prompts are not heard over Bluetooth.'));
+		o.value('bluetooth', _('Over the Tesla\'s Bluetooth too'));
+		o.value('carplay', _('On the CarPlay page'));
+		o.default = 'bluetooth';
+		o.rmempty = false;
+
 		// A public name with a Let's Encrypt certificate, obtained by DNS-01 over the SIM (nothing has to reach the
 		// box). Two providers: a free DuckDNS sub-domain, or a Tencent Cloud (DNSPod) domain.
 		o = s.taboption('reach', form.ListValue, 'dns_provider', _('DNS provider'));
