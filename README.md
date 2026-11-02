@@ -16,13 +16,15 @@ AutoPlay 是 [PlayPort](https://github.com/youcci/playport) + [DashPlay](https:/
 
 > 一台刷了 OpenWrt（[mu300-linux](https://github.com/dikeckaan/mu300-linux) 的 `mu300-linux` 镜像，厂商 5.4 内核，紫光展锐 T760）的**中兴 F50** 随身 WiFi，接车上 USB 供电，接收 iPhone 的无线 CarPlay，把画面显示在**特斯拉**车机自带的浏览器里。
 
-**状态：0.1.1 工程测试版，未上车验证。** 已完成接收端编译与本机回归、前端构建和盒子软件测试；基线、具体计数、缺陷清单和剩余风险见 [`docs/AUDIT-0.1.1.md`](docs/AUDIT-0.1.1.md)。本轮以原 0.1.0（提交 `7d8bcca`）为基线，保留 F50 + 特斯拉架构，修复媒体恢复、配对落盘、设置请求、状态并发、安装门禁与回滚签名等问题。F50 B13、AMD Model 3P、iPhone 15 Pro / iOS 27.2 尚未跑过端到端测试，本版不能作为已验证的刷机镜像或成品使用。
+**状态：1.2.0，已在车上跑起来。** 1.0.0（2026-11-02）在一辆 2022 款 Model 3（AMD 车机）上实测通过：iPhone 15 Pro / iOS 27.2 的无线 CarPlay 画面、触摸、导航播报经 F50 显示在车机浏览器里，证书来自 Let's Encrypt（DNSPod 路线）。1.1.0 把所有声音默认交给特斯拉蓝牙，1.2.0 按车机的窗口形状重做了两张页面。还没有长期浸泡数据；已知事项见 `CHANGELOG.md` 各版的"未动的已知事项"。
+
+<p align="center"><img src="docs/images/tesla-model3-carplay-2026-11-02.jpg" width="640" alt="Model 3 车机浏览器里的 CarPlay 主屏，地址栏是盒子自己的域名"> <img src="docs/images/f50-in-hand-2026-11-02.jpg" width="240" alt="手里的中兴 F50，车机上是 CarPlay"></p>
 
 **这不是 Apple 认证产品。** 运行需要用户自己提供配件认证身份；仓库、包、文档、测试里都不含身份材料，也不会自动下载。公开流传的共享身份随时可能被撤销（见 `NOTICE.md`、`docs/SECURITY.md`）。
 
 ## 它怎么工作（一句话版）
 
-F50 开 5 GHz 热点（100.96.0.1/24），用蓝牙 iAP2 引导 iPhone 连上来，JVM 接收端把 iPhone 发来的 H.264 原样经 WSS 转给车机浏览器，浏览器用 WebCodecs 解码画到 canvas 上；触摸原路回传。音乐、通话、Siri 走特斯拉自己的蓝牙，页面只管画面和导航播报。细节见 `docs/ARCHITECTURE.md`，依据见 `docs/DECISIONS.md`。
+F50 开 5 GHz 热点（100.96.0.1/24），用蓝牙 iAP2 引导 iPhone 连上来，JVM 接收端把 iPhone 发来的 H.264 原样经 WSS 转给车机浏览器，浏览器用 WebCodecs 解码画到 canvas 上；触摸原路回传。所有声音——音乐、通话、Siri、导航播报——默认走特斯拉自己的蓝牙（1.1.0，`docs/AUDIO.md`），页面只管画面和触摸。细节见 `docs/ARCHITECTURE.md`，依据见 `docs/DECISIONS.md`。
 
 ## 目录
 

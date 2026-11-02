@@ -29,3 +29,8 @@ state/
 .vscode/
 __pycache__/
 *.pyc
+
+# Raw in-car photos and videos: iPhone originals carry GPS EXIF/QuickTime location and run to ~100 MB;
+# stripped, resized copies for the README live in docs/images/.
+测试视频和照片/
+发布素材/
