@@ -586,6 +586,7 @@ window.setInterval(() => { syncNight(); if (panel.open) render(); }, 30000);
 if (!pageAudio) {
   el('sound-settings').querySelectorAll<HTMLElement>(':scope > :not(#sound-on-car)').forEach(node => { node.hidden = true; });
   el('sound-on-car').hidden = false;
+  document.querySelectorAll<HTMLElement>('[data-i18n="privacy"]').forEach(node => { node.hidden = true; });   // "tap for sound" does not apply
 }
 el('browser-check-show').onclick = () => {
   panel.close();

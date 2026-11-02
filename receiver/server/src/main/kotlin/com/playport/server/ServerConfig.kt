@@ -40,10 +40,10 @@ data class ServerConfig(
     val accessToken: String = generateToken(),
     /**
      * Where navigation prompts and alerts play (uci autoplay.main.audio_route_navigation; the names are DashPlay
-     * 2026.10.31's). "carplay": the page plays them, music/Siri/calls stay on the Tesla's Bluetooth (the 7-format
-     * declaration verified while driving). "bluetooth": the receiver offers the iPhone no audio at all
-     * (AirPlayConfig.disableAudioOutput), so every sound, navigation included, plays on the iPhone or the Tesla's
-     * Bluetooth; the page shows no sound controls. docs/AUDIO.md.
+     * 2026.10.31's). "carplay" (this bare receiver's default): the page plays them, music/Siri/calls stay on the
+     * Tesla's Bluetooth (the 7-format declaration verified while driving). "bluetooth" (the box's default, ADR-14):
+     * the receiver offers the iPhone no audio at all (AirPlayConfig.disableAudioOutput), so every sound, navigation
+     * included, plays on the iPhone or the Tesla's Bluetooth; the page shows no sound controls. docs/AUDIO.md.
      */
     val audioRouteNavigation: String = AUDIO_ROUTE_CARPLAY,
 ) {
