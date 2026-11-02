@@ -396,7 +396,8 @@ class ManagedPageTests(unittest.TestCase):
             self.page.apply("/update", {"action": "install", "nonce": "stale"})
         with patch.object(update, "launch", return_value="已开始升级") as launch, \
                 patch.object(update, "check") as check:
-            self.assertEqual(self.page.apply("/update", {"action": "install", "nonce": nonce}), "已开始升级")
+            self.assertEqual(self.page.apply("/update", {"action": "install", "nonce": nonce}), {"ask": "install"})   # asks first (1.2.0)
+            self.assertEqual(self.page.apply("/update", {"action": "install", "nonce": nonce, "confirmed": "1"}), "已开始升级")
             launch.assert_called_once_with(self.state.parent)
             self.assertIn("正在检查更新", self.page.apply("/update", {"action": "check", "nonce": nonce}))
         update.save(self.state / "update-status.json", {"phase": "installing", "message": "正在安装", "at": time.time()})

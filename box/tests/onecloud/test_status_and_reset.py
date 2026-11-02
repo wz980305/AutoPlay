@@ -167,6 +167,47 @@ class PageBannerTests(unittest.TestCase):
         self.assertNotIn("1234", html)
         self.assertIn("恢复出厂设置", html)
 
+    def test_removing_a_phone_is_confirmed_on_the_page_not_in_a_browser_box(self):
+        """1.2.0: a car browser draws confirm() at the OS size or not at all, so the question is a screen of the page."""
+        self.page.pairing.devices = lambda: {"AA:BB:CC:DD:EE:01": "小王的 iPhone"}
+        removed = []
+        self.page.pairing.remove = removed.append
+        nonce = self.page.pairing.nonce
+        self.assertNotIn("confirm(", self.page.render(""))
+        self.assertIn("删除此 iPhone…", self.page.render(""))
+        # first press: nothing removed, the redirect asks for the confirmation screen
+        reply = self.page.apply("/pair", {"nonce": nonce, "action": "remove", "phone": "AA:BB:CC:DD:EE:01"})
+        self.assertEqual(reply, {"ask": "remove", "phone": "AA:BB:CC:DD:EE:01"})
+        self.assertEqual(removed, [])
+        html = self.page.render("ask=remove&phone=AA%3ABB%3ACC%3ADD%3AEE%3A01")
+        self.assertIn("从盒子上删除这部 iPhone？", html)
+        self.assertIn("小王的 iPhone", html)
+        self.assertIn('name=confirmed value="1"', html)
+        self.assertNotIn("我的 iPhone", html, "the question is the whole screen")
+        # second press carries the confirmation
+        reply = self.page.apply("/pair", {"nonce": nonce, "action": "remove", "phone": "AA:BB:CC:DD:EE:01", "confirmed": "1"})
+        self.assertIn("已从盒子上删除", reply)
+        self.assertEqual(removed, ["AA:BB:CC:DD:EE:01"])
+        # a phone that is gone: no question, the normal page
+        self.page.pairing.devices = lambda: {}
+        self.assertIn("我的 iPhone", self.page.render("ask=remove&phone=AA%3ABB%3ACC%3ADD%3AEE%3A01"))
+
+    def test_an_update_is_confirmed_on_the_page_too(self):
+        nonce = self.page.pairing.nonce
+        reply = self.page.apply("/update", {"nonce": nonce, "action": "install"})
+        self.assertEqual(reply, {"ask": "install"})
+        (self.state / "update-check.json").write_text(json.dumps({"available": True, "online": True, "latest": "1.3.0", "current": "1.2.0", "checked_at": 1}))
+        html = self.page.render("ask=install")
+        self.assertIn("现在升级到 1.3.0？", html)
+        self.assertIn("立即升级", html)
+        self.assertNotIn("confirm(", html)
+        with patch("settings_page.update.launch", return_value="正在升级") as launch:
+            self.assertEqual(self.page.apply("/update", {"nonce": nonce, "action": "install", "confirmed": "1"}), "正在升级")
+        launch.assert_called_once()
+        # nothing to install (offline or none found): the normal page instead of an empty question
+        (self.state / "update-check.json").write_text(json.dumps({"available": False, "latest": "1.2.0", "checked_at": 1}))
+        self.assertIn("我的 iPhone", self.page.render("ask=install"))
+
 
     def test_the_page_demands_the_typed_words(self):
         with tempfile.TemporaryDirectory() as tmp:

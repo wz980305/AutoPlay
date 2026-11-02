@@ -62,7 +62,7 @@ class PairingTests(unittest.TestCase):
             page=self.page.render('')
         self.assertIn('<b>A</b><span>蓝牙 …00:01</span></span><span class=value>正在使用</span>',page)
         self.assertEqual(page.count('value=remove'),1)
-        self.assertIn('删除「&lt;B&gt;」',page)
+        self.assertNotIn('confirm(',page)   # 1.2.0: the question is a screen of the page (settings_page.confirm_screen)
         self.assertNotIn('value=use',page)
 
     def test_pick_only_listed_phone_while_idle_and_waiting(self):
@@ -102,7 +102,10 @@ class PairingTests(unittest.TestCase):
         with patch.object(self.window,'devices',return_value={A:'A',B:'B'}),patch('pairing_window.remove_device',fake_remove):
             with self.assertRaises(ValueError):self.window.remove(A)
             with self.assertRaises(ValueError):self.window.remove('02:00:00:00:00:09')
-            self.page.apply('/pair',{'action':'remove','phone':B,'nonce':self.window.nonce})
+            # the first press only asks (1.2.0); the confirmed one removes
+            self.assertEqual(self.page.apply('/pair',{'action':'remove','phone':B,'nonce':self.window.nonce}),{'ask':'remove','phone':B})
+            self.assertEqual(removed,[])
+            self.page.apply('/pair',{'action':'remove','phone':B,'nonce':self.window.nonce,'confirmed':'1'})
         self.assertEqual(removed,[B])
         left=read_json(state)
         self.assertEqual(list(left['phones']),[A])
