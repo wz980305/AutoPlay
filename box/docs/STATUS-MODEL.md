@@ -98,16 +98,18 @@ on failure (`bridge_reasons.py`); the supervisor reads the last five.
 
 | state | reason | page |
 |---|---|---|
-| `self_signed` | — | no DuckDNS name: the JVM self-signs, the car's browser warns once |
-| `issuing` | `waiting-for-internet` or — | acme.sh is running or waiting for the WAN |
+| `self_signed` | — | no own name (DuckDNS or DNSPod): the JVM self-signs, the car's browser warns once |
+| `issuing` | `route` (no default route yet), `dns` (provider or CA does not resolve), `waiting-for-internet`, or — | acme.sh is running, or the readiness probe says the network is not there yet (looked at every 15 s, no back-off spent; 1.1.0 D1) |
 | `ok` | — (`not_after`) | |
 | `renewing` | — | within the renewal window |
 | `expiring_soon` | retry reason or — | under 30 days: orange bar |
 | `expired` | retry reason or — | orange bar: renews when the box is online |
-| `failed` | `not-obtained`, acme.sh's reason | |
+| `failed` | `not-obtained`, or a failure code (1.1.0 D3): `curl<N>` (curl's exit code from acme.sh's log: 6 name lookup, 7 connect, 28 timeout), `timeout` (acme.sh's 600 s cap or openssl hanging), `network`, `certificate` (the issued chain did not verify), `acme` (anything else acme.sh refused) | the settings page turns the code into words (`own_domain.reason_text`); never a message, which could carry the token |
 
 Retries 60/120/300/900 s then hourly; a WAN-up or NTP hotplug event wakes the
-maintainer at once (`/var/run/autoplay/wan-up`).
+maintainer at once (`/var/run/autoplay/wan-up`). Every acme.sh request runs through a
+curl shim with `--connect-timeout 10 --max-time 90 --retry 2` (`state/acme/bin/curl`,
+1.1.0 D2; acme.sh 3.1.6 itself sends requests without a timeout and stays byte-identical).
 
 ### update — the online update (6e)
 

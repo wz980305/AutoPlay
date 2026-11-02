@@ -25,6 +25,7 @@ import re
 import shutil
 import signal
 import subprocess
+import socket
 import tempfile
 import threading
 import time
@@ -49,8 +50,18 @@ CERT_CHECK = 12 * 3600
 CERT_RETRIES = (60, 120, 300, 900)
 CERT_RETRY = 3600
 ACME_TIMEOUT = 600
+# acme.sh 3.1.6 sends its requests without any timeout: one dead connection held a whole run until ACME_TIMEOUT. A
+# curl shim in state/acme/bin bounds every request (D2, DashPlay 2026.10.31); the pinned acme.sh itself is untouched.
+ACME_CONNECT_TIMEOUT = 10
+ACME_REQUEST_TIMEOUT = 90
+ACME_RETRY = 2
+# Not a failure: no default route or no DNS yet (boot, SIM registering). Looked at again this often instead of
+# spending the 60/120/300/900 s back-off on "no internet" (D1, DashPlay 2026.10.26).
+READY_RETRY = 15
 DNS_SLEEP = 60             # wait for the TXT record instead of acme.sh's DoH check (blocked on some networks)
 ACME_SERVER = os.environ.get("AUTOPLAY_ACME_SERVER", "letsencrypt")   # tests: letsencrypt_test
+ACME_HOSTS = {"letsencrypt": "acme-v02.api.letsencrypt.org", "letsencrypt_test": "acme-staging-v02.api.letsencrypt.org"}
+PROVIDER_HOSTS = {"duckdns": "www.duckdns.org", "dnspod": "dnsapi.cn"}   # what acme.sh's hook talks to
 
 
 def sub_domain(text):
@@ -137,6 +148,115 @@ def end_date(state):
         return None
 
 
+def directory_host():
+    """The ACME server's host name (acme.sh takes a short name or a full directory URL)."""
+    if "://" in ACME_SERVER:
+        return urllib.parse.urlsplit(ACME_SERVER).hostname or ""
+    return ACME_HOSTS.get(ACME_SERVER, ACME_HOSTS["letsencrypt"])
+
+
+def has_default_route(proc=Path("/proc")):
+    """An IPv4 or IPv6 default route that is up and not a reject route. /proc, since OpenWrt's BusyBox `ip` has no
+    JSON (DashPlay default_route_families, the /proc branches)."""
+    try:   # Iface Destination Gateway Flags ... Mask ...: /0, up (0x1), not a reject route (0x200)
+        for line in (proc / "net/route").read_text().splitlines()[1:]:
+            fields = line.split()
+            if (len(fields) >= 11 and fields[0] != "lo" and fields[1] == fields[7] == "00000000"
+                    and int(fields[3], 16) & 1 and not int(fields[3], 16) & 0x200):
+                return True
+    except (OSError, ValueError):
+        pass
+    try:   # ::/0 must be UP and not REJECT; Linux also lists an unreachable ::/0 on lo
+        for line in (proc / "net/ipv6_route").read_text().splitlines():
+            fields = line.split()
+            if (len(fields) == 10 and fields[0] == "0" * 32 and fields[1] == "00" and fields[9] != "lo"
+                    and int(fields[8], 16) & 1 and not int(fields[8], 16) & 0x200):
+                return True
+    except (OSError, ValueError):
+        pass
+    return False
+
+
+def network_ready(provider="duckdns", resolve=socket.getaddrinfo, proc=Path("/proc")):
+    """None when the box can reach its DNS provider and the CA, else "route" or "dns" (D1). Looked at before
+    acme.sh runs: at boot the first attempt landed before the SIM was up and cost the first back-off step."""
+    if not has_default_route(proc):
+        return "route"
+    for host in (PROVIDER_HOSTS.get(provider, PROVIDER_HOSTS["duckdns"]), directory_host()):
+        try:
+            resolve(host, 443, type=socket.SOCK_STREAM)
+        except OSError:
+            return "dns"
+    return None
+
+
+CURL_FAILURE = re.compile(r"error code: (\d{1,3})")
+
+
+def curl_failure(log):
+    """The curl exit code from acme.sh's log ("6" name lookup, "28" timeout), digits only."""
+    try:
+        found = CURL_FAILURE.findall(Path(log).read_text(errors="replace"))
+    except OSError:
+        return None
+    return found[-1] if found else None
+
+
+def failure_reason(error, log=None):
+    """A short code for the status (D3): never a message, which may carry the token. The log is read only when
+    this run wrote to it (the caller compares mtimes), so an old failure is not reported again."""
+    code = curl_failure(log) if log else None
+    if code:
+        return "curl" + code
+    if isinstance(error, (TimeoutError, subprocess.TimeoutExpired)):   # acme.sh's cap, or openssl hanging
+        return "timeout"
+    if isinstance(error, ValueError):
+        return "certificate"
+    if isinstance(error, OSError):
+        return "network"
+    return "acme"
+
+
+def reason_text(reason):
+    """The settings page's words for failure_reason() and the readiness codes."""
+    if reason == "route":
+        return "盒子还没有默认路由（SIM 卡还没连上网络）"
+    if reason == "dns":
+        return "域名解析失败（DNS 服务商或 Let's Encrypt 解析不到）"
+    if reason == "timeout":
+        return "acme.sh 超时"
+    if reason and reason.startswith("curl") and reason[4:].isdigit():
+        return f"连接失败（curl 错误 {reason[4:]}）"
+    if reason == "network":
+        return "网络中断"
+    if reason == "certificate":
+        return "证书内容不对"
+    return "acme.sh 申请没有成功"
+
+
+def curl_shim(home):
+    """A curl in front of acme.sh's own (D2): --connect-timeout/--max-time/--retry on every request. PATH only for the
+    acme.sh process; the bundled acme.sh stays byte-identical to its pinned hash. None when curl is not there."""
+    real = shutil.which("curl")
+    if not real:
+        return None
+    directory = Path(home) / "bin"
+    path = directory / "curl"
+    text = ("#!/bin/sh\n"
+            f'exec "{real}" --connect-timeout {ACME_CONNECT_TIMEOUT} --max-time {ACME_REQUEST_TIMEOUT} '
+            f'--retry {ACME_RETRY} --retry-delay 2 "$@"\n')
+    try:
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if not path.exists() or path.read_text() != text:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o700)
+            with os.fdopen(fd, "w") as out:
+                out.write(text)
+            path.chmod(0o700)
+    except OSError:
+        return None
+    return str(directory)
+
+
 def write_status(state, **fields):
     """Fixed, public fields only (phase, record, address): never an error text, which may carry the token."""
     path = Path(state) / "own-domain.json"
@@ -177,6 +297,7 @@ class Maintainer(threading.Thread):
             say("own name record kept: Tesla cannot reach the current address")
         self.stopped, self.say = stopped, say
         self.sent, self.sent_at = None, 0.0   # address last accepted by DuckDNS, and when
+        self.ready = network_ready               # the readiness probe (D1); tests replace it
 
     def woken(self):
         """A hotplug event (WAN up, NTP synced) since the last look: the supervisor's wake file, consumed here."""
@@ -222,6 +343,8 @@ class Maintainer(threading.Thread):
 
     def check_certificate(self):
         """Seconds until the next look."""
+        log = self.state / "acme" / "acme.log"
+        before = None
         try:
             # OpenSSL can time out or fail to start too, not just acme.sh. These failures must use
             # the same retry policy instead of ending the only renewal thread for this boot.
@@ -229,18 +352,29 @@ class Maintainer(threading.Thread):
                 self.cert_failures = 0
                 write_status(self.state, name=self.name, phase="ready")
                 return CERT_CHECK
+            # D1: no route or no DNS yet is not a failure (boot, SIM registering): look again in READY_RETRY s
+            # instead of spending a back-off step; the settings page shows why.
+            try:
+                missing = self.ready(self.config.get("provider", "duckdns"))
+            except Exception:   # never kill the worker on a readiness probe
+                missing = "route"
+            if missing:
+                write_status(self.state, name=self.name, phase="waiting", reason=missing)
+                return READY_RETRY
             renewing = certificate_for(self.state, self.name)
             write_status(self.state, name=self.name, phase="renewing" if renewing else "issuing")
+            before = log.stat().st_mtime_ns if log.exists() else None
             self.obtain()
             until = end_date(self.state)
         except InterruptedError:
             return CERT_CHECK
-        except Exception as error:   # no internet, DuckDNS or Let's Encrypt refused; texts may carry the token
+        except Exception as error:   # no internet, the DNS provider or Let's Encrypt refused; texts may carry the token
             self.cert_failures += 1
             delay = self.retry_delay()
-            write_status(self.state, name=self.name, phase="retry", failures=self.cert_failures,
-                         reason=type(error).__name__)
-            self.say(f"certificate for {self.name} deferred: {type(error).__name__}; next try in {delay} s")
+            after = log.stat().st_mtime_ns if log.exists() else None
+            reason = failure_reason(error, log if before is not None and after != before else None)
+            write_status(self.state, name=self.name, phase="retry", failures=self.cert_failures, reason=reason)
+            self.say(f"certificate for {self.name} deferred ({reason}); next try in {delay} s")
             return delay
         self.cert_failures = 0
         write_status(self.state, name=self.name, phase="ready")
@@ -291,6 +425,9 @@ class Maintainer(threading.Thread):
         env = dict(os.environ)
         if extra_env:
             env.update(extra_env)
+        shim = curl_shim(home)   # D2: every request bounded; acme.sh itself unchanged
+        if shim:
+            env["PATH"] = shim + os.pathsep + env.get("PATH", "")
         fd = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         with os.fdopen(fd, "ab") as out, subprocess.Popen(
                 command, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
@@ -329,9 +466,13 @@ def message(state, name):
         if not serving(state):
             text += "新证书在下次开机时启用。"
     else:
+        phase, reason = status.get("phase"), status.get("reason")
         text = {"issuing": "正在申请正式证书，通常几分钟；完成后下次开机启用。",
-                "retry": "正式证书暂未申请到：请确认盒子能上网、域名和 DNS 服务商的凭证正确；盒子每小时重试。",
-                }.get(status.get("phase"), "等待申请正式证书：盒子联网后自动开始。")
+                "renewing": "正在续签正式证书；完成后下次开机启用。",
+                "waiting": f"等待申请正式证书：{reason_text(reason)}，盒子每 15 秒再看一次。",
+                "retry": f"正式证书暂未申请到：{reason_text(reason)}。请确认盒子能上网、域名和 DNS 服务商的凭证正确；"
+                         "盒子每小时重试。",
+                }.get(phase, "等待申请正式证书：盒子联网后自动开始。")
     if status.get("record") == "blocked":
         text += status.get("warning", "已保留原域名记录。")
     if status.get("record") == "failed":
@@ -367,6 +508,8 @@ def certificate_state(state, name, now=None, soon_days=30):
     if end is None:
         if phase == "retry":
             return {"state": "failed", "reason": status.get("reason") or "not-obtained", "not_after": None}
+        if phase == "waiting":   # D1: no route / no DNS yet, not a failure
+            return {"state": "issuing", "reason": status.get("reason") or "waiting-for-internet", "not_after": None}
         return {"state": "issuing", "reason": None if phase == "issuing" else "waiting-for-internet", "not_after": None}
     if end <= current:
         return {"state": "expired", "reason": status.get("reason") if phase == "retry" else None, "not_after": end_text}

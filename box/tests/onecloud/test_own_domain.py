@@ -1,9 +1,11 @@
 """Own DuckDNS name with a Let's Encrypt certificate (own_domain.py): the one route a Tesla's browser is known to open
 without a warning. acme.sh is replaced by a script that hands out a synthetic certificate."""
+import hashlib
 import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -130,8 +132,10 @@ class MaintainerTests(unittest.TestCase):
         record.start(); self.addCleanup(record.stop)
         self.stopped = threading.Event()
 
-    def maintainer(self, address="192.168.5.80"):
-        return own_domain.Maintainer(self.root, self.config, address, self.stopped, say=lambda _: None)
+    def maintainer(self, address="192.168.5.80", ready=None):
+        worker = own_domain.Maintainer(self.root, self.config, address, self.stopped, say=lambda _: None)
+        worker.ready = ready or (lambda provider: None)   # the network is there unless a test says otherwise (D1)
+        return worker
 
     def calls(self):
         return (self.fake / "calls").read_text()
@@ -155,6 +159,8 @@ class MaintainerTests(unittest.TestCase):
         config = {"domain": "car.example.com", "provider": "dnspod", "id": "123456", "token": DNSPOD_TOKEN}
         make_certificate(self.fake, "car.example.com")
         worker = own_domain.Maintainer(self.root, config, "100.96.0.1", self.stopped, say=lambda _: None)
+        asked = []
+        worker.ready = lambda provider: asked.append(provider)
         self.assertEqual(worker.name, "car.example.com")
         self.assertEqual(worker.check_certificate(), own_domain.CERT_CHECK)
         self.assertTrue(own_domain.certificate_for(self.state, "car.example.com", own_domain.RENEW_DAYS))
@@ -167,6 +173,7 @@ class MaintainerTests(unittest.TestCase):
         self.assertNotIn(DNSPOD_TOKEN, calls, "the token stays off acme.sh's command line")
         self.assertNotIn("123456", calls.replace("car.example.com", ""), "the API id stays off the command line")
         self.assertEqual(own_domain.read_status(self.state)["phase"], "ready")
+        self.assertEqual(asked, ["dnspod"], "the readiness probe knows which provider to resolve")
 
     def test_a_current_certificate_is_left_alone(self):
         make_certificate(self.fake, self.name)
@@ -195,6 +202,60 @@ class MaintainerTests(unittest.TestCase):
         self.assertEqual(worker.check_certificate(), own_domain.CERT_CHECK)
         self.assertEqual(worker.cert_failures, 0)
 
+    def test_no_route_or_dns_yet_is_waiting_not_a_failure(self):
+        # D1 (DashPlay 2026.10.26): at boot the first attempt landed before the SIM was up and cost a back-off step.
+        for missing in ("route", "dns"):
+            with self.subTest(missing=missing):
+                worker = self.maintainer(ready=lambda provider, m=missing: m)
+                self.assertEqual(worker.check_certificate(), own_domain.READY_RETRY)
+                self.assertEqual(worker.cert_failures, 0)
+                status = own_domain.read_status(self.state)
+                self.assertEqual((status["phase"], status["reason"]), ("waiting", missing))
+                self.assertFalse((self.fake / "calls").exists(), "acme.sh is not run while the network is not there")
+                self.assertEqual(own_domain.certificate_state(self.state, self.name)["state"], "issuing")
+                self.assertEqual(own_domain.certificate_state(self.state, self.name)["reason"], missing)
+                self.assertIn(own_domain.reason_text(missing), own_domain.message(self.state, self.name))
+        # A probe that itself fails never kills the worker: treated as "route".
+        def broken(provider):
+            raise OSError("ip went away")
+        self.assertEqual(self.maintainer(ready=broken).check_certificate(), own_domain.READY_RETRY)
+        self.assertEqual(own_domain.read_status(self.state)["reason"], "route")
+
+    def test_the_failure_reason_is_a_code_from_this_runs_log_never_a_message(self):
+        # D3: the settings page gets a word (curl code, timeout, acme); the token in acme.sh's output never leaves the log.
+        worker = self.maintainer()
+        log = self.state / "acme" / "acme.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("old run: curl: (6) Could not resolve host; error code: 6\n")
+        with patch.dict(os.environ, FAKE_ISSUE="1"):
+            worker.check_certificate()
+        status = own_domain.read_status(self.state)
+        self.assertEqual(status["phase"], "retry")
+        self.assertEqual(status["reason"], "acme", "obtain() starts a fresh log and the fake acme.sh wrote nothing to it")
+        self.assertNotIn(TOKEN, json.dumps(status))
+        self.assertIn("acme.sh 申请没有成功", own_domain.message(self.state, self.name))
+        log.write_text("curl: (6) Could not resolve host; error code: 6\n")   # what this run's log would say
+        self.assertEqual(own_domain.failure_reason(TimeoutError("x")), "timeout")
+        self.assertEqual(own_domain.failure_reason(ValueError("x")), "certificate")
+        self.assertEqual(own_domain.failure_reason(OSError("x")), "network")
+        self.assertEqual(own_domain.failure_reason(RuntimeError("x")), "acme")
+        self.assertEqual(own_domain.failure_reason(RuntimeError("x"), log), "curl6", "a log this run wrote names the curl code")
+        self.assertIn("curl 错误 6", own_domain.reason_text("curl6"))
+
+    def test_acme_runs_with_a_bounded_curl_in_front_of_its_own(self):
+        # D2: acme.sh 3.1.6 has no request timeout; a shim adds --connect-timeout/--max-time/--retry. acme.sh is unchanged.
+        make_certificate(self.fake, self.name)
+        self.assertEqual(self.maintainer().check_certificate(), own_domain.CERT_CHECK)
+        shim = self.state / "acme" / "bin" / "curl"
+        self.assertTrue(shim.exists(), "the shim is written beside acme.sh's config home")
+        self.assertEqual(shim.stat().st_mode & 0o777, 0o700)
+        text = shim.read_text()
+        self.assertIn(f"--connect-timeout {own_domain.ACME_CONNECT_TIMEOUT}", text)
+        self.assertIn(f"--max-time {own_domain.ACME_REQUEST_TIMEOUT}", text)
+        self.assertIn('"$@"', text)
+        self.assertEqual(hashlib.sha256((self.root / "acme" / "acme.sh").read_bytes()).hexdigest(),
+                         hashlib.sha256(FAKE_ACME.encode()).hexdigest(), "acme.sh itself is byte-identical")
+
     def test_a_network_event_wakes_the_maintainer(self):
         wake = self.root / "wan-up"
         worker = own_domain.Maintainer(self.root, self.config, None, self.stopped, say=lambda _: None, wake_file=wake)
@@ -208,7 +269,7 @@ class MaintainerTests(unittest.TestCase):
         with patch.object(own_domain, 'certificate_for', side_effect=subprocess.TimeoutExpired('openssl', 30)):
             self.assertEqual(worker.check_certificate(), own_domain.CERT_RETRIES[0])
             self.assertEqual(worker.check_certificate(), own_domain.CERT_RETRIES[1])
-        self.assertEqual(own_domain.read_status(self.state)['reason'], 'TimeoutExpired')
+        self.assertEqual(own_domain.read_status(self.state)['reason'], 'timeout')   # a code since 1.1.0 (D3), never a message
 
     def test_full_state_disk_does_not_end_certificate_maintenance(self):
         with patch.object(own_domain, 'save_json', side_effect=OSError('full')):
@@ -307,3 +368,44 @@ class SettingsPageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReadinessTests(unittest.TestCase):
+    """has_default_route() reads /proc (BusyBox ip has no JSON); network_ready() resolves the provider and the CA."""
+
+    def proc(self, route="", ipv6=""):
+        tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
+        net = Path(tmp.name) / "net"; net.mkdir()
+        (net / "route").write_text("Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\n" + route)
+        (net / "ipv6_route").write_text(ipv6)
+        return Path(tmp.name)
+
+    def test_default_route_detection(self):
+        up = "wwan0\t00000000\t0A40600A\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"
+        down = "wwan0\t00000000\t0A40600A\t0002\t0\t0\t0\t00000000\t0\t0\t0\n"
+        reject = "lo\t00000000\t00000000\t0203\t0\t0\t0\t00000000\t0\t0\t0\n"
+        lan = "br-lan\t00006064\t00000000\t0001\t0\t0\t0\t00FFFFFF\t0\t0\t0\n"
+        self.assertTrue(own_domain.has_default_route(self.proc(up + lan)))
+        self.assertFalse(own_domain.has_default_route(self.proc(lan)), "a LAN route is not a default route")
+        self.assertFalse(own_domain.has_default_route(self.proc(down)), "a default route that is not up")
+        self.assertFalse(own_domain.has_default_route(self.proc(reject)), "an unreachable default is a reject route")
+        v6 = "0" * 32 + " 00 " + "0" * 32 + " 00 " + "fe800000000000000000000000000001" + " 00000400 00000001 00000000 00000003 wwan0\n"
+        self.assertTrue(own_domain.has_default_route(self.proc("", v6)), "an IPv6-only uplink counts")
+        self.assertFalse(own_domain.has_default_route(self.proc("", v6.replace(" wwan0", " lo"))))
+        self.assertFalse(own_domain.has_default_route(Path("/nonexistent")), "no /proc: not ready, never an exception")
+
+    def test_network_ready_names_what_is_missing(self):
+        proc = self.proc("wwan0\t00000000\t0A40600A\t0003\t0\t0\t0\t00000000\t0\t0\t0\n")
+        asked = []
+        def resolve(host, port, type=None):
+            asked.append(host)
+        self.assertIsNone(own_domain.network_ready("dnspod", resolve=resolve, proc=proc))
+        self.assertEqual(asked, ["dnsapi.cn", "acme-v02.api.letsencrypt.org"] if own_domain.ACME_SERVER == "letsencrypt"
+                         else ["dnsapi.cn", own_domain.directory_host()])
+        asked.clear()
+        self.assertIsNone(own_domain.network_ready("duckdns", resolve=resolve, proc=proc))
+        self.assertEqual(asked[0], "www.duckdns.org")
+        def failing(host, port, type=None):
+            raise socket.gaierror("no DNS")
+        self.assertEqual(own_domain.network_ready("duckdns", resolve=failing, proc=proc), "dns")
+        self.assertEqual(own_domain.network_ready("duckdns", resolve=resolve, proc=self.proc("")), "route")
