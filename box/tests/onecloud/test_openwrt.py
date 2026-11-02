@@ -289,9 +289,11 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(read_config("")["idle_release"], "300")
         self.assertEqual(read_config("autoplay.main.idle_release='0'\n")["idle_release"], "0")
 
-    def test_seven_keys_and_constants(self):
-        self.assertEqual(sorted(DEFAULTS), ["duckdns_domain", "duckdns_token", "enabled", "idle_release", "update_check",
-                                            "update_mirror", "viewer_port"])
+    def test_eleven_keys_and_constants(self):
+        # 7 keys of the Tesla-only trim (D-list) + the 4 of the DNSPod provider (1.0.0): anything else is a constant.
+        self.assertEqual(sorted(DEFAULTS), ["dns_provider", "dnspod_id", "dnspod_token", "duckdns_domain", "duckdns_token",
+                                            "enabled", "idle_release", "own_domain", "update_check", "update_mirror",
+                                            "viewer_port"])
         self.assertEqual(SETTINGS_PORT, 18080)
         self.assertEqual(str(supervisor_openwrt.SHARED_LAN), "100.96.0.1/24")
         self.assertEqual(supervisor_openwrt.JAVA, "/usr/lib/autoplay-jre/bin/java")

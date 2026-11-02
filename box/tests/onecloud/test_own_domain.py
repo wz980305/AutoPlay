@@ -19,10 +19,12 @@ from settings_page import SettingsPage
 import supervisor_openwrt
 
 TOKEN = "0a1b2c3d-1111-2222-3333-444455556666"
+DNSPOD_TOKEN = "0123456789abcdef0123456789abcdef"   # synthetic, 32 alphanumerics like a DNSPod API token
 FAKE_ACME = """#!/bin/sh
 # Records how it was called; --install-cert copies the prepared certificate to the requested files.
 echo "$*" >> "$FAKE_DIR/calls"
 [ -n "$DuckDNS_Token" ] && echo "token in environment" >> "$FAKE_DIR/calls"
+[ -n "$DP_Id" ] && [ -n "$DP_Key" ] && echo "dnspod credentials in environment" >> "$FAKE_DIR/calls"
 case " $* " in *" --issue "*) [ -n "$FAKE_SLEEP" ] && sleep "$FAKE_SLEEP"; exit "${FAKE_ISSUE:-0}" ;; esac
 while [ $# -gt 0 ]; do
     case "$1" in --fullchain-file) cp "$FAKE_DIR/fullchain.pem" "$2" ;; --key-file) cp "$FAKE_DIR/key.pem" "$2" ;; esac
@@ -56,10 +58,59 @@ class ConfigTests(unittest.TestCase):
     def test_openwrt_reads_it_from_uci_and_ignores_a_bad_one(self):
         base = supervisor_openwrt.read_config("autoplay.main.duckdns_domain='MyCar'\n"
                                               f"autoplay.main.duckdns_token='{TOKEN}'\n")
-        self.assertEqual(supervisor_openwrt.own_config(base), {"domain": "mycar", "token": TOKEN})
+        self.assertEqual(supervisor_openwrt.own_config(base), {"domain": "mycar", "provider": "duckdns", "token": TOKEN})
         self.assertIsNone(supervisor_openwrt.own_config(supervisor_openwrt.read_config("")))
         bad = supervisor_openwrt.read_config("autoplay.main.duckdns_domain='mycar'\nautoplay.main.duckdns_token='x'\n")
         self.assertIsNone(supervisor_openwrt.own_config(bad), "a wrong token turns it off, CarPlay still starts")
+
+    # Tencent Cloud (DNSPod), the second provider (1.0.0) --------------------------------------------
+
+    def test_dnspod_fields_are_checked_and_normalised(self):
+        self.assertEqual(own_domain.fqdn(" Car.Example.COM. "), "car.example.com")
+        for bad in ("", "car", "car.", ".example.com", "car example.com", "-car.example.com", "x" * 64 + ".com"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                own_domain.fqdn(bad)
+        self.assertEqual(own_domain.check_dnspod_id(" 123456 "), "123456")
+        for bad in ("", "12", "12a456", "x" * 17):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                own_domain.check_dnspod_id(bad)
+        self.assertEqual(own_domain.check_dnspod_token("a" * 32), "a" * 32)
+        for bad in ("", "short", "a" * 65, "has-dash-" + "a" * 20):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                own_domain.check_dnspod_token(bad)
+
+    def test_openwrt_reads_the_dnspod_provider_and_ignores_a_bad_one(self):
+        good = supervisor_openwrt.read_config("autoplay.main.dns_provider='dnspod'\n"
+                                              "autoplay.main.own_domain='Car.Example.com'\n"
+                                              "autoplay.main.dnspod_id='123456'\n"
+                                              f"autoplay.main.dnspod_token='{DNSPOD_TOKEN}'\n")
+        self.assertEqual(supervisor_openwrt.own_config(good),
+                         {"domain": "car.example.com", "provider": "dnspod", "id": "123456", "token": DNSPOD_TOKEN})
+        # dnspod selected but no domain: off, not an error.
+        self.assertIsNone(supervisor_openwrt.own_config(supervisor_openwrt.read_config("autoplay.main.dns_provider='dnspod'\n")))
+        # A bad credential turns it off; CarPlay still starts.
+        bad = supervisor_openwrt.read_config("autoplay.main.dns_provider='dnspod'\nautoplay.main.own_domain='car.example.com'\n"
+                                             "autoplay.main.dnspod_id='12'\nautoplay.main.dnspod_token='x'\n")
+        self.assertIsNone(supervisor_openwrt.own_config(bad))
+        # A DuckDNS entry does not leak into the dnspod branch, and vice versa.
+        mixed = supervisor_openwrt.read_config("autoplay.main.dns_provider='dnspod'\nautoplay.main.duckdns_domain='mycar'\n"
+                                               f"autoplay.main.duckdns_token='{TOKEN}'\n")
+        self.assertIsNone(supervisor_openwrt.own_config(mixed), "dnspod selected, no own_domain: off")
+
+    def test_the_name_is_the_full_domain_for_dnspod_and_the_duckdns_one_otherwise(self):
+        self.assertEqual(own_domain.name_of({"domain": "car.example.com", "provider": "dnspod", "id": "1", "token": "t"}),
+                         "car.example.com")
+        self.assertEqual(own_domain.name_of({"domain": "mycar", "provider": "duckdns", "token": TOKEN}), "mycar.duckdns.org")
+        self.assertEqual(own_domain.name_of({"domain": "mycar", "token": TOKEN}), "mycar.duckdns.org", "pre-1.0.0 config")
+        self.assertIsNone(own_domain.name_of(None))
+        self.assertEqual(supervisor_openwrt.box_name({"domain": "car.example.com", "provider": "dnspod", "id": "1", "token": "t"}),
+                         "car.example.com")
+
+    def test_dnspod_has_no_record_to_update(self):
+        with patch.object(own_domain.urllib.request, "urlopen") as network:
+            self.assertTrue(own_domain.update_record({"domain": "car.example.com", "provider": "dnspod", "id": "1", "token": "t"},
+                                                     "100.96.0.1"))
+        network.assert_not_called()
 
 
 @unittest.skipUnless(shutil.which("openssl"), "needs the openssl command")
@@ -99,6 +150,23 @@ class MaintainerTests(unittest.TestCase):
         boxnet.ensure_keystore(self.state)   # the next start
         self.assertTrue(own_domain.serving(self.state))
         self.assertNotIn("下次开机", own_domain.message(self.state, self.name))
+
+    def test_dnspod_issues_through_the_dns_dp_hook_with_credentials_in_the_environment(self):
+        config = {"domain": "car.example.com", "provider": "dnspod", "id": "123456", "token": DNSPOD_TOKEN}
+        make_certificate(self.fake, "car.example.com")
+        worker = own_domain.Maintainer(self.root, config, "100.96.0.1", self.stopped, say=lambda _: None)
+        self.assertEqual(worker.name, "car.example.com")
+        self.assertEqual(worker.check_certificate(), own_domain.CERT_CHECK)
+        self.assertTrue(own_domain.certificate_for(self.state, "car.example.com", own_domain.RENEW_DAYS))
+        calls = self.calls()
+        self.assertIn("--dns dns_dp", calls)
+        self.assertIn("-d car.example.com", calls)
+        self.assertNotIn("dns_duckdns", calls)
+        self.assertIn("dnspod credentials in environment", calls)
+        self.assertNotIn("token in environment", calls, "no DuckDNS token is handed to acme.sh for a DNSPod name")
+        self.assertNotIn(DNSPOD_TOKEN, calls, "the token stays off acme.sh's command line")
+        self.assertNotIn("123456", calls.replace("car.example.com", ""), "the API id stays off the command line")
+        self.assertEqual(own_domain.read_status(self.state)["phase"], "ready")
 
     def test_a_current_certificate_is_left_alone(self):
         make_certificate(self.fake, self.name)

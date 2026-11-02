@@ -1,14 +1,20 @@
-"""Optional: a DuckDNS name with a Let's Encrypt certificate. The only route verified on a Tesla (F50 2026-10-14):
-its browser opens https://<name>.duckdns.org:18443/ without a certificate warning (tesla_only_box_delta.md 0).
-Off unless the owner enters a DuckDNS sub-domain and token in LuCI (uci duckdns_domain / duckdns_token).
+"""Optional: an own name with a Let's Encrypt certificate. The only route verified on a Tesla (F50 2026-10-14,
+again 2026-11-02): its browser opens https://<name>:18443/ without a certificate warning (tesla_only_box_delta.md 0).
+Off unless the owner enters a name in LuCI. Two DNS providers (uci dns_provider):
 
-- The public DuckDNS record points the name at the router's LAN address (100.96.0.1). DuckDNS takes a private
-  address; the box's own dnsmasq answers the name locally for the Tesla as well (tesla_openwrt.OfflineChecks).
+- duckdns (default): a DuckDNS sub-domain and its token (uci duckdns_domain / duckdns_token). The public DuckDNS
+  record is pointed at the router's LAN address (100.96.0.1; DuckDNS takes a private address) by update_record().
+- dnspod: a full domain the owner manages in Tencent Cloud DNS (uci own_domain / dnspod_id / dnspod_token). acme.sh's
+  dns_dp hook creates the DNS-01 TXT record through the DNSPod API; the A record is the owner's to create in the
+  DNSPod console (recommended: <name> -> 100.96.0.1, so the name also resolves when the car asks a public resolver).
+  The DNSPod API token can change every record of the account: keep it to a box the owner controls.
+
+In both cases the box's own dnsmasq answers the name locally for the Tesla (tesla_openwrt.OfflineChecks).
 - The certificate comes from Let's Encrypt through acme.sh (bundled in acme/) with a DNS-01 challenge: only
   outgoing HTTPS, nothing has to reach the box, so it works over the SIM. It is installed in state/tls/own/,
   which boxnet wraps into the receiver's keystore; a new one loads on the next receiver start, never mid-drive.
   Renewed when less than RENEW_DAYS remain, whenever the box is online.
-- The token reaches acme.sh by its environment only (not its command line); it is never logged or shown.
+- The credentials reach acme.sh by its environment only (not its command line); they are never logged or shown.
 """
 import fcntl
 import hashlib
@@ -168,7 +174,7 @@ class Maintainer(threading.Thread):
             # Cannot happen once the LAN is the install-time constant (D1); kept as a guard for a hand-edited LAN.
             self.address = None
             write_status(self.state, name=self.name, record="blocked", warning="特斯拉无法打开当前地址，已保留原域名记录")
-            say("DuckDNS record kept: Tesla cannot reach the current address")
+            say("own name record kept: Tesla cannot reach the current address")
         self.stopped, self.say = stopped, say
         self.sent, self.sent_at = None, 0.0   # address last accepted by DuckDNS, and when
 
@@ -199,7 +205,7 @@ class Maintainer(threading.Thread):
                         ok = False
                     if ok:
                         self.sent, self.sent_at = self.address, now
-                    self.say(f"duckdns {self.name} -> {self.address}: {'OK' if ok else 'failed'}")
+                    self.say(f"{self.config.get('provider', 'duckdns')} {self.name} -> {self.address}: {'OK' if ok else 'failed'}")
                 write_status(self.state, name=self.name, record="ok" if ok else "failed", address=self.address)
                 next_record = now + (RECORD_RETRY if not ok else RECORD_REFRESH)
             if now >= next_cert:
@@ -324,7 +330,7 @@ def message(state, name):
             text += "新证书在下次开机时启用。"
     else:
         text = {"issuing": "正在申请正式证书，通常几分钟；完成后下次开机启用。",
-                "retry": "正式证书暂未申请到：请确认盒子能上网、子域名和 token 正确；盒子每小时重试。",
+                "retry": "正式证书暂未申请到：请确认盒子能上网、域名和 DNS 服务商的凭证正确；盒子每小时重试。",
                 }.get(status.get("phase"), "等待申请正式证书：盒子联网后自动开始。")
     if status.get("record") == "blocked":
         text += status.get("warning", "已保留原域名记录。")

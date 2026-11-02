@@ -15,8 +15,9 @@ it is there, the JVM is probed over HTTP every 10 s (three misses restart it), e
 and "Wi-Fi missing" counts only after three consecutive misses. The whole service restarts itself only when the
 Wi-Fi handed to the iPhone changes or the identity files appear. What the box is doing is published as
 RUN/status.json (status_model.py, docs/STATUS-MODEL.md).
-Optional: a DuckDNS name with a Let's Encrypt certificate (uci duckdns_domain / duckdns_token, own_domain.py),
-the one route a Tesla's browser is known to open without a warning; it then replaces the local name.
+Optional: an own name with a Let's Encrypt certificate (own_domain.py; uci dns_provider: a DuckDNS sub-domain, or a
+Tencent Cloud DNSPod domain), the one route a Tesla's browser is known to open without a warning; it then replaces
+the local name.
 """
 import argparse
 import ipaddress
@@ -614,7 +615,7 @@ def main():
     trusted = []   # the network the settings page serves, once the Wi-Fi is known (it starts after that)
     settings = SettingsPage(state, status.snapshot, request_reexec, lambda: list(trusted), root=root)
     offline_checks = OfflineChecks(state, platform=platform)
-    maintainer = []   # own_domain.Maintainer, when a DuckDNS name is set
+    maintainer = []   # own_domain.Maintainer, when an own name is set
     handoff_file = RUN / "handoff.json"
 
     def command(network, wireless, wait):

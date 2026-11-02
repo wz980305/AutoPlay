@@ -3,7 +3,7 @@
 The box has no CA of its own any more (tesla_only_box_delta.md D7): a Tesla cannot install one, and the receiver
 (PlayPort TlsCertificate.kt) makes itself a self-signed certificate with the bind address in its SAN whenever no
 keystore exists, which is all the unverified IP route needs. What stays is the certificate of one's own: the
-Let's Encrypt chain own_domain.py obtains for the DuckDNS name, wrapped into the PKCS12 keystore the receiver
+Let's Encrypt chain own_domain.py obtains for the own name (DuckDNS or DNSPod), wrapped into the PKCS12 keystore the receiver
 loads (alias and password "playport", fixed in its source). When that certificate is gone or has run out, the
 keystore is deleted so that the receiver self-signs again instead of serving an expired chain.
 """
