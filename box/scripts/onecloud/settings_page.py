@@ -39,7 +39,7 @@ BLUETOOTH_TEXT = {   # reason codes of the bluetooth domain (status_model) -> wh
     "adapter-not-powered": "蓝牙适配器没有上电，盒子会一直重试",
     "controller-init-failed": "蓝牙芯片初始化失败（Marlin3 固件没有接受配置）",
     "controller-timeout": "蓝牙芯片没有响应",
-    "bluez-missing": "盒子上缺少蓝牙程序（安装没有完成：重新运行装机的 autoplay 步骤）",
+    "bluez-missing": "盒子上缺少蓝牙程序（安装没有完成：在盒子上运行 python3 /opt/autoplay/board_zte_f50.py --setup）",
     "rfkill": "蓝牙开关（rfkill）不对：找不到、或解除软阻塞失败",
     "rfkill-hard": "蓝牙被硬件开关关闭（rfkill hard），软件无法打开",
     "hci-busy": "另一个程序占着蓝牙控制器",
@@ -296,7 +296,7 @@ class SettingsPage:
                       f'<span class=value>当前 {escape(found.get("current") or "较旧版本")}</span></div>')
             cells += (f'<form method=post action=/update>{ui.hidden(nonce)}<button class="cell action" name=action '
                       'value=install>立即升级（约 2–5 分钟，期间 CarPlay 会断开）</button></form>' if found.get("online") else
-                      f'<p class=note>{escape(found.get("reason") or "这一版改了系统")}，不能在线升级：请按装机说明用刷机包升级。</p>')
+                      f'<p class=note>{escape(found.get("reason") or "这一版改了系统")}，不能在线升级：请按该版本的发布说明升级。</p>')
         elif found.get("latest"):
             cells += (f'<div class=cell><span class=main><b>已是最新</b></span>'
                       f'<span class=value>{escape(found["latest"])}</span></div>')

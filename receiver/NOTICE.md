@@ -2,7 +2,7 @@
 
 AutoPlay's receiver (`receiver/`: `protocol/`, `server/`, `web/`) is free software under the **GNU General Public
 License v3.0** (see [LICENSE](LICENSE)). It is a hard fork, trimmed to one target (a ZTE F50 running OpenWrt, showing
-wireless CarPlay in a Tesla's built-in browser, with music, calls and Siri on the car's own Bluetooth). Everything it
+wireless CarPlay in a Tesla's built-in browser, with every sound — music, navigation prompts, calls and Siri — on the car's own Bluetooth by default since 1.1.0). Everything it
 derives from is GPL-3.0; distributed copies and modifications must keep this license and make their source available.
 
 ## Lineage
@@ -15,6 +15,9 @@ derives from is GPL-3.0; distributed copies and modifications must keep this lic
   else), applied here as one commit per patch. The author published DashPlay's updates and how-tos on Douyin and
   Xiaohongshu; the viewer used to carry two QR codes to those accounts, which the Tesla-only trim removed from the page
   (31 KB per load, the brightest elements at night). This notice is where that attribution now lives.
+  AutoPlay 1.1.0 also brought in DashPlay's 2026-10-26 … 11-01 work (F50 rfkill unblock, the pairing-agent generation guard,
+  the per-session idle grace, the AppCDS archive check, certificate issuance that waits for the network, and the
+  in-car finding that a music-playing page makes a moving Tesla renegotiate).
 - **DiPlay** by shihabal3amri (<https://github.com/shihabal3amri/DiPlay>), itself based on **xcertplay** by shilapi
   (<https://github.com/shilapi/xcertplay>), both GPL-3.0: the AirPlay, iAP2 and accessory-authentication protocol
   stack in `protocol/` (a port of DiPlay's `shared` sources), the view-area protocol (`updateViewArea`) and parts of
@@ -29,8 +32,8 @@ derives from is GPL-3.0; distributed copies and modifications must keep this lic
 
 ## Not part of this repository
 
-The accessory (MFi) identity the protocol needs is third-party key material recovered during the DiPlay project's
-investigation. It is not relicensed, not shipped and never committed (`receiver/identity/` is ignored by git).
+The accessory (MFi) identity the protocol needs is the user's own. It is not shipped, not downloaded and never
+committed (`receiver/identity/` is ignored by git); how to obtain one is outside this project's scope.
 
 CarPlay, iPhone, AirPlay and MFi are trademarks of Apple Inc. Tesla is a trademark of Tesla, Inc. AutoPlay is an
 independent project; no affiliation with or endorsement by Apple, Tesla, or the authors of the projects above is

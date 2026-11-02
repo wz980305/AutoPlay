@@ -1,23 +1,23 @@
 # Accessory identity (not in git)
 
-CarPlay requires an authenticated accessory. PlayPort needs two files that are deliberately
-**not** included in this repository:
+CarPlay requires an MFi-authenticated accessory. The receiver reads two files that are deliberately
+**not** included in this repository, its packages or its tests:
 
 ```
 identity/offline-mfi/identity.pk8       # PKCS#8 EC P-256 private key
 identity/offline-mfi/certificate.p7b    # accessory certificate (Apple Accessories CA)
 ```
 
-`identity/` is ignored by Git. To keep the files elsewhere, start the server with
-`--identity-dir /path/to/identity`, or use a remote MFi service with `--mfi-server`.
+`identity/` is ignored by Git. On the box they live in `/opt/autoplay/identity/offline-mfi/`
+(`run-receiver.py` passes `--identity-dir /opt/autoplay/identity`); on a desk, point
+`--identity-dir` at a directory containing `offline-mfi/`. Nothing downloads them: the box's
+status model reports `identity: missing` until the files are there, and `provided` afterwards.
 
-Where to get a pair, and the caveats that come with it, are documented in the main
-[README](../README.md#accessory-identity-required). In short: the same experimental pair DiPlay
-bundles can be extracted from a public DiPlay release APK, or recovered from public Carlinkit
-firmware. It is shared, not issued to PlayPort, and Apple can revoke it at any time — do not
-redistribute it.
+How to obtain a legitimate pair is outside this project's scope. AutoPlay is not an
+Apple-certified product; a shared identity circulating publicly may be revoked by Apple at any
+time, and this project does not redistribute one (`../../docs/SECURITY.md`, `../../NOTICE.md`).
 
-Verify a pair signs correctly with:
+Verify that a pair signs correctly with:
 
 ```sh
 ./gradlew :server:test --tests '*MfiIdentityTest*'

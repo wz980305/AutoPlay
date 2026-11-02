@@ -1,6 +1,6 @@
 # AutoPlay
 
-**让特斯拉用上无线 CarPlay，整套硬件只是一台两百块的中兴 F50 随身 WiFi。** 它刷成 OpenWrt 后装上本项目，iPhone 像连普通 CarPlay 车机一样连上它；CarPlay 的画面出现在特斯拉车机自带的浏览器里，手指点在屏幕上直接传回 iPhone；音乐、导航播报、通话和 Siri 都走特斯拉自己的蓝牙。不改车，不装 App，不需要在车里再塞一台安卓盒子。
+**让特斯拉用上无线 CarPlay，整套硬件只是一台四百块的中兴 F50 随身 WiFi。** 它刷成 OpenWrt 后装上本项目，iPhone 像连普通 CarPlay 车机一样连上它；CarPlay 的画面出现在特斯拉车机自带的浏览器里，手指点在屏幕上直接传回 iPhone；音乐、导航播报、通话和 Siri 都走特斯拉自己的蓝牙。不改车，不装 App，不需要在车里再塞一台安卓盒子。
 
 <p align="center"><img src="docs/images/tesla-model3-carplay-2026-11-02.jpg" width="640" alt="Model 3 车机浏览器里的 CarPlay 主屏"> <img src="docs/images/f50-in-hand-2026-11-02.jpg" width="240" alt="手里的中兴 F50，车机上是 CarPlay"></p>
 
@@ -36,7 +36,7 @@ AutoPlay 想做的是把这台"别处"缩到最小。CarPlay 的本质是 iPhone
 
 ## 你需要准备什么
 
-**一台中兴 F50**，型号 MU300。我们这台原厂固件是 **B13**，刷成了 [mu300-linux](https://github.com/dikeckaan/mu300-linux) 的 OpenWrt 25.12 镜像（厂商 5.4 内核）。刷机、root、回安卓，请只看 mu300-linux 自己的文档；本仓库不写这些步骤，也不替它判断哪个固件版本能刷（`box/scripts/f50-install.py` 和 `box/skills/autoplay-install/` 是上游 DashPlay 面向 B16 的旧流程，不是我们的安装路线）。车上要给它 5 V、3 A 以上、打火时不断电的 USB 供电，线短而粗，加散热片，别放在太阳晒到的地方——发热和供电是 F50 在车里最大的两个风险。
+**一台中兴 F50**，型号 MU300。我们这台原厂固件是 **B13**，刷成了 [mu300-linux](https://github.com/dikeckaan/mu300-linux) 的 OpenWrt 25.12 镜像（厂商 5.4 内核）。刷机、root、回安卓，请只看 mu300-linux 自己的文档；本仓库不写这些步骤，也不替它判断哪个固件版本能刷（`box/scripts/f50-*.py`、`prepare-*.py` 是上游 DashPlay 面向 B16 原厂固件的旧刷机流程，未被使用，也不是我们的安装路线）。车上要给它 5 V、3 A 以上、打火时不断电的 USB 供电，线短而粗，加散热片，别放在太阳晒到的地方——发热和供电是 F50 在车里最大的两个风险。
 
 **一张能上网的 SIM 卡**，理由见上一节。**一个自己的域名**：DuckDNS 的子域名，或者托管在腾讯云 DNSPod 的域名（国内 SIM 访问 DuckDNS 的接口是否通畅还没有验证，这正是加 DNSPod 路线的原因）。
 

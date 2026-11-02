@@ -22,7 +22,7 @@ log at `/var/run/autoplay/receiver.log` is the source of the `phone` reasons.
   "identity":    {"state": "provided", "reason": null, "since": 1761475120},
   "phone":       {"state": "idle",     "reason": null, "since": 1761475120, "active": false},
   "certificate": {"state": "self_signed", "reason": null, "since": 1761475120, "not_after": null},
-  "update":      {"state": "current",  "reason": "2026.10.26", "since": 1761475120},
+  "update":      {"state": "current",  "reason": "1.2.0", "since": 1761475120},
   "system":      {"state": "ok",       "reason": null, "since": 1761475140, "temp_c": 61},
   "tesla":       {"state": "on",       "reason": null, "since": 1761475126}
 }
@@ -49,8 +49,8 @@ already read from DashPlay; they stay.
 | `failed` | `adapter-not-powered` | still not powered after three tries; retried every 60 s for ever |
 | `failed` | `controller-init-failed` | Marlin3 firmware refused the configuration |
 | `failed` | `controller-timeout` | the controller did not come up |
-| `failed` | `bluez-missing` | the private BlueZ root is not installed (rerun the `autoplay` install stage) |
-| `failed` | `rfkill` | not exactly one built-in Bluetooth rfkill |
+| `failed` | `bluez-missing` | the private BlueZ root is not installed (run `python3 /opt/autoplay/board_zte_f50.py --setup`) |
+| `failed` | `rfkill` | the Bluetooth rfkill was not found after hci0 appeared, or unblocking it failed (1.1.0: every bluetooth-type rfkill is unblocked; `rfkill-hard` = hard-blocked) |
 | `failed` | `hci-busy` | another program owns the HCI |
 | `failed` | `hci-lost` | hci0 vanished (Wi-Fi chip reset); the helper is restarted |
 | `failed` | `storage-conflict` | `/var/lib/bluetooth` belongs to something else |

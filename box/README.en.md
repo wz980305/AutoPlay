@@ -2,73 +2,74 @@
 
 [中文](README.md)
 
-Turns a **ZTE F50** pocket Wi-Fi router (OpenWrt) into a wireless CarPlay receiver for a Tesla: the car and the iPhone both join the box's 5 GHz access point, the car's browser opens the box's page and gets the picture and touch; music, calls and Siri go over the car's own Bluetooth. The box answers the car's connectivity checks, so the car does not refuse the hotspot for "no internet"; with a SIM card that has data, the car's own apps are online as usual.
+This is the half of AutoPlay that runs on the **ZTE F50 pocket router** (OpenWrt): it supervises the receiver, brings up the F50's Bluetooth, maintains the certificate, gives the owner a settings page, and answers the car's connectivity checks so the car does not leave the box's hotspot for "having no internet". The receiver itself (Kotlin/JVM: speaks CarPlay to the iPhone and relays the picture to the car's browser) lives in the repository's `receiver/`. The project as a whole is described in the [root README](../README.en.md).
 
-AutoPlay is a hard fork of [DashPlay](https://github.com/yizhixiaoheigou/DashPlay) (GPL-3.0) with one target left: **F50 + Tesla**. Other boxes, wired CarPlay and the phone-hotspot modes are gone ([docs/TRIM-LOG.md](docs/TRIM-LOG.md)). The receiver lives in the repository's `receiver/` (PlayPort with the patches applied); this directory is what runs on the box: supervisor, Bluetooth bridge, settings page, and the installer.
+This directory comes from [DashPlay](https://github.com/yizhixiaoheigou/DashPlay) (GPL-3.0 hard fork) and keeps one target: F50 + Tesla. Debian, Phicomm N1, Onecloud, wired CarPlay, phone-hotspot and external-router modes are gone; the process is recorded in [docs/TRIM-LOG.md](docs/TRIM-LOG.md).
 
-> **Not an Apple-certified product.** It needs an accessory identity you provide yourself (below). Flashing carries a risk of bricking the device.
+> **Not an Apple-certified product.** Running it requires your own accessory identity (below).
 
 ## What you need
 
-- A ZTE F50 (SIM version, stock B16 firmware), a heat sink, an SD card of 8 GB or more that can be wiped, a USB cable that carries data;
-- a SIM card with data if the car should be online (CarPlay works without one);
-- a computer for the install: Apple-silicon Mac or 64-bit Windows 10/11;
-- your own CarPlay accessory identity (below).
+A ZTE F50 (model MU300) **already flashed to [mu300-linux](https://github.com/dikeckaan/mu300-linux)'s OpenWrt image following that project's own documentation**. The unit we verified in the car shipped with stock firmware B13. Flashing, rooting and going back to Android are mu300-linux's business; this repository gives no such steps and makes no claim about which firmware versions can be flashed (`scripts/f50-install.py`, `scripts/f50-root-*` and `skills/autoplay-install/` are upstream DashPlay's old flow for stock B16 firmware, unused, and not this project's install route).
+
+In the car: a SIM with data (certificate issuance and renewal, and the car's connectivity checks, depend on it); 5 V at 3 A or more from a port that stays powered through ignition, a short thick cable; a heatsink. And your own CarPlay accessory identity (below).
 
 ## Installing
 
-Send this to your AI assistant (Claude Code, Codex, anything that can run commands on your computer). It follows the [install skill](skills/autoplay-install/SKILL.md) step by step and only calls you to plug something in, press a button or tap on the phone:
+Four apk packages (`autoplay`, `autoplay-jre`, `luci-app-autoplay` and its Chinese translation) are defined in the repository's `openwrt/` and built with the OpenWrt Docker SDK; copy them to the box, `apk add` them, run `python3 /opt/autoplay/board_zte_f50.py --setup` once so the F50's Bluetooth uses the private BlueZ (do not `apk add bluez-daemon`), place the identity files, restart the service. Full commands: the [install guide](../交付资料/AutoPlay-1.2.0-安装使用说明.md) (Chinese) and [`openwrt/README.en.md`](../openwrt/README.en.md).
 
-> Download the raw text of `box/skills/autoplay-install/SKILL.md` from this repository with curl in the terminal, read all of it, then follow it to install AutoPlay on my F50.
-
-The installer is `scripts/f50-install.py`, one command per stage: `check` (tools, downloads, space) → `flash` (full backup and Root in one download-mode session) → `openwrt` (OpenWrt onto the SD card, stock system kept in slot B) → `autoplay` (this program and Bluetooth; the LAN becomes `100.96.0.1`) → `identity` (your identity files onto the box) → `tesla` (pre-drive checks, optional Wi-Fi country/channel). Every stage ends with `F50_OK` or `F50_STOP <reason>`; a stop stops, nothing is retried against the device.
+The install script (uci-defaults `90-autoplay-tesla`) moves the LAN from `192.168.77.1` to **`100.96.0.1/24`** — a Tesla's browser refuses private addresses but accepts the 100.64/10 range — and sets the 5 GHz radio to country CN / channel 149: the car only finds the hotspot on 149–165, which the mu300-linux image's country code (TR) does not have. A channel you set in LuCI within 149–165 is kept; SSID and password are untouched.
 
 ## In the car
 
-1. The car joins the box's 5 GHz access point (name and password are OpenWrt's wireless settings; the plugin leaves them alone); the iPhone joins too and pairs over Bluetooth (the settings page invites it; the Bluetooth name is `AutoPlay`).
-2. The car's browser opens `https://autoplay.lan:18443/` (with a DuckDNS name: `https://<name>.duckdns.org:18443/`, which carries a real certificate so the browser stops warning).
-3. The settings page is `http://100.96.0.1:18080/` (`http://100.96.0.2/` redirects there): iPhone, Bluetooth, certificate and update status, invite or remove an iPhone, upgrade, factory reset. LuCI has the same four tabs under Services → AutoPlay.
+1. Join the box's 5 GHz hotspot from the car and turn on "Remain connected in Drive"; pair the iPhone over Bluetooth and make it the media source.
+2. The first time, open the settings page at `http://100.96.0.1:18080/`, tap "Add iPhone", tap the box's name in the iPhone's Settings → Bluetooth, and compare the six-digit code on both sides. Afterwards the iPhone is bootstrapped onto the hotspot over Bluetooth iAP2 whenever it comes near.
+3. Open `https://<your domain>:18443/` in the car's browser (a DuckDNS name or your own DNSPod-hosted domain; without one it is `https://autoplay.lan:18443/` with a certificate warning).
 
-Seven settings (`/etc/config/autoplay`): enabled, viewer port, idle release seconds, DuckDNS name and token, update check, update mirror. The network stays OpenWrt's; the plugin only sets the LAN to `100.96.0.1/24` and answers the connectivity checks.
+The settings page shows the hotspot–box–iPhone chain, adds and removes iPhones, shows certificate expiry and the audio mode, offers a diagnostics download and a factory reset; `http://100.96.0.2/` from the car or a phone redirects to it. LuCI's Services → AutoPlay has four tabs: Network, iPhone (including where navigation prompts play), Own address (DuckDNS / DNSPod), Program update.
 
-Every status carries a reason word (why Bluetooth is not up, how many days the certificate has left, why the program is restarting): [docs/STATUS-MODEL.md](docs/STATUS-MODEL.md).
+`/etc/config/autoplay` has twelve options: on/off, viewer port, idle-release seconds, DNS provider, DuckDNS name and token, own domain plus DNSPod ID and token, where navigation prompts play (default `bluetooth`: every sound on the Tesla's Bluetooth; `carplay`: the page plays prompts), update check, update mirror. The network stays OpenWrt's.
+
+Every state carries a reason word (why Bluetooth is down, how many days the certificate has left, why the program restarted): [docs/STATUS-MODEL.md](docs/STATUS-MODEL.md). The update tab cannot yet update online: `update.py` verifies release signatures and the project has no release key or feed of its own; upgrade by installing new packages as the guide describes — pairings, certificate and identity stay under `/opt/autoplay/`.
 
 ## Accessory identity
 
-An iPhone only connects to a receiver that presents a valid accessory certificate and signs with the matching private key. Like PlayPort, AutoPlay **neither includes, distributes nor downloads any identity**; the repository, packages, documentation and tests contain no real identity files. The receiver refuses to start without these two files on the box:
+An iPhone only connects to a receiver that presents a valid accessory certificate and can sign with the matching private key. AutoPlay **ships, distributes and downloads no identity**; there is none in the repository, the packages, the docs or the tests. Without these two files the status page shows `identity: missing` and the receiver does not start:
 
 ```
 /opt/autoplay/identity/offline-mfi/identity.pk8       # PKCS#8 EC P-256 private key
 /opt/autoplay/identity/offline-mfi/certificate.p7b    # the matching accessory certificate
 ```
 
-Sources are discussed in [PlayPort's README, "Accessory identity"](https://github.com/youcci/playport#accessory-identity-required). Publicly available identities are shared experimental identities that Apple can revoke at any time; personal experimentation only, do not sell, redistribute or commit them. The installer's `identity` stage puts the files in place, checks that key and certificate match and leaves them readable by root only; the settings page's factory reset removes them only after a second typed confirmation.
+How to obtain a legitimate identity is outside this project's scope; a shared identity circulating publicly may be revoked by Apple at any time — do not sell, redistribute or commit one. The files are root-only; the settings page's factory reset deletes them only after a second typed confirmation.
 
 ## Build and test
 
-The program bundle `autoplay-bundle-<version>.tar` is what the OpenWrt package unpacks to `/opt/autoplay`. Build `receiver/` first (`./gradlew :server:installDist`, `npm run build` for the page), then
+The bundle `autoplay-bundle-<version>.tar` is what the OpenWrt package unpacks to `/opt/autoplay`. Build `receiver/` first (`./gradlew :server:installDist`, and `npm run build` for the page), then from the repository root:
 
 ```sh
-sh box/scripts/build-bundle.sh autoplay-bundle.tar
+AUTOPLAY_VERSION=1.2.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 ```
 
-It packs committed files only and downloads two hash-pinned inputs: dbus-next 0.2.3 (the Bluetooth bridge) and acme.sh 3.1.6 (the DuckDNS certificate). The OpenWrt package definitions are in the repository's `openwrt/`.
+It packs committed files only and downloads two pinned dependencies: dbus-next 0.2.3 (Bluetooth bridge) and acme.sh 3.1.6 with the DuckDNS and DNSPod DNS hooks (certificates).
 
-Tests use the standard library's `unittest` only and no network:
+Tests use the standard library `unittest` only, no network:
 
 ```sh
 cd box
-python3 -m unittest discover -s tests/onecloud
-python3 -m unittest discover -s tests/bluetooth    # test_bluez / test_recovery need dbus-next
+python3 -m unittest discover -s tests/onecloud      # 263
+python3 -m unittest discover -s tests/bluetooth     # test_bluez / test_recovery need dbus-next
 ```
 
 ## Layout
 
-- `scripts/onecloud/`: what runs on the box — `supervisor_openwrt.py` (supervision, status, retries), `run-receiver.py` (starts the JVM), `settings_page.py`, `tesla_openwrt.py` (connectivity checks), `own_domain.py` (DuckDNS + Let's Encrypt), `update.py` (online update and rollback), `board_zte_f50.py` (F50 Bluetooth bring-up)
-- `linux/bt-bridge/`: the iAP2 RFCOMM bridge over BlueZ's D-Bus API ([README](linux/bt-bridge/README.md))
-- `scripts/f50-install.py`: the installer; `skills/autoplay-install/`: the install guide for an AI assistant
-- `docs/`: trim log, status model, test baseline
+- `scripts/onecloud/` the programs on the box: `supervisor_openwrt.py` (supervision, status, retries), `supervision.py` (per-component restart policy), `status_model.py` (nine status domains), `run-receiver.py` (starts the JVM), `settings_page.py` / `settings_ui.py` (settings page), `pairing_window.py` (pairing), `tesla_openwrt.py` (connectivity checks), `own_domain.py` (DuckDNS / DNSPod + Let's Encrypt), `update.py` (update and rollback), `factory_reset.py`, `board_zte_f50.py` (F50 Bluetooth bring-up), `mu300_boot.py`, `viewer_port.py`
+- `linux/bt-bridge/` the iAP2 RFCOMM bridge over BlueZ D-Bus ([README](linux/bt-bridge/README.md))
+- `scripts/build-bundle.sh` builds the bundle; `scripts/scan-sensitive.py` scans for personal and secret material before publishing
+- `scripts/f50-*.py`, `scripts/prepare-*.py`, `skills/autoplay-install/` upstream DashPlay's flashing and install flow for stock B16, unused
+- `docs/` trim log, status model, test baseline
+- `tools/render_settings_states.py` renders the settings page's eight states to static HTML (for `receiver/web/scripts/ui-shots.mjs`)
 
 ## License
 
-GPL-3.0, see `LICENSE`; sources and attribution in [NOTICE.md](NOTICE.md). CarPlay, iPhone and AirPlay are trademarks of Apple Inc.; this project is not affiliated with Apple.
+GPL-3.0, see `LICENSE`; sources and credits in [NOTICE.md](NOTICE.md). CarPlay, iPhone, AirPlay and MFi are trademarks of Apple Inc.; Tesla is a trademark of Tesla, Inc. This project is not affiliated with either.

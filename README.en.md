@@ -1,6 +1,6 @@
 # AutoPlay
 
-**Wireless CarPlay in a Tesla, with nothing in the car but a $30 ZTE F50 pocket router.** Flashed to OpenWrt and running this project, the F50 is what the iPhone connects to, exactly as it would connect to a CarPlay head unit; the CarPlay picture appears in the Tesla's own browser, a finger on the screen goes straight back to the iPhone, and music, navigation prompts, calls and Siri all play through the Tesla's own Bluetooth. No modification to the car, no app, no Android box in the cup holder.
+**Wireless CarPlay in a Tesla, with nothing in the car but a ¥400 (about $55) ZTE F50 pocket router.** Flashed to OpenWrt and running this project, the F50 is what the iPhone connects to, exactly as it would connect to a CarPlay head unit; the CarPlay picture appears in the Tesla's own browser, a finger on the screen goes straight back to the iPhone, and music, navigation prompts, calls and Siri all play through the Tesla's own Bluetooth. No modification to the car, no app, no Android box in the cup holder.
 
 <p align="center"><img src="docs/images/tesla-model3-carplay-2026-11-02.jpg" width="640" alt="CarPlay home screen inside the Model 3's browser"> <img src="docs/images/f50-in-hand-2026-11-02.jpg" width="240" alt="The ZTE F50 in hand, CarPlay on the car screen"></p>
 
@@ -36,7 +36,7 @@ Two things are not done. The 1.1.0 and 1.2.0 changes to the receiver's Kotlin we
 
 ## What you need
 
-**A ZTE F50**, model MU300. Ours shipped with stock firmware **B13** and runs [mu300-linux](https://github.com/dikeckaan/mu300-linux)'s OpenWrt 25.12 image (vendor 5.4 kernel). For flashing, rooting and going back to Android, use mu300-linux's own documentation only; this repository gives no such steps and makes no claim about which firmware versions can be flashed (`box/scripts/f50-install.py` and `box/skills/autoplay-install/` are upstream DashPlay's old B16 flow, not our install route). In the car, give it 5 V at 3 A or more from a port that stays powered through ignition, a short thick cable, a heatsink, and a spot out of the sun: heat and power are the two biggest risks of an F50 in a car.
+**A ZTE F50**, model MU300. Ours shipped with stock firmware **B13** and runs [mu300-linux](https://github.com/dikeckaan/mu300-linux)'s OpenWrt 25.12 image (vendor 5.4 kernel). For flashing, rooting and going back to Android, use mu300-linux's own documentation only; this repository gives no such steps and makes no claim about which firmware versions can be flashed (`box/scripts/f50-*.py` and `prepare-*.py` are upstream DashPlay's old flashing flow for stock B16 firmware, unused, and not our install route). In the car, give it 5 V at 3 A or more from a port that stays powered through ignition, a short thick cable, a heatsink, and a spot out of the sun: heat and power are the two biggest risks of an F50 in a car.
 
 **A SIM with data**, for the reasons above. **A domain of your own**: a DuckDNS subdomain, or a domain hosted at Tencent DNSPod (whether DuckDNS's update API is reachable over a Chinese SIM is unverified, which is why the DNSPod route exists).
 

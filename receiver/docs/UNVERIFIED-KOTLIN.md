@@ -2,9 +2,13 @@
 
 > Superseded for compilation by 0.1.1 (2026-10-31): both modules now build and local tests pass on JDK 21. Hardware-dependent checks below remain open. See `../../docs/AUDIT-0.1.1.md`. This document preserves the original 0.1.0 audit history.
 
+> **Status (2026-11-03):** compiled and tested through 1.0.0. Uncompiled since: the 1.0.1 version string in `Main.kt`; the
+> four 1.1.0 files in the table below plus `Main.kt`'s "1.1.0" string; the 1.2.0 "1.2.0" string in `Main.kt`. Nothing else
+> in `receiver/` changed after 1.0.0. First step on a machine with JDK 21 and a Gradle network: `cd receiver && ./gradlew build`.
+
 > **1.2.0 (2026-11-02):** only `Main.kt`'s fallback version string changed ("1.1.0" → "1.2.0"), still without a compiler; the 1.1.0 list below stands.
 
-> **1.1.0 (2026-11-02): four Kotlin files changed again without a compiler at hand** (same reason: no Gradle
+> **1.1.0 (2026-11-02): four Kotlin files (and `Main.kt`'s version string) changed again without a compiler at hand** (same reason: no Gradle
 > dependency network where they were written). First thing on a machine with JDK 21: `cd receiver && ./gradlew build`.
 >
 > | File | Change | Risk |

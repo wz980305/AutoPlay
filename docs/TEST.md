@@ -13,13 +13,13 @@ python3 -m unittest discover -s openwrt/tests      # 安装脚本 90-autoplay-te
 # 1.1.0 的四个 Kotlin 改动未在编写环境编译：./gradlew build 是上车前的第一步（receiver/docs/UNVERIFIED-KOTLIN.md）
 
 # 盒子侧：设置页、状态模型、守护（supervision）、升级日志与回滚、证书退避、时钟下限、出厂重置、平台、诊断、装机脚本
-cd box && python3 -m unittest discover -s tests/onecloud        # 225 个，通过（0.1.0 合并时在本机跑过）
+cd box && python3 -m unittest discover -s tests/onecloud        # 263 个（1.2.0），通过
 
 # 蓝牙桥：test_reason、test_relay 等 7 个可直接跑；test_bluez、test_recovery 需要 dbus-daemon 和 dbus-next 0.2.3
 cd box && python3 -m unittest discover -s tests/bluetooth       # 没有 dbus-next 时那两个模块报 import 错误，是环境问题
 ```
 
-测试身份全是合成数据。裁剪前后的基线在 `box/docs/TEST-BASELINE.md`（375 → 225 是删掉的 Debian/N1/有线/STA 测试减去新模块的测试）。
+测试身份全是合成数据。裁剪前后的基线在 `box/docs/TEST-BASELINE.md`（375 → 225 是删掉的 Debian/N1/有线/STA 测试减去新模块的测试；1.2.0 为 263）。
 
 ### 投屏页（无浏览器）
 
@@ -41,15 +41,15 @@ CHROME=/path/to/chromium node scripts/ui-shots.mjs out/ui-shots [viewer|box]  # 
 
 需要 `playwright-core` 和一个 Chromium；全部本地 mock，不碰盒子和手机。每个形状打印标签/说明字号、行高和有无横向溢出。
 
-四个检查脚本用 `typescript` 即时编译被测模块，在 Node 里模拟 DOM 表面：输入控制器（含 30ms 最短按压、补发抬起）、音频时间线、车载模式和特斯拉默认值、状态提示（`status.ts`）、duck 渐变、浏览器检测。`check-flac.mjs` 随有线代码删除。这三步在 0.1.0 合并时都通过。
+五个检查脚本（`check`、`check-audio`、`check-car`、`check-browser`、`check-runtime`，0.1.1 起）用 `typescript` 即时编译被测模块，在 Node 里模拟 DOM 表面：输入控制器（含 30ms 最短按压、补发抬起）、音频时间线、车载模式和特斯拉默认值、状态提示（`status.ts`）、duck 渐变、浏览器检测。`check-flac.mjs` 随有线代码删除。这三步在 0.1.0 合并时都通过。
 
 ### 接收端
 
 ```sh
-cd receiver && ./gradlew build          # 编译两个模块并跑测试；0.1.1 已完成
+cd receiver && ./gradlew build          # 编译两个模块并跑测试；0.1.1 完成过，1.1.0/1.2.0 的改动还没编译
 ```
 
-见 `docs/BUILD.md` 的警告：Kotlin 侧改动未编译，第一次跑之前先读 `receiver/docs/UNVERIFIED-KOTLIN.md`，它按文件列出了编译风险和"失去最后一个调用者"的预期警告。
+见 `docs/BUILD.md`：1.1.0 和 1.2.0 的 Kotlin 改动未编译，第一次跑之前先读 `receiver/docs/UNVERIFIED-KOTLIN.md`，它按文件列出了改动和风险。
 
 ### 探测页渲染
 
@@ -88,7 +88,7 @@ sh -n openwrt/autoplay/files/autoplay.init && sh -n box/scripts/build-bundle.sh
 - [ ] 夏天暴晒停车后上车，5 分钟内恢复正常，或者明确提示过热
 - [ ] 随机断电 200 次，零配对丢失、零文件系统错误（台架完成即可）
 - [ ] 进隧道 SIM 掉线时 CarPlay 不受影响（上游 10.25 已修，作为回归项）
-- [ ] 导航播报时会压低音乐；通话无回声（或者走车载蓝牙）
+- [ ] 默认 `bluetooth` 模式：导航播报从车机扬声器出来、第一个字没被吃、播报时 iPhone 自己压低音乐；`carplay` 模式：页面播报时压低音乐；通话无回声（走车载蓝牙）
 
 阶段 1 的基线复现标准（技术路径 §六）：上电到出画面 ≤45 秒；触摸到画面 ≤200ms；≥30fps；连续 30 分钟音频不断；暴晒下 SoC <85°C；连续 10 次点火都能自动重连。
 
@@ -100,7 +100,7 @@ sh -n openwrt/autoplay/files/autoplay.init && sh -n box/scripts/build-bundle.sh
 
 1. 封面排空：音乐走车载蓝牙时 iPhone 仍发起封面文件传输，排空线程必须让隧道活过 256 次传输；长途多次切歌后看日志里有没有 `iAP2 received-file queue limit exceeded`。
 2. iOS 27 深浅色：iOS 27 手机上夜间模式能切换（日志 `appearance updates=true`），iOS 26 仍靠 `setNightMode`；2,2 / 1,1 的取值来自 dashplay-tesla 的实车观察，Apple 没有文档。
-3. duck/unduck：`grep 'audio duckAudio'` 看 iPhone 发来的原始 `volume`，dB 到线性的映射在有日志之前是猜的。
+3. duck/unduck（仅 `carplay` 模式有意义）：`grep 'audio duckAudio'` 看 iPhone 发来的原始 `volume`，dB 到线性的映射在有日志之前是猜的。
 4. 配对存储：第一次新配对后 `state/receiver/pairings.properties.bak` 出现；故意清空主文件后下次启动要回退到 `.bak`。
 5. DSCP：盒子上 `tcpdump -v` 看 18443 的流量 TOS 是否 0x88。
 6. 触摸释放：手指按着时挂倒挡冻结页面，日志应出现 `viewer client=N paused with a finger down: lifting it`，iPhone 上不能留下按住的按钮。
@@ -110,7 +110,7 @@ sh -n openwrt/autoplay/files/autoplay.init && sh -n box/scripts/build-bundle.sh
 - iPhone 加入 F50 热点后，会不会走 F50 的 SIM 卡上网（流量费 + 挤占带宽）。
 - 车载蓝牙模式下来电、Siri、导航语音分别从哪里出声，能否稳定切换；iOS 26 和 27 是否不同。
 - F50 自带热点上的真实触摸延迟和帧率。
-- 特斯拉：方向盘按键是否交给网页；证书警告页有没有"继续"；行车时网页麦克风是否可用；DuckDNS 和 Let's Encrypt 从这张 SIM 卡是否可达。
+- 特斯拉：方向盘按键是否交给网页；证书警告页有没有"继续"；行车时网页麦克风是否可用；Let's Encrypt 从国内 SIM 可达已在 1.0.0 验证（DNSPod 路线）；DuckDNS 的接口从这张 SIM 卡是否可达仍未验证。
 - iPhone 走开再回来，是否真的不会自己连回 F50 的热点（dashplay-tesla 作者在 N1 上的观察）。
 
 ## 5. 持续

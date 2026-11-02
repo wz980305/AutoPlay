@@ -11,7 +11,7 @@ AutoPlay 以 GNU General Public License v3.0 分发（见 `LICENSE`）。它是�
 - **xcertplay** — <https://github.com/shilapi/xcertplay>（GPL-3.0），shilapi。DiPlay 的上游协议栈；其 MSE 兼容档和悬浮控件的隐藏策略是本项目相关决定的参考。
 - **WheelPlay** — <https://github.com/fython/wheelplay>（GPL-3.0），fython。PlayPort/DashPlay 从其提交 `c1bd07717c8e87a3130ef03477d2ca318fb66caa` 移植了 iAP2 文件传输（专辑封面）接收器；本项目的画面状态机（等待 / 显示 / 恢复中，帧和触控带会话号）、WebRTC + 直接 Canvas 的 C′ 档评估、分段延迟测法参考其 `docs/ARCHITECTURE.md`、`MEDIA_PRESENTATION.md`、`WEBRTC_RECOVERY.md`、`VALIDATION.md`。
 - **mu300-linux** — <https://github.com/dikeckaan/mu300-linux>，dikeckaan。F50 的 Linux 移植：OpenWrt 镜像、厂商 5.4 内核、`mu300-*` 工具。本项目不包含它的代码；`tools/f50/harden.sh` 调用其 `mu300-next-boot`、`mu300-usb`、`mu300-led`，并修改其 `extra-modules` 脚本（保留备份）。刷机和回安卓只以它的文档为准。
-- **acme.sh** — <https://github.com/acmesh-official/acme.sh>（GPL-3.0），3.1.6，未修改的主脚本和 DuckDNS 钩子，随 `box/` 的程序包分发，仅在用户配置自己的 DuckDNS 名称时使用。
+- **acme.sh** — <https://github.com/acmesh-official/acme.sh>（GPL-3.0），3.1.6，未修改的主脚本和 DuckDNS、DNSPod（`dns_dp.sh`）两个钩子，随 `box/` 的程序包分发，仅在用户配置自己的域名（DuckDNS 或 DNSPod）时使用；1.1.0 起经一个加超时参数的 curl 壳调用，acme.sh 本身不改。
 - **dbus-next** — <https://github.com/altdesktop/python-dbus-next>（MIT），0.2.3，未修改，蓝牙桥使用；许可证文本在 `box/licenses/`。
 - **Eclipse Temurin 21 JRE**（Alpine/musl 构建，Eclipse Adoptium，GPL-2.0 with Classpath Exception）由 `openwrt/autoplay-jre/Makefile` 打包，去掉 `libjsound.so` 并以 jlink 裁剪。
 

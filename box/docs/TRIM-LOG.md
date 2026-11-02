@@ -1,5 +1,7 @@
 # Trim log: DashPlay box → AutoPlay box (ZTE F50, Tesla only)
 
+> 历史记录（2026-10-26 的裁剪）。此后变化：uci 键 7 → 12（1.0.0 加 DNSPod 四键，1.1.0 加 `audio_route_navigation`）；`tests/onecloud` 225 → 263；LuCI 四个标签页的名字是「网络 / iPhone / 自己的网址 / 程序更新」；§"保留"里的 `f50-install.py` F50 路径按 ADR-11 不是安装路线，未被使用；§"未完成"里 `SKILL.md` 于 2026-11-03 换成指向安装说明的短文。
+
 What the `box-trim` branch removed, moved and added relative to the imported
 tree (commit `c138aae`, DashPlay `e3beae4` + openwrt-dashplay `5f17702`), in
 the order of the work items. The design notes referred to are the ones the

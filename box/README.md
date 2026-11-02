@@ -2,73 +2,74 @@
 
 [English](README.en.md)
 
-把一台 **ZTE F50 随身 WiFi**（OpenWrt）变成特斯拉用的无线 CarPlay 接收端：车和 iPhone 都连盒子的 5 GHz 热点，车机浏览器打开盒子的网页就有画面和触控；音乐、通话、Siri 走车自带的蓝牙。盒子替车答联网检查，所以车机不会因为"没网"拒绝连热点；插上能上网的 SIM 卡，车机自带的应用也能照常上网。
+这是跑在 **中兴 F50 随身 WiFi**（OpenWrt）上的那一半 AutoPlay：守护接收程序、拉起 F50 的蓝牙、维护证书、给车主一张设置页，并替车机应答联网检查，这样车机不会因为"这个 Wi-Fi 没网"而拒绝停留在盒子的热点上。接收程序本身（Kotlin/JVM，和 iPhone 讲 CarPlay、把画面转给车机浏览器）在仓库的 `receiver/`。项目的整体说明在 [仓库根目录的 README](../README.md)。
 
-AutoPlay 是 [DashPlay](https://github.com/yizhixiaoheigou/DashPlay) 的硬分叉（GPL-3.0），只保留一个目标：**F50 + 特斯拉**。其他盒子、有线 CarPlay、借手机热点等模式都已去掉（[docs/TRIM-LOG.md](docs/TRIM-LOG.md)）。接收程序在仓库的 `receiver/`（PlayPort 打好补丁的源码），本目录是盒子上的监管程序、蓝牙桥接、设置页和装机脚本。
+本目录来自 [DashPlay](https://github.com/yizhixiaoheigou/DashPlay)（GPL-3.0 硬分叉），只保留一个目标：F50 + 特斯拉。Debian、斐讯 N1、玩客云、有线 CarPlay、借手机热点、外接路由等模式都已去掉，过程记在 [docs/TRIM-LOG.md](docs/TRIM-LOG.md)。
 
-> **这不是 Apple 认证产品。** 运行需要你自己提供配件认证身份（见下文）。刷机有风险，操作不当可能变砖。
+> **这不是 Apple 认证产品。** 运行需要你自己提供配件认证身份（见下文）。
 
 ## 需要什么
 
-- ZTE F50 插卡版（原厂 B16 固件），散热器，8 GB 以上可清空的 SD 卡，能传数据的 USB 线；
-- 想让车机上网就再加一张能上网的 SIM 卡（不插也能用 CarPlay）；
-- 装机用的电脑：Apple 芯片 Mac 或 64 位 Windows 10/11；
-- 你自己的 CarPlay 认证文件（见下文）。
+一台中兴 F50（型号 MU300），**已经按 [mu300-linux](https://github.com/dikeckaan/mu300-linux) 的文档刷成它的 OpenWrt 镜像**。我们实测的那台原厂固件是 B13。刷机、root、回安卓只看 mu300-linux 自己的说明，本仓库不写这些步骤，也不判断哪个固件版本能刷（`scripts/f50-install.py`、`scripts/f50-root-*` 和 `skills/autoplay-install/` 是上游 DashPlay 面向 B16 原厂固件的旧流程，未被使用，也不是本项目的安装路线）。
+
+车上还要：一张能上网的 SIM 卡（证书签发和续期、车机的联网检测都靠它）；5 V、3 A 以上、打火不断电的 USB 供电，短而粗的线；散热片。以及你自己的 CarPlay 认证文件（见下文）。
 
 ## 怎么装
 
-把下面这句话发给你的 AI 助手（Claude Code、Codex 等能在电脑上运行命令的都行），它会按 [装机 skill](skills/autoplay-install/SKILL.md) 一步步做，只在要你插拔线、按按钮或在手机上点选时叫你：
+四个 apk 包（`autoplay`、`autoplay-jre`、`luci-app-autoplay` 和它的中文翻译）由仓库的 `openwrt/` 定义，用 OpenWrt 的 Docker SDK 打出来，推到盒子上 `apk add`，再跑一次 `python3 /opt/autoplay/board_zte_f50.py --setup` 让 F50 的蓝牙用上私有的 BlueZ（不要 `apk add bluez-daemon`），放好认证文件，重启服务。完整命令在 [安装使用说明](../交付资料/AutoPlay-1.2.0-安装使用说明.md) 和 [`openwrt/README.md`](../openwrt/README.md)。
 
-> 请在终端用 curl 下载本仓库 `box/skills/autoplay-install/SKILL.md` 的原文并完整读完，再按它一步步帮我把 AutoPlay 装到 F50 上。
-
-装机命令是 `scripts/f50-install.py`，一个阶段一条命令：`check`（工具、下载、空间）→ `flash`（完整备份并 Root，一次下载模式会话）→ `openwrt`（OpenWrt 装到 SD 卡，原厂系统保留在 B 槽）→ `autoplay`（本程序和蓝牙，热点改为 `100.96.0.1`）→ `identity`（放入认证文件）→ `tesla`（上车前检查，可选 Wi-Fi 国家码/信道）。每一步以 `F50_OK` 或 `F50_STOP <原因>` 结束，停了就停，不会自己重试写设备。
+安装脚本（uci-defaults `90-autoplay-tesla`）会把 LAN 从 `192.168.77.1` 改成 **`100.96.0.1/24`**——特斯拉的浏览器打不开私网地址，100.64/10 这段可以——并把 5 GHz 无线设为中国区 CN / 信道 149：实车只在 149–165 上搜得到热点，而 mu300-linux 镜像的国家码 TR 没有这些信道。你在 LuCI 里改到 153–165 的信道会保留；SSID 和密码不动。
 
 ## 上车
 
-1. 车机连盒子的 5 GHz 热点（名字和密码在 OpenWrt 后台的无线设置里，插件不改），iPhone 也连上并配对蓝牙（设置页会邀请；蓝牙名叫 `AutoPlay`）。
-2. 车机浏览器打开 `https://autoplay.lan:18443/`（填了 DuckDNS 名字就是 `https://<名字>.duckdns.org:18443/`，有正式证书，浏览器不再警告）。
-3. 设置页在 `http://100.96.0.1:18080/`（车机或手机打开 `http://100.96.0.2/` 也会转到这里）：看 iPhone、蓝牙、证书和更新的状态，邀请或删除 iPhone，升级，恢复出厂设置。OpenWrt 后台「服务 → AutoPlay」有同样的四个标签页。
+1. 车机 Wi-Fi 连盒子的 5 GHz 热点，打开"行驶中保持连接"；蓝牙连 iPhone 并选为媒体来源。
+2. 第一次使用，在设置页 `http://100.96.0.1:18080/` 点「添加 iPhone」，在 iPhone 的「设置 → 蓝牙」里点盒子的名字，两边核对六位配对码。之后 iPhone 靠近就会被蓝牙 iAP2 引导连上热点。
+3. 车机浏览器打开 `https://<你的域名>:18443/`（DuckDNS 名字或 DNSPod 托管的自有域名；没设域名时是 `https://autoplay.lan:18443/`，车机会报证书警告）。
 
-设置只有七项（`/etc/config/autoplay`）：开关、网页端口、空闲释放秒数、DuckDNS 名字和 token、是否检查更新、更新镜像。网络仍由 OpenWrt 管，插件只把 LAN 定为 `100.96.0.1/24` 并答联网检查。
+设置页能看到热点、盒子、iPhone 三者的状态，添加或删除 iPhone，看证书有效期和声音模式，下载诊断记录，恢复出厂设置；车机或手机打开 `http://100.96.0.2/` 也会转到它。OpenWrt 后台「服务 → AutoPlay」有四个标签页：网络、iPhone（含导航播报走哪里）、自己的网址（DuckDNS / DNSPod）、程序更新。
 
-状态都有一个原因词（蓝牙没起来是为什么、证书还剩几天、程序为什么在重启），见 [docs/STATUS-MODEL.md](docs/STATUS-MODEL.md)。
+`/etc/config/autoplay` 一共十二项：开关、网页端口、空闲释放秒数、DNS 服务商、DuckDNS 名字和 token、自有域名和 DNSPod 的 ID 与 token、导航播报走哪里（默认 `bluetooth`：所有声音都走特斯拉蓝牙；`carplay`：页面播导航）、是否检查更新、更新镜像。网络仍由 OpenWrt 管。
+
+每个状态都带一个原因词（蓝牙为什么没起来、证书还剩几天、程序为什么在重启），见 [docs/STATUS-MODEL.md](docs/STATUS-MODEL.md)。程序更新一页目前不能真的在线升级：`update.py` 校验发布签名，而项目还没有自己的发布密钥和软件源；升级按安装说明手动装新包，配对、证书、身份文件都保留在 `/opt/autoplay/` 下。
 
 ## 认证身份
 
-iPhone 只连接出示有效配件证书、并能用对应私钥签名的接收端。AutoPlay 与 PlayPort 一样**不附带、不分发、不自动下载任何身份**；仓库、安装包、文档和测试里没有真实身份文件。盒子上缺少这两个文件时接收程序拒绝启动：
+iPhone 只连接出示有效配件证书、并能用对应私钥签名的接收端。AutoPlay **不附带、不分发、不自动下载任何身份**；仓库、安装包、文档和测试里没有身份文件。盒子上缺少这两个文件时，状态页的 `identity` 停在 `missing`，接收程序不会启动：
 
 ```
 /opt/autoplay/identity/offline-mfi/identity.pk8       # PKCS#8 EC P-256 私钥
 /opt/autoplay/identity/offline-mfi/certificate.p7b    # 对应的配件证书
 ```
 
-来源见 [PlayPort README 的 Accessory identity 一节](https://github.com/youcci/playport#accessory-identity-required)。公开可得的身份是共享的实验身份，Apple 随时可能使其失效；只用于个人实验，不要出售、再分发或提交到仓库。装机的 `identity` 阶段把文件放到位并核对私钥与证书配对，文件只有 root 可读；设置页的"恢复出厂设置"只有再输入一次确认文字才会删它。
+怎样取得合法的身份不在本项目讨论范围内；公开流传的共享身份 Apple 随时可能使其失效，不要出售、再分发或提交到仓库。文件只有 root 可读；设置页的"恢复出厂设置"只有再输入一次确认文字才会删它。
 
 ## 构建与测试
 
-程序包 `autoplay-bundle-<版本>.tar` 是 OpenWrt 包解开到 `/opt/autoplay` 的内容：先构建 `receiver/`（`./gradlew :server:installDist`，网页 `npm run build`），再
+程序包 `autoplay-bundle-<版本>.tar` 是 OpenWrt 包解开到 `/opt/autoplay` 的内容：先构建 `receiver/`（`./gradlew :server:installDist`，网页 `npm run build`），再在仓库根目录
 
 ```sh
-sh box/scripts/build-bundle.sh autoplay-bundle.tar
+AUTOPLAY_VERSION=1.2.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 ```
 
-它只打包 git 已提交的文件，另下载两份固定哈希的依赖：dbus-next 0.2.3（蓝牙桥接）和 acme.sh 3.1.6（DuckDNS 证书）。OpenWrt 包的定义在仓库的 `openwrt/`。
+它只打包 git 已提交的文件，另下载两份固定哈希的依赖：dbus-next 0.2.3（蓝牙桥接）和 acme.sh 3.1.6 连同 DuckDNS 与 DNSPod 两个 DNS 钩子（证书）。
 
 测试只用标准库 `unittest`，不用网络：
 
 ```sh
 cd box
-python3 -m unittest discover -s tests/onecloud
-python3 -m unittest discover -s tests/bluetooth    # test_bluez / test_recovery 需要 dbus-next
+python3 -m unittest discover -s tests/onecloud      # 263 个
+python3 -m unittest discover -s tests/bluetooth     # test_bluez / test_recovery 需要 dbus-next
 ```
 
 ## 目录
 
-- `scripts/onecloud/` 盒子上的程序：`supervisor_openwrt.py`（监管、状态、重试）、`run-receiver.py`（启动 JVM）、`settings_page.py`（设置页）、`tesla_openwrt.py`（联网检查）、`own_domain.py`（DuckDNS + Let's Encrypt）、`update.py`（在线升级与回退）、`board_zte_f50.py`（F50 蓝牙启动）
+- `scripts/onecloud/` 盒子上的程序：`supervisor_openwrt.py`（监管、状态、重试）、`supervision.py`（分组件重启策略）、`status_model.py`（九个状态域）、`run-receiver.py`（启动 JVM）、`settings_page.py` / `settings_ui.py`（设置页）、`pairing_window.py`（配对）、`tesla_openwrt.py`（联网检查）、`own_domain.py`（DuckDNS / DNSPod + Let's Encrypt）、`update.py`（升级与回退）、`factory_reset.py`、`board_zte_f50.py`（F50 蓝牙启动）、`mu300_boot.py`、`viewer_port.py`
 - `linux/bt-bridge/` BlueZ D-Bus 的 iAP2 RFCOMM 桥接（[说明](linux/bt-bridge/README.md)）
-- `scripts/f50-install.py` 装机；`skills/autoplay-install/` 给 AI 助手的装机说明
+- `scripts/build-bundle.sh` 打程序包；`scripts/scan-sensitive.py` 发布前的敏感信息扫描
+- `scripts/f50-*.py`、`scripts/prepare-*.py`、`skills/autoplay-install/` 上游 DashPlay 面向 B16 的刷机与装机流程，未使用
 - `docs/` 修剪记录、状态模型、测试基线
+- `tools/render_settings_states.py` 把设置页的八个状态渲染成静态 HTML（配合 `receiver/web/scripts/ui-shots.mjs` 截图）
 
 ## 许可
 
-GPL-3.0，见 `LICENSE`；来源与致谢见 [NOTICE.md](NOTICE.md)。CarPlay、iPhone、AirPlay 是 Apple Inc. 的商标；本项目与 Apple 无关。
+GPL-3.0，见 `LICENSE`；来源与致谢见 [NOTICE.md](NOTICE.md)。CarPlay、iPhone、AirPlay、MFi 是 Apple Inc. 的商标，Tesla 是 Tesla, Inc. 的商标；本项目与 Apple、Tesla 无关。

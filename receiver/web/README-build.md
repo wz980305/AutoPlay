@@ -38,6 +38,18 @@ copy with a symlink (node_modules/ is gitignored):
 mkdir -p node_modules && ln -sfn /opt/npm-tools/node_modules/typescript node_modules/typescript
 ```
 
+## Since then (1.1.0 / 1.2.0)
+
+- `npm run build:offline` = `tsc --noEmit -p tsconfig.offline.json && node scripts/build-esbuild.mjs`.
+- `npm test` runs five scripts: `check.mjs`, `check-audio.mjs`, `check-car.mjs`, `check-browser.mjs`, `check-runtime.mjs`.
+- 1.1.0 deleted the MSE music path (`music-output.ts`, `aac-mp4.ts`; `flags.ts` has `PAGE_PLAYS_MUSIC = false`).
+- 1.2.0 added `src/picker.ts` (the in-page option sheet that replaces native `<select>` lists) and
+  `scripts/ui-shots.mjs`, which screenshots the viewer and the box page at the Tesla browser's window shapes
+  (needs `playwright-core` and a Chromium: `CHROME=/path/to/chromium node scripts/ui-shots.mjs out/ui-shots`;
+  `../../docs/UI-1.2.0.md`). `scripts/benchmark-media.mjs` is the media micro-benchmark from 0.1.1.
+- Sizes are larger than the numbers below (`index.html` 12.7 KB, `style.css` 20 KB source); those are the
+  2026-10-26 snapshot.
+
 ## State at the end of the trim (2026-10-26, branch `receiver-trim`)
 
 - `tsc --noEmit -p tsconfig.offline.json`: clean (the `ws.ts` error went with `sendBinary` and the microphone).

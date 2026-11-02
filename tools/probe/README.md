@@ -10,7 +10,7 @@
 
 两种方式，推荐都做一遍，因为 http 和 https 下结果不同（WebCodecs 只在安全上下文里存在）：
 
-1. **从盒子上提供（https）。** 把 `index.html` 放到接收端的静态目录（PlayPort 的 `web/dist/`），用车机浏览器打开 `https://<你的域名>:18443/probe/index.html`。这测的是真实的部署环境：DuckDNS 域名、Let's Encrypt 证书、100.96 网段。
+1. **从盒子上提供（https）。** 把 `index.html` 放到接收端的静态目录（`receiver/web/dist/`，静态文件不需要令牌），用车机浏览器打开 `https://<你的域名>:18443/probe/index.html`。这测的是真实的部署环境：自己的域名（DuckDNS 或 DNSPod）、Let's Encrypt 证书、100.96 网段。
 2. **从任意 https 主机提供。** 任何能被车机访问的 https 静态站（自己的服务器、对象存储、GitHub Pages 都行）。这能在还没装好盒子时先摸清浏览器。注意：从公网主机打开时，"网络可达性"一节里对 100.96 / 192.168 地址的请求会被当作私网请求（PNA）或混合内容拦截，结果只代表那种场景。
 3. **纯 http 的对照（可选）。** 例如 `http://100.96.0.1/probe/index.html`。用来回答两个问题：Tesla 是否允许打开 http 的 CGNAT 地址；HTTP 页面下主线程有没有 `MediaStreamTrackProcessor`（C′ 档成立的前提）。
 
@@ -37,13 +37,13 @@
 |---|---|---|
 | **WebCodecs VideoDecoder** + **H.264 avc1.42E01F 1280×720** | `isConfigSupported` 的结果，分"无偏好"和"硬件优先"两次 | **A 档（主链路）成立的条件。** 两次都 unsupported → 这台车机走不了 WebCodecs，只能考虑 B/C 档 |
 | HEVC hvc1 1280×720 | 同上 | 可选。只有在支持、并且实测解码够快时才向 iPhone 申请 HEVC；浏览器没有 HEVC 软解兜底 |
-| WebCodecs AudioDecoder：AAC-LC / Opus | 浏览器音频模式下能否直接解 iPhone 发来的 AAC | AAC unsupported 时，盒子要把 AAC 转成 Opus/FLAC（T760 负担很小），或者按《特斯拉专属精简补充》走车载蓝牙 |
+| WebCodecs AudioDecoder：AAC-LC / Opus | 浏览器音频模式下能否直接解 iPhone 发来的 AAC | 已定（ADR-14，1.1.0）：页面永远不播音乐，默认声音全部走车载蓝牙；此行只对 `carplay` 声音模式下的导航播报有意义 |
 | AudioEncoder | 麦克风上行需要 Opus 编码 | 特斯拉模式下不提供麦克风，此行只对浏览器音频模式有意义 |
-| MSE MediaSource + avc1 / hvc1 / mp4a / flac | `isTypeSupported` | **B 档（驻车兼容）**。Tesla 行车时 `<video>` 被禁，所以 B 档只能驻车用 |
+| MSE MediaSource + avc1 / hvc1 / mp4a / flac | `isTypeSupported` | **B 档（驻车兼容）**。Tesla 行车时 `<video>` 被禁，所以 B 档只能驻车用。页面里已没有 MSE 代码（1.1.0），此行仅作记录 |
 | WebRTC RTCPeerConnection + 视频解码能力 | 存在性 + `RTCRtpReceiver.getCapabilities('video')` 的编解码器列表 | **C 档**。列表里有 H264 才有意义；H265 需要 Chrome 136+ |
 | MediaStreamTrackProcessor（主线程） | 存在性 | **C′ 档**（WheelPlay 的"直接 Canvas"）：WebRTC 收流后不经 `<video>` 直接画到 canvas。HTTP 页面下主线程可用才成立；成立的话可以省掉整套证书方案（推断，待上车验证） |
 | getUserMedia 存在 | 只看存在，不申请 | 实际申请在下一节 |
-| Media Session API | 存在性 | 方向盘按键是否交给网页，看"按键事件"行 |
+| Media Session API | 存在性 | 方向盘按键是否交给网页，看"按键事件"行；页面已不用 Media Session（裁剪），仅作记录 |
 | fullscreenEnabled / Wake Lock / WebSocket / Worker+OffscreenCanvas | 存在性 | WebSocket 是硬要求；Worker+OffscreenCanvas 是页面减负（解码放 Worker）的前提 |
 
 ### 需要轻点后才能测的
@@ -100,3 +100,5 @@
 - `isConfigSupported` 回答的是"配置能不能开"，不是"解码够不够快"。解码速度要靠接收端会话里的统计（DashPlay 的 `decode-backlog` 补丁和 HUD）。
 - Media Session 的按键事件只有在 `<audio>` 真的在播放时才会被路由到页面；如果"`<audio>` 播放"一行失败，"按键事件"一行就测不出来。
 - 页面不做任何上传或埋点；"POST 到盒子"只在你点击时发送，目标地址可改。
+
+> 2026-11-03 补记：A 档（WebCodecs → canvas）已于 2026-11-02 在车上看到画面（停车）；探测页本身还没在车上跑过，`docs/TESLA.md` §7 等着它的结果。

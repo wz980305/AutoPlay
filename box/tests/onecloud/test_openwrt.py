@@ -365,7 +365,7 @@ class ManagedPageTests(unittest.TestCase):
         update.save(self.state / "update-check.json", {"checked_at": 1, "latest": "2026.10.20", "available": True,
                                                        "online": False})
         html = self.page.render("")
-        self.assertIn("用刷机包升级", html)
+        self.assertIn("按该版本的发布说明升级", html)
         self.assertNotIn("立即升级", html, "a release that changed the system is not offered online")
         update.save(self.state / "update-check.json", {"checked_at": 1, "current": "2026.10.20", "latest": "2026.10.20",
                                                        "available": False, "online": True})

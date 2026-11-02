@@ -8,17 +8,18 @@
 ## 一、安装
 
 ### 1. 前置
-- F50 已刷 OpenWrt（mu300-linux），后台 `http://192.168.77.1`（root 登录）。
+- F50 已按 [mu300-linux](https://github.com/dikeckaan/mu300-linux) 的文档刷成它的 OpenWrt 镜像（我们实测的那台原厂固件是 B13；刷机步骤本说明不写），后台 `http://192.168.77.1`（root 登录）。
 - 盒子需能联网（插 SIM），装依赖要拉 OpenWrt 源。
 
 ### 2. 编译安装包（本机）
 需要 JDK 21 工具链 + Docker（SDK 镜像 `openwrt/sdk:x86-64-25.12.5`）：
 
 ```sh
+# 都在仓库根目录执行
 # 编译接收端（Kotlin/Gradle 9.5.0）
-cd receiver && ./gradlew :server:installDist
+(cd receiver && ./gradlew build && ./gradlew :server:installDist)   # build 先跑测试：1.1.0 起的 Kotlin 改动还没编译过
 # 编译投屏页
-cd web && npm ci && npm run build
+(cd receiver/web && npm ci && npm run build)
 # 打程序包
 AUTOPLAY_VERSION=1.2.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 # 用 Docker SDK 打 apk
@@ -38,7 +39,7 @@ python3 /opt/autoplay/board_zte_f50.py --setup   # F50 私有 BlueZ（切勿 apk
 /etc/init.d/autoplay restart
 ```
 
-> 安装时（`90-autoplay-tesla`）会自动完成两件事：
+> 安装时（`90-autoplay-tesla`）会自动完成两件事，并有一个副作用：
 > 1. LAN 从 `192.168.77.1` 切成 **`100.96.0.1/24`**（特斯拉浏览器不认私网地址）。
 > 2. 5 GHz 无线设为**中国区 CN / 信道 149**（厂商镜像国家码 TR 不含 149–165，这正是特斯拉搜不到热点的原因）。已经在 149–165 里的信道（例如你在 LuCI 里改成的 157）会保留。
 > 3. 两处修改都会让经 Wi-Fi 连着的 SSH 断开一次：LAN 换地址，无线重载。
@@ -50,7 +51,7 @@ python3 /opt/autoplay/board_zte_f50.py --setup   # F50 私有 BlueZ（切勿 apk
 
 ## 二、自有域名证书（可选，消除车机警告）
 
-支持两种 DNS 提供商（LuCI「服务 → AutoPlay → Own address」或命令行 uci）：
+支持两种 DNS 提供商（LuCI「服务 → AutoPlay → 自己的网址」或命令行 uci）：
 
 **DuckDNS（免费子域名）**
 ```sh
@@ -113,7 +114,7 @@ apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
 1. **F50 接车上 USB**：5V≥3A、打火不断电的口，短粗线；加散热片/小风扇。
 2. **iPhone**：连特斯拉蓝牙并设为媒体来源（音乐/通话/Siri 走特斯拉蓝牙）。
 3. **车机 Wi-Fi**：打开「行驶中保持连接」，连 F50 的热点（SSID 见 LuCI「网络 → 无线」）。
-4. iPhone 靠近盒子，蓝牙 iAP2 自动引导连上 F50 热点。
+4. **第一次使用**：车机（或手机）浏览器打开 `http://100.96.0.1:18080/`，点「添加 iPhone」；在 iPhone 的「设置 → 蓝牙」里点盒子的名字，两边核对六位配对码。之后 iPhone 靠近盒子，蓝牙 iAP2 自动引导它连上 F50 热点。
 5. 车机浏览器打开 `https://<域名>:18443/`，即看到 CarPlay 画面；触摸回传。默认模式下页面无声，所有声音从特斯拉蓝牙出来，不需要轻点。
 
 ### 关键注意

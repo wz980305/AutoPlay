@@ -1,5 +1,7 @@
 # Test baseline (untouched import, commit c138aae)
 
+> 历史记录（2026-10-26）。截至 1.2.0（2026-11-03）：`tests/onecloud` 263 个全部通过，`test_f50_tools.py` 仍在并通过；下文的"待删除"没有发生。
+
 Recorded 2026-10-26 before any trimming, on the tree imported from DashPlay
 `e3beae4` (box/) and openwrt-dashplay `5f17702` (openwrt/).
 

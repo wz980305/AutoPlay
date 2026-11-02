@@ -10,7 +10,7 @@ The built packages contain:
 
 - **autoplay**: the AutoPlay program bundle of the release named in `autoplay/Makefile` — AutoPlay
   (GPL-3.0), the receiver (PlayPort with DashPlay's patches, GPL-3.0) with its Maven dependencies
-  (licenses inside each JAR), acme.sh 3.1.6 (GPL-3.0, unmodified main script and DuckDNS hook, for the
+  (licenses inside each JAR), acme.sh 3.1.6 (GPL-3.0, unmodified main script with its DuckDNS and DNSPod hooks, for the
   optional own name) and dbus-next 0.2.3 (MIT). `../box/NOTICE.md` lists the projects AutoPlay derives
   from.
 - **autoplay-jre**: Eclipse Temurin 21 JRE, Alpine Linux (musl) build, by the Eclipse Adoptium

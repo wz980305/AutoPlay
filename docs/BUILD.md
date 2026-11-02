@@ -2,7 +2,7 @@
 
 三个可构建的部分：接收端（JVM）、投屏页（web）、OpenWrt 包（apk）。盒子上的 Python（`box/`）不需要构建，但要打进程序包。
 
-> **0.1.1 验证：** 接收端已用 Temurin 21.0.13 与 Gradle 9.5.0 完成构建和测试，前端用锁文件中的 TypeScript/Vite 构建成功。见 `AUDIT-0.1.1.md`。`receiver/docs/UNVERIFIED-KOTLIN.md` 保留为 0.1.0 历史清单；硬件行为仍待验证。
+> **构建状态：** 0.1.1 用 Temurin 21.0.13 与 Gradle 9.5.0 完成过构建和测试，1.0.0 在车上跑通；1.1.0 和 1.2.0 对接收端 Kotlin 的改动在没有 Gradle 网络的环境里写成，还没有编译——`receiver/docs/UNVERIFIED-KOTLIN.md` 是现行清单，`./gradlew build` 是第一步。
 
 ## 1. 接收端（`receiver/`）
 
@@ -54,17 +54,17 @@ node check.mjs && node check-audio.mjs && node check-car.mjs && node check-brows
 mkdir -p node_modules && ln -sfn /opt/npm-tools/node_modules/typescript node_modules/typescript
 ```
 
-页面的常量在 `src/flags.ts`（`CAR_MUSIC`、`TESLA`、`MUSIC_ELEMENT`、`PROMPT_BOOST`），改默认值不需要改盒子。`tools/probe/index.html` 不需要构建，是单文件。
+页面的常量在 `src/flags.ts`（`CAR_MUSIC`、`TESLA`、`PAGE_PLAYS_MUSIC`（1.1.0 起恒为 false，原 `MUSIC_ELEMENT` 随音乐路径一起删除）、`PROMPT_BOOST`），改默认值不需要改盒子。`tools/probe/index.html` 不需要构建，是单文件。
 
 ## 3. 程序包（`box/`）
 
 OpenWrt 包解开到 `/opt/autoplay` 的内容是 `autoplay-bundle-<版本>.tar`，由 `box/scripts/build-bundle.sh` 从本仓库打出（先完成第 1、2 节）：
 
 ```sh
-AUTOPLAY_VERSION=0.1.1 sh box/scripts/build-bundle.sh autoplay-bundle.tar      # RECEIVER=<路径> 指定接收端构建目录，默认 ../receiver
+AUTOPLAY_VERSION=1.2.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar      # RECEIVER=<路径> 指定接收端构建目录，默认 ../receiver
 ```
 
-需要主机上有：接收端的 `installDist` 产物和 `web/dist/`、`javac` 21、pip、curl、unzip。它从经过审核的源码目录枚举顶层 Python 模块（不再依赖 `.git`，新增模块不会遗漏），另下载两份固定哈希的依赖：dbus-next 0.2.3（蓝牙桥）和 acme.sh 3.1.6（DuckDNS 证书）；`scan-sensitive.py` 的检查会拒绝打进个人文件。
+需要主机上有：接收端的 `installDist` 产物和 `web/dist/`、`javac` 21、pip、curl、unzip。它从经过审核的源码目录枚举顶层 Python 模块（不再依赖 `.git`，新增模块不会遗漏），另下载两份固定哈希的依赖：dbus-next 0.2.3（蓝牙桥）和 acme.sh 3.1.6 连同 DuckDNS、DNSPod 两个 DNS 钩子（证书）；`scan-sensitive.py` 的检查会拒绝打进个人文件。
 
 ## 4. OpenWrt 包（`openwrt/`）
 
@@ -76,7 +76,7 @@ sh openwrt/scripts/build-packages.sh out/ autoplay-bundle.tar   # 用第 3 节�
 sh openwrt/scripts/bump-autoplay.sh <版本> autoplay-bundle-<版本>.tar   # 发布后更新 Makefile 的版本与校验值
 ```
 
-**现状：** `openwrt/autoplay/Makefile` 的 `PKG_SOURCE_URL` 指向尚未存在的发布页，`PKG_HASH:=skip`；`update.py` 的更新源和清单 URL 是 `openwrt-autoplay` 占位符（`AUTOPLAY_UPDATE_OWNER/REPO/FEED_REPO`、`AUTOPLAY_FEED`）。发布第一个版本前要填上。镜像默认 `openwrt/sdk:x86-64-25.12.5`（`OPENWRT_SDK` 可改）。
+**现状：** `openwrt/autoplay/Makefile` 的 `PKG_SOURCE_URL` 指向尚未存在的发布页，`PKG_HASH:=skip`；`update.py` 的更新源和清单 URL 是 `openwrt-autoplay` 占位符（`AUTOPLAY_UPDATE_OWNER/REPO/FEED_REPO`、`AUTOPLAY_UPDATE_FEED`）。发布第一个版本前要填上。镜像默认 `openwrt/sdk:x86-64-25.12.5`（`OPENWRT_SDK` 可改）。
 
 装到盒子上：
 
@@ -85,7 +85,7 @@ scp out/*.apk root@100.96.0.1:/tmp/
 ssh root@100.96.0.1 'cd /tmp && apk add --allow-untrusted autoplay-jre-*_$(cat /etc/apk/arch).apk autoplay-[0-9]*.apk luci-app-autoplay-*.apk luci-i18n-autoplay-zh-cn-*.apk'
 ```
 
-包没有签名（WP9 的待办），所以要 `--allow-untrusted`。F50 的蓝牙用的是装机脚本 `box/scripts/f50-install.py` 的 `autoplay` 阶段装进 `/opt/autoplay-bluez` 的私有 BlueZ，不是 `apk add bluez-daemon`（系统包会带入不匹配的 6.12 内核模块）。装机脚本的 `check`/`flash` 阶段需要 `box/tools/` 里固定版本的 `spd_dump`/`lz4`，这些二进制没有导入本仓库，要从 DashPlay 的检出里拿；`box/skills/autoplay-install/SKILL.md` 也还没按本仓库重写。
+包没有签名（WP9 的待办），所以要 `--allow-untrusted`。F50 的蓝牙用的是 `python3 /opt/autoplay/board_zte_f50.py --setup` 装进 `/opt/autoplay-bluez` 的私有 BlueZ，不是 `apk add bluez-daemon`（系统包会带入不匹配的 6.12 内核模块）。刷机、root 只看 mu300-linux 的文档（ADR-11）；上游 DashPlay 的 B16 装机脚本 `box/scripts/f50-install.py` 及其 `box/tools/` 依赖未被使用，也不是本项目的安装路线。随包的 `update-key.pem` 是上游的公钥，在项目有自己的发布密钥和软件源之前在线升级不可用。
 
 ## 5. 工具（`tools/`）
 
@@ -93,4 +93,4 @@ ssh root@100.96.0.1 'cd /tmp && apk add --allow-untrusted autoplay-jre-*_$(cat /
 
 ## 6. 版本钉住
 
-每个 AutoPlay 版本固定一组：mu300-linux 版本和内核（当前装机脚本固定 v2026.10.15，平台审计 PA#3 建议在自己浸泡测试后升到 ≥ v2026.10.19.3）、OpenWrt 25.12.x、Temurin 21 构建号、PlayPort 基线提交。记录在 `CHANGELOG.md` 的对应版本里。
+每个 AutoPlay 版本固定一组：mu300-linux 版本和内核（实车那台是 OpenWrt 25.12 / 5.4 内核的 mu300-linux 镜像；本仓库不固定它的版本，车主按 mu300-linux 的说明升级）、OpenWrt 25.12.x、Temurin 21 构建号、PlayPort 基线提交。记录在 `CHANGELOG.md` 的对应版本里。

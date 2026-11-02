@@ -5,7 +5,7 @@
 | 文件 | 作用 | 验证方式 |
 |---|---|---|
 | `harden.sh` | 第 1 周的配置类加固，一次性执行、可重复执行、可回退 | `sh -n`；在假根目录里跑过 apply / 重复 apply / revert |
-| `measure.sh` + `measure.init` | procd 服务：每 10 秒记一行 CSV 到 tmpfs，每 60 秒追加到 SD 卡 | `sh -n`；本机 `--once` 和守护模式各跑过，列数对齐、重启不重复 |
+| `measure.sh` + `measure.init` + `test_measure_shell.py` | procd 服务：每 10 秒记一行 CSV 到 tmpfs，每 60 秒追加到 SD 卡 | `sh -n`；本机 `--once` 和守护模式各跑过，列数对齐、重启不重复；`python3 -m unittest tools/f50/test_measure_shell.py` |
 | `measure-report.py` + `test_measure_report.py` | 把 CSV 变成文字摘要（最高温、降频分钟、CPU0 忙碌分位数……） | `python3 -m unittest tools/f50/test_measure_report.py` |
 
 编号来源：**H1–H11** = 《AutoPlay 硬件视角审查与精简方案》第三节；**PA#n** = 平台审计 `platform_audit.md` 的第 n 条发现；**WPn** = 《AutoPlay 日常使用加固路线图》的工作包。所有数值都是那几份文档里的推算值，没有在 F50 上实测过——这正是 `measure.sh` 存在的理由。
@@ -108,3 +108,5 @@ python3 -m unittest tools/f50/test_measure_report.py
 ## 0.1.1 测量修正
 
 采样间隔和刷盘间隔必须为正整数；每个输出文件使用自己的 `<输出文件>.state/`，避免同目录多次测量相互污染。滚动只保留一个表头，重启读取已保存偏移时去除空白，网卡计数器归零后该次吞吐留空。`test_measure_shell.py` 用合成 `/proc` 覆盖这些行为；尚无 F50 实测数据。持久文件目前仍需人工归档或定期清理，磁盘写失败时的滚动策略还应继续加固。
+
+> 2026-11-03：1.0.0 已在车上跑通，但 `measure.sh` 和 `harden.sh` 的 A/B 顺序还没有在那台 F50 上执行过，本文的数值仍是推算；第一组实测数据见 `docs/ROADMAP.md`"车上要测的"。

@@ -1,6 +1,6 @@
 # 架构
 
-本文描述 0.1.0 里程碑的实际形态（上游快照）和已经定下来的目标形态；两者不同的地方标出来。依据：《F50 车机浏览器 CarPlay 技术路径》§三、《硬件视角审查》§2.3、§四、《界面审查》§五、审计笔记 `viewer_ui_audit.md` §12。
+本文描述 1.2.0 的实际形态（1.0.0 起在车上跑通）和已经定下来的目标形态；两者不同的地方标出来。2026-10-26 写成，之后按各版修订：DNSPod 路线（1.0.0）、声音默认全走蓝牙（1.1.0）、页内选项表与确认屏（1.2.0）。依据：《F50 车机浏览器 CarPlay 技术路径》§三、《硬件视角审查》§2.3、§四、《界面审查》§五、审计笔记 `viewer_ui_audit.md` §12。
 
 ## 1. 拓扑
 
@@ -12,20 +12,20 @@
   └─④ 特斯拉蓝牙：音乐、通话、Siri、方向盘按键（原生） ─────────────▶ 车机
 
  F50（OpenWrt 25.12 / mu300-linux，5.4 内核；热点 100.96.0.1/24；5G SIM 给车机上网和证书续期）
-  └─③ HTTPS/WSS :18443：H.264 原样转发（二进制帧）、导航播报音频、状态 ──▶ 车机浏览器（WebCodecs → canvas）
+  └─③ HTTPS/WSS :18443：H.264 / H.265 原样转发（二进制帧）、状态；导航播报音频仅在 carplay 模式 ──▶ 车机浏览器（WebCodecs → canvas）
         ◀──────────── WSS 文本帧：触摸、按键、显示设置 ───────────────── 车机浏览器
 ```
 
 拓扑是硬件定死的（技术路径 §一第 2 条）：SC2355 同一时间只能开一个 Wi-Fi 接口，所以 F50 只能当热点，车机和 iPhone 都连它；F50 不能同时连别的热点。F50 没有 USB 主机，有线 CarPlay 不可能。
 
-地址：局域网 100.96.0.1/24（CGNAT 段；特斯拉浏览器拒绝 192.168/10/172.16，用域名也不行）。车机打开的地址是 `https://<duckdns 名>:18443/`，由盒子上的 dnsmasq 以 `address=/<名>/100.96.0.1` 本地应答（OpenWrt 的 DNS 重绑定保护会丢弃上游返回的 100.64/10 地址，所以必须本地应答）。
+地址：局域网 100.96.0.1/24（CGNAT 段；特斯拉浏览器拒绝 192.168/10/172.16，用域名也不行）。车机打开的地址是 `https://<自己的域名>:18443/`（DuckDNS 或 DNSPod 托管的域名），由盒子上的 dnsmasq 以 `address=/<名>/100.96.0.1` 本地应答（OpenWrt 的 DNS 重绑定保护会丢弃上游返回的 100.64/10 地址，所以必须本地应答）。
 
-## 2. 进程与端口（0.1.0 现状）
+## 2. 进程与端口（1.2.0）
 
 ```
 procd
  └─ /etc/init.d/autoplay (S99)  →  python3 /opt/autoplay/supervisor_openwrt.py     守护（supervision.py：分组件重启、退避、降级态）；
-      │                                                                             设置页 :18080（含 /status.json）；诊断；升级检查；特斯拉常驻应答；DuckDNS；状态模型
+      │                                                                             设置页 :18080（含 /status.json）；诊断；升级检查；特斯拉常驻应答；DuckDNS / DNSPod 证书；状态模型
       ├─ BluetoothManager → python3 board_zte_f50.py                                 F50 蓝牙：dbus-daemon(私有总线) + btattach(/dev/ttyBT0) + bluetoothd(/opt/autoplay-bluez)
       │                                                                             上电失败 10/20/40 秒重试，之后每 60 秒；原因词进 status.json 的 bluetooth 域
       ├─ ReceiverManager → python3 run-receiver.py → java (Temurin 21, -Xmx384m, AppCDS, ExitOnOOM)   接收端（PlayPort 分叉）
@@ -45,7 +45,7 @@ procd
 | 动态 udp | RTP 音频、RTCP | iPhone → F50 | |
 | 5353/udp | mDNS | iPhone ↔ F50 | 热点必须放行组播，不开客户端隔离 |
 | 18443/tcp | HTTPS + WSS | 车机 → F50 | 投屏页、`/ws`、`/api/display`、`receiver-access.json`（仅本页令牌，仍写在 `web/dist/`，挪进 tmpfs 是待办）；端口可配（uci `viewer_port`） |
-| 18080/tcp | HTTP | 手机 → F50 | 设置页（iPhone、蓝牙、证书、更新、出厂重置）和 `/status.json`；明文、无认证，有 Host 白名单和 `X-Frame-Options: DENY`（见 SECURITY） |
+| 18080/tcp | HTTP | 手机 → F50 | 设置页（iPhone、蓝牙、证书、声音模式、更新、出厂重置）和 `/status.json`；明文、无认证，有 Host 白名单和 `X-Frame-Options: DENY`（见 SECURITY） |
 | 80/tcp | HTTP | 车机、手机 → F50 | LuCI（概览 + 网络 / iPhone / 自有地址 / 更新四个标签）；`100.96.0.2` 别名上的 80 转到设置页，并应答车机的联网检测 |
 | 53/67 | DNS/DHCP | 车机、iPhone | dnsmasq；`address=` 把域名指到 100.96.0.1 |
 
@@ -59,15 +59,16 @@ iPhone 编码 H.264 ─TCP─▶ JVM airplay-screen 线程：读 128B 头 + 包�
    → Ktor WebSocket 二进制帧 → Netty TLS → wlan0 ─▶ 浏览器 ws.ts → protocol.ts 解包 → video.ts：VideoDecoder.decode
    → VideoFrame → canvas 2d（alpha:false, desynchronized）→ 车机屏幕
 触摸：pointer 事件 → 按画面归一化坐标 → WSS 文本 JSON → JVM → HID 报文 → ChaCha 加密 → iPhone 事件连接
-音频（特斯拉模式）：只有 100/101 号流（导航播报、提醒）经 WSS 到页面，AudioDecoder/Web Audio 播放并放大 3 倍；
-   音乐、通话、Siri 不经过 F50（iPhone 直接走特斯拉蓝牙）
+音频：默认（audio_route_navigation=bluetooth，1.1.0）接收端不声明任何音频格式，iPhone 不建立音频流，
+   音乐、导航播报、通话、Siri 全部直接走特斯拉蓝牙，WSS 上没有音频；备选 carplay 模式下只有 100/101 号流
+   （导航播报、提醒）经 WSS 到页面，AudioDecoder/Web Audio 播放并放大 3 倍。两种模式页面都不播音乐（ADR-14）
 ```
 
 F50 不解码、不转码，只解密、重封装、再加密。每帧在 JVM 里约 8 次内存拷贝、2 次加解密（硬件审查 H4）；所有网络中断落在 CPU0（H3）。这两条决定了 `tools/f50/harden.sh` 里 RPS、CPU0 空闲状态和 A76 限频的取舍。
 
 ## 4. 页面与设置页共用的状态模型
 
-现状：投屏页只有 waiting / starting / live / reconnecting / error 五种显示状态，设置页靠横幅拼凑；蓝牙、认证、过热、升级中、被占用、重协商这些状态要么没有、要么显示成别的东西（界面审查 §一）。这是两套界面问题的共同根因，所以先定状态模型，再改界面。
+上游原状（0.1.0 之前）：投屏页只有 waiting / starting / live / reconnecting / error 五种显示状态，设置页靠横幅拼凑；蓝牙、认证、过热、升级中、被占用、重协商这些状态要么没有、要么显示成别的东西（界面审查 §一）。这是两套界面问题的共同根因，所以先定状态模型，再改界面。
 
 ### 4.1 投屏页状态（`viewer_ui_audit.md` §12）
 
@@ -82,7 +83,7 @@ F50 不解码、不转码，只解密、重封装、再加密。每帧在 JVM �
 | `starting` | `sessionActive:true`、首帧前 | "iPhone 已连接，正在接收画面…" | — |
 | `renegotiating` | 显示设置变更 / 自动适配 | 上一帧调暗 + "正在按新窗口重新连接 CarPlay（约 5 秒）" | — |
 | `live` | 首帧解码 | 画面；非全屏时一条细状态栏（状态点、夜间标记、声音关标记） | CarPlay |
-| `live-muted` | 已有画面且声音未解锁 | 底部整宽提示条"轻点任意位置开启声音（导航播报、Siri）" | 轻点 |
+| `live-muted` | 已有画面且声音未解锁（仅 carplay 声音模式；默认的 bluetooth 模式下页面无声，此行不出现） | 底部整宽提示条"轻点屏幕开启导航播报与提示音" | 轻点 |
 | `recovering` | 链路断开（`reset(hold)` / `wake`） | 保留画面 + 40% 遮罩 + 居中常驻"连接中断 · 正在重连 · 触控已暂停"，无超时 | 等待，8 秒后可刷新 |
 | `paused-by-box` | LagGate 关闸 | 状态栏小标签"画面暂停（车机变慢）" | — |
 | `busy` | 另一个页面在用（需服务端新消息） | "另一块屏幕正在显示 CarPlay" + 接管 | 接管 |
@@ -123,15 +124,18 @@ F50 不解码、不转码，只解密、重封装、再加密。每帧在 JVM �
 | `/opt/autoplay/identity/offline-mfi/` | **用户自备**的 `identity.pk8` + `certificate.p7b`，不进仓库、不进镜像；出厂重置时要二次确认才删 | SD 卡，root 可读 |
 | `/opt/autoplay/state/` | 配对（`pairings.properties` + `.bak`）、蓝牙密钥、TLS 证书库、`config.json`、`phone-ios.properties`、AppCDS、升级日志和包缓存、时钟下限、`diag/`、日志镜像（5MB 尾部，每 60 秒）、`measure/`（测量服务） | SD 卡；每个写入都 fsync + rename |
 | `/var/run/autoplay/` | `status.json`、`receiver.log`、日志环、`measure.csv`、`session` | tmpfs（`harden.sh` 单独挂 64MB） |
-| `/etc/config/autoplay` | 7 个 uci 键：`enabled, viewer_port, idle_release, duckdns_domain, duckdns_token, update_check, update_mirror` | SD 卡 |
+| `/etc/config/autoplay` | 12 个 uci 键：`enabled, viewer_port, idle_release, dns_provider, duckdns_domain, duckdns_token, own_domain, dnspod_id, dnspod_token, audio_route_navigation, update_check, update_mirror` | SD 卡 |
 | `/etc/autoplay/` | `harden.sh` 的配置、回退记录和戳记；`measure.conf` | SD 卡 |
 
-常量（不是配置）：LAN 100.96.0.1/24（uci-defaults `90-autoplay-tesla` 安装时写一次）、设置页 18080、联网检测常驻应答、音乐/通话/Siri 走车载蓝牙、第一个 5 GHz 热点交给 iPhone、名字 = DuckDNS 或 `autoplay.lan`。
+常量（不是配置）：LAN 100.96.0.1/24（uci-defaults `90-autoplay-tesla` 安装时写一次）、设置页 18080、联网检测常驻应答、音乐/通话/Siri 走车载蓝牙（导航播报默认也走，可切回页面）、第一个 5 GHz 热点交给 iPhone、名字 = 自己的域名（DuckDNS 或 DNSPod）或 `autoplay.lan`。
 
-## 6. 这份架构里还没有验证的假设
+## 6. 这份架构里还没有验证的假设（截至 1.2.0）
 
-- 特斯拉行车时 canvas 不受 `<video>` 限制的波及（多个项目报告，无官方说明）。
-- 特斯拉浏览器的真实 Chromium 版本、UA、DPR、两种窗口形状的尺寸。
+已验证（2026-11-02，1.0.0）：WebCodecs → canvas 的画面、触摸回传、蓝牙 iAP2 引导、Let's Encrypt 证书在特斯拉浏览器里无警告、热点只在 149–165 信道可见。仍未验证：
+
+- 特斯拉**行驶中** canvas 不受 `<video>` 限制的波及（停车状态已看到画面；多个项目报告行车可用，无官方说明）。
+- 特斯拉浏览器的真实 Chromium 版本、UA、DPR、两种窗口形状的精确尺寸（探测页还没在车上跑，`docs/TESLA.md` §7）。
+- 默认 bluetooth 声音模式下导航播报在行驶中是否稳定出声。
 - HTTP 页面下主线程 `MediaStreamTrackProcessor` 是否可用（决定 C′ 档是否值得做，进而决定证书方案能否省掉）。
 - 方向盘按键是否交给网页（车载蓝牙模式下不需要）。
 - CPU0 深度睡眠、RPS、限频对延迟和温度的实际影响——全部是别的板子或推算的数字。

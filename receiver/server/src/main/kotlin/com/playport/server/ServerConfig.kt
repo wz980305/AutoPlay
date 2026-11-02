@@ -140,7 +140,7 @@ data class ServerConfig(
                 Usage: ./gradlew :server:run --args="[options]"
 
                 Options:
-                  --device-name <name>      AirPlay device name shown on the iPhone (default: playport)
+                  --device-name <name>      AirPlay device name shown on the iPhone (default: PlayPort)
                   --model <model>           AirPlay model string (default: playport)
                   --manufacturer <name>     Manufacturer string (default: playport)
                   --airplay-port <port>     AirPlay RTSP port (default: 7000)
@@ -161,7 +161,7 @@ data class ServerConfig(
                   --wifi-ssid <ssid>        Wi-Fi network the phone should join (the box's own access point)
                   --wifi-passphrase <pass>  Wi-Fi passphrase handed to the phone
                   --wifi-channel <n>        Wi-Fi channel (default: 0 = unknown)
-                  --wifi-security <mode>    open | wpa | wpa2 (default: wpa2)
+                  --wifi-security <mode>    open | wpa | wpa2 | wpa3 (default: wpa2)
                   --bt-address <mac>        iPhone Bluetooth address for the wireless bootstrap
                   --bt-bridge <path>        Path to the bt-bridge helper (the box's Bluetooth RFCOMM relay)
                   --mdns <backend>          jmdns | off (default: jmdns)

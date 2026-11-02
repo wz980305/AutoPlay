@@ -1,8 +1,9 @@
 # 路线图：工作包与界面批次对照仓库状态
 
-工作包 WP0–WP10 来自《AutoPlay 日常使用加固路线图》，界面第 1–4 批来自《AutoPlay 界面审查》§六，精简步骤来自《硬件视角审查》§2.4 和《特斯拉专属精简补充》。状态只有三种：**本里程碑已做**（0.1.0 仓库里有）、**下一步**（第 1–4 周）、**之后**。诚实起见：本里程碑没有一行代码在车上或盒子上运行过。
+工作包 WP0–WP10 来自《AutoPlay 日常使用加固路线图》，界面第 1–4 批来自《AutoPlay 界面审查》§六，精简步骤来自《硬件视角审查》§2.4 和《特斯拉专属精简补充》。状态截至 1.2.0（2026-11-03）：1.0.0 已在一辆 2022 款 Model 3 上跑通（画面、触摸、导航播报、证书），1.1.0 把声音默认交给特斯拉蓝牙并引入上游的可靠性修复，1.2.0 重做了两张页面的界面。第一节是 0.1.0 里程碑的记录，第一节甲是之后各版做了什么，第二节是还没做的。
 
-## 一、本里程碑（0.1.0）已做
+
+## 一、0.1.0 里程碑已做（2026-10-26，历史记录）
 
 | 项目 | 对应 | 在哪 |
 |---|---|---|
@@ -12,7 +13,7 @@
 | **接收端修复**：配对文件原子写（WP3）；DSCP AF41（WP5）；性能模式关 / 1920 上限 / 300mm（H1、特斯拉补充 §五）；画布 `alpha:false`（WP5）；duck/unduck 压低音乐（WP6）；触摸最短按压 + 补发全部抬起（WP5 触摸健壮性的一半）；iOS 27 深浅色（dashplay-tesla §三第 2 项） | WP3、WP5、WP6 | 同上，每项一个提交 |
 | **界面第 1 批的投屏页部分**：V1 恢复中遮罩、V3 提示按状态、V7 整宽声音解锁条；第 3 批里的 V4 rem 字号 / 触控目标 / 吐司位置、V13 的 iOS 27 部分、V17 全部字符串走 `t()`；V10 驾驶者可读的双语检测页；V2 画面上不再放悬浮按钮；V19/V11 的自定义分辨率和二维码 | 界面审查 §六第 1、2、3 批（部分） | `receiver/web/src/status.ts`、`style.css`、`public/browser-check.js` |
 | **盒子侧精简**：拆隐藏耦合（`state.py`、`tesla_checks.py`、独立 `platform_openwrt.py`，精简第 2 步）；删 Debian、N1/玩客云、STA/手机上网、外接路由、公网 IPv6、本地 CA、有线（精简第 2–4、7、9 步；D6、D7、D10、D12、D13） | 硬件审查 §2.4；特斯拉专属补充 §二 | `box/docs/TRIM-LOG.md` |
-| **特斯拉常量**：LAN 100.96.0.1/24 安装时写死、DNS 只经 `OfflineChecks`、`answer_tesla_checks` 常量开、车载音频标志常量、设置页 18080、名字派生、uci 7 键、LuCI 概览 + 4 标签；安装脚本 `--sim yes` 写 `answer_tesla_checks=0` 的缺陷随之消失（D1、D2、D4、D8、D11、D14、D15、D16） | 特斯拉专属补充 §二、§五 | `openwrt/autoplay/files/90-autoplay-tesla`、`autoplay.config` |
+| **特斯拉常量**：LAN 100.96.0.1/24 安装时写死、DNS 只经 `OfflineChecks`、`answer_tesla_checks` 常量开、车载音频标志常量、设置页 18080、名字派生、uci 7 键（1.2.0 时为 12 键）、LuCI 概览 + 4 标签；安装脚本 `--sim yes` 写 `answer_tesla_checks=0` 的缺陷随之消失（D1、D2、D4、D8、D11、D14、D15、D16） | 特斯拉专属补充 §二、§五 | `openwrt/autoplay/files/90-autoplay-tesla`、`autoplay.config` |
 | **WP2 的一半**：分组件守护、指数退避、降级态、蓝牙后台重试（10/20/40 秒再每 60 秒）、JVM 存活探测（三次不过重启）、`-XX:+ExitOnOutOfMemoryError`、子进程超时和周期检查的 try/except 计数 | WP2 | `box/scripts/onecloud/supervision.py`、`supervisor_openwrt.py` |
 | **WP3 的一半**：日志进内存每 60 秒镜像 5MB 尾部、不再全局 `sync`、状态文件有变化才写、AppCDS 安装时生成、升级日志 + 启动时补完或回滚 + 健康检查 = 接收端应答且蓝牙已上电、证书续期从 60 秒退避并由 WAN/NTP hotplug 触发、证书状态与到期提示、时钟下限 | WP3 | `diagnostics.py`、`update.py`、`own_domain.py`、`clock_floor.py` |
 | **状态通道**：`/var/run/autoplay/status.json`，9 个域 `{state, reason, since}`，设置页 `/status.json` 转发；设置页横幅据此显示（S2 蓝牙红条、S7 盒子状态、S8 时效、S14 证书） | ARCHITECTURE §4.2；界面第 2 批的后端 | `status_model.py`、`box/docs/STATUS-MODEL.md` |
@@ -26,38 +27,53 @@
 | 第 1 周硬件配置项：A76 限频、去掉 `mali_kbase`、RPS 到大核、tmpfs 限额、`errors=remount-ro`、LED 关、CPU0 深度睡眠的 A/B 开关、`tcp_notsent_lowat` | 硬件审查 §五阶段 1、H1/H3/H5/H7/H9；WP6 | `harden.sh` 第 6–8 项、`autoplay-tune` |
 | 文档：架构（含状态模型）、构建、测试、特斯拉、安全、决策、署名；裁剪日志、未编译清单、状态模型说明 | — | `docs/`、`NOTICE.md`、`receiver/docs/`、`box/docs/` |
 
-**做了但没验证**：以上接收端的每一项都没有编译（`receiver/docs/UNVERIFIED-KOTLIN.md`）；盒子侧只有单元测试（225 个通过），没有在 F50 上装过；`UNVERIFIED-KOTLIN.md` 的"需要一台盒子或一辆车"列了 6 件要在车上看的事（封面排空、iOS 27 深浅色、duck 的音量映射、配对 `.bak`、DSCP、触摸释放）。
+## 一甲、0.1.1 → 1.2.0 已做
 
-## 二、下一步（第 1–4 周，按路线图 §四的顺序）
+| 版本 | 做了什么 | 在哪 |
+|---|---|---|
+| 0.1.1（10-31） | 接收端在 JDK 21 上编译并跑通测试；媒体恢复、配对落盘、设置请求、状态并发、安装门禁与回滚签名的一批修复 | `docs/AUDIT-0.1.1.md`、`CHANGELOG.md` |
+| 0.1.2（10-31） | 投屏页界面：全屏三页设置工作区、rem 字号尺度、夜间模式简化、"CarPlay 内容大小"命名 | `docs/UI-0.1.2.txt` |
+| 1.0.0（11-02） | **实车跑通**（2022 款 Model 3 AMD、iPhone 15 Pro / iOS 27.2）；自有域名证书加腾讯云 DNSPod 路线（ADR-12）；5 GHz 固定 CN / 149–165（ADR-13，特斯拉只在这段搜得到热点） | `docs/TESLA.md` §7、`own_domain.py`、`90-autoplay-tesla` |
+| 1.0.1（11-02） | DNSPod 的测试与中文翻译；安装脚本保留车主选的 149–165 信道；`openwrt/tests` | `CHANGELOG.md` |
+| 1.1.0（11-02） | 声音默认全部走特斯拉蓝牙，网页不再播音乐（ADR-14）；上游 10.26–11.01 的 F50 蓝牙 rfkill、配对代理代际、空闲宽限、AppCDS、证书申请等待网络等修复；失败原因代码 | `docs/AUDIO.md`、`receiver/docs/UNVERIFIED-KOTLIN.md` |
+| 1.2.0（11-02） | 两张页面按车机窗口形状核对；页内选项表替代原生下拉；二级菜单滚入视野；盒子页同一尺度、配对码首屏、页内确认屏（ADR-15） | `docs/UI-1.2.0.md` |
 
-### 第 1 周
+此前列在"下一步"而已经做掉的：信道不在 36–48 / 149–165 时告警（`supervisor_openwrt.channel_warning`）、无边框按视口判断（`main.ts`）、上游 SKILL.md 替换为指向安装说明的短文、探测页之外的 Tesla 检测。
 
-- [ ] **编译接收端**：`cd receiver && ./gradlew build`，按 `UNVERIFIED-KOTLIN.md` 逐文件排查；打一个 `autoplay-bundle.tar`，装到 F50 上。
-- [ ] 上车跑探测页，定下画面档位（预期 A 档）和音频模式（预期车载蓝牙）。
-- [ ] 装 `measure.sh`，跑 `harden.sh` 的 A/B 顺序（`tools/f50/README.md` 末尾），得到第一组真实的温度、CPU0、延迟数据。
+**做了但没验证**：1.1.0 和 1.2.0 对接收端的 Kotlin 改动没有编译（`receiver/docs/UNVERIFIED-KOTLIN.md`）；`bluetooth` 声音模式在行驶中是否稳定听到导航播报；探测页还没在车上跑过（`docs/TESLA.md` §7 的表仍是空的）；没有长期浸泡数据。
+
+## 二、下一步
+
+### 上车前
+
+- [ ] **编译接收端**：`cd receiver && ./gradlew build`，按 `UNVERIFIED-KOTLIN.md` 逐文件看；打 1.2.0 的包装到 F50。
+- [ ] 项目自己的发布密钥与软件源：`update.py` 的 `FEED_REPO`/`update-key.pem` 还是占位和上游的键，在线升级因此不可用；`autoplay/Makefile` 的 `PKG_SOURCE_URL`/`PKG_HASH:=skip` 同理（WP9 的一部分）。
+
+### 车上要测的
+
+- [ ] 停车跑一次 `tools/probe/`，填满 `docs/TESLA.md` §7 的表（车机版本、UA、DPR、两种窗口尺寸）。
+- [ ] `bluetooth` 模式：行驶中导航播报是否出声、第一个字有没有被吃；来电、Siri 是否照常；故意不连车机蓝牙时声音去了哪。
+- [ ] 1.2.0 的界面：选项表在车机浏览器里是否出现（嵌套 `showModal()`）；盒子页删除手机的确认屏。
+- [ ] 装 `measure.sh`，跑 `harden.sh` 的 A/B 顺序，拿到第一组温度、CPU0、延迟数据；相机法测触摸延迟。
 - [ ] 电源和散热件到位（5V ≥3A 随点火通断、散热片 + 风扇、高耐久卡）。
-- [ ] 补盒子侧没做完的：重写 `box/skills/autoplay-install/SKILL.md`（还是 N1/DashPlay 时代的）；导入或说明 `box/tools/` 的 `spd_dump`/`lz4`；更新源 URL 从占位符改成真实发布页，`PKG_HASH` 填上。
-- [ ] 接收端侧的两个小项：`/time` 提示喂给时钟下限；`receiver-access.json` 挪进 tmpfs（H7）。
-- [ ] V5（宽高比相差 >2.5% 时等比缩放加黑边）、V8 面板里的跳转确认文案、V12 吐司排队——界面第 1 批剩下的小项。
 
-### 第 2–3 周
+### 盒子侧
 
 - [ ] WP2 剩下的：Wi-Fi 看门狗、hci0 复位时重跑蓝牙初始化、`/var/run/autoplay/session` 会话钩子（`autoplay-tune session on|off` 已就位）、`/healthz` 心跳。
 - [ ] WP3 剩下的：时区和 fake-hwclock 式的第二时间源；`e2fsck -n` 健康检查；证书到期日显示在投屏页。
-- [ ] 投屏页消费 `status.json`：`waiting-iphone` 的原因、`overheating`、`box-restarting`、`busy`（界面第 2 批的前端一半，V22、V6 报错体系、S4 配对独立页）。
+- [ ] 接收端侧的两个小项：`/time` 提示喂给时钟下限；`receiver-access.json` 挪进 tmpfs（H7）。
+- [ ] 上游 B16 刷机/装机脚本（`box/scripts/f50-*.py`、`prepare-*.py`、`skills/autoplay-install/downloads.json`）按 ADR-11 不是安装路线：决定删除还是明确标注后保留。
+- [ ] `--car-voice` 和 `receiver-access.json` 里的 `carMusic`/`tesla` 字段已无人读取，随下次接收端编译一起清掉。
+
+### 界面
+
+- [ ] 投屏页消费 `status.json`：`waiting-iphone` 的原因、`overheating`、`box-restarting`、`busy`（界面第 2 批的前端一半，V22、V6 报错体系）。
+- [ ] "行驶中保持连接"提醒（一趟里两次 3–10 秒、以 `online` 结束的断链）；解析 `tesla-dns.log` 里未知的检测域名。
+- [ ] V5（宽高比相差 >2.5% 时等比缩放加黑边）、V12 吐司排队；界面第 3 批剩下的对比度和次要控件（V15）、欢迎页两栏（V14）。
 - [ ] WP5 触摸健壮性的另一半：HID 单线程执行器、触摸租约。
-- [ ] 特斯拉专属 §四新增项：信道不在 36–48/149–165 时告警、无边框按视口判断、"行驶中保持连接"提醒、"音乐从页面出来了"提示、解析 `tesla-dns.log` 里未知的检测域名、跳转 URL 国际化。
-
-### 第 3–4 周
-
-- [ ] WP4 底座决策：在 5.4 上浸泡 v2026.10.19.3，还是去验证 6.18（Wi-Fi 稳定性修复只进了主线）；温度监控和过热策略（≥80°C 页面提示并降分辨率，≥95°C 有序释放）。
-- [ ] 界面第 3 批剩下的：对比度和次要控件（V15）、欢迎页两栏（V14）、夜间修饰对界面本身的变暗（V13 的页面侧）、面板重组为"常用 / 高级"（V11）。
-- [ ] 特斯拉专属 W10：设置面板瘦身到 22 行；W5/F3 视图区域的两形状复活要先有实测。
-
-### 第 4–6 周
-
-- [ ] WP5/WP6 剩下的，每项前后测量：JCA ChaCha20 替换 BouncyCastle、`CICompilerCount`/G1 或 Serial 的选择、解码器出错回退后请求关键帧、发送队列满时请求关键帧、LagGate 调优、音频优先出队、语音 AudioWorklet 自适应缓冲、音乐缓冲 PI 微调、页面隐藏时暂停视频。
-- [ ] 界面第 4 批：首次使用 9 屏、设置页信息架构、设置页双语（投屏页已双语，LuCI 已有概览）。
+- [ ] WP4 底座决策：在 5.4 上浸泡，还是去验证 6.18；温度监控和过热策略（≥80°C 页面提示并降分辨率，≥95°C 有序释放）。
+- [ ] WP5/WP6 剩下的，每项前后测量：JCA ChaCha20 替换 BouncyCastle、`CICompilerCount`/G1 或 Serial 的选择、解码器出错回退后请求关键帧、发送队列满时请求关键帧、LagGate 调优。
+- [ ] 界面第 4 批：首次使用引导、设置页双语（投屏页已双语，LuCI 已有概览）。
 
 ## 三、之后
 
@@ -67,7 +83,7 @@
 | 原生引擎 `engine=native`（复用 LIVI 的 Rust 协议栈，路线 C） | 硬件审查 §四第三阶段 | 三个去风险原型通过：Unix socket 喂原生 WSS 转发器、LIVI crate 用稳定版 Rust 编成 aarch64-musl、iAP2 引导对等比对 |
 | C′ 档（WebRTC + 直接 Canvas） | 技术路径 §3.4 | 探测页证明 HTTP 页面下主线程 `MediaStreamTrackProcessor` 可用且行车时画面刷新 |
 | 双手机连接规则、走开再回来自动接回 | dashplay-tesla 分析 §三第 1、5 项 | 状态机落在 `autoplayd` 里，防火墙用 nft 集合 |
-| 服务器端续期证书 + 盒子领取 | dashplay-tesla 分析 §三第 7 项、WP3/WP9 | 先验证 DuckDNS/Let's Encrypt 从国内 SIM 卡是否可达 |
+| 服务器端续期证书 + 盒子领取 | dashplay-tesla 分析 §三第 7 项、WP3/WP9 | ADR-12 后不再需要：盒子直接向 Let's Encrypt 签发已在国内 SIM 上验证（DNSPod 路线）；只剩 DuckDNS 接口从国内 SIM 的可达性未验证 |
 | 复活两形状视图区域（带边框 ↔ 无边框 300ms 切换） | 特斯拉专属补充 F3 | 实测两种形状的尺寸和重启后浏览器的默认形状 |
 | WP7 其余：配对/删除/升级要 PIN、单控制端、每设备令牌、私有 BlueZ 随升级重建、apk 签名 | WP7、SECURITY.md | — |
 | WP9：CI（构建、单元测试、台架）、确定性打包、签名 apk 源 | WP9 | — |

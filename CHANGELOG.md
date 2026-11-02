@@ -2,6 +2,16 @@
 
 格式参考 Keep a Changelog；版本号从 0.1.0 起，1.0 之前不承诺兼容性。
 
+## [未发布] — 2026-11-03 — 发布到 GitHub 前的文档核对与隐私清理
+
+代码没有变（只改了两处用法文本和一句状态页提示）。
+
+- README（中英）重写为可以从头读到尾的说明，并对照代码订正：实测的 F50 原厂固件是 **B13**（按 mu300-linux 刷机），不再写"需要 B16"；视频是 H.264 / H.265；声音默认全走特斯拉蓝牙；三个页面的入口与用途；在线升级目前不可用；加入 2026-11-02 的实车照片（已去元数据、打码）。
+- 对照代码逐篇核对 `docs/`、`box/`、`openwrt/`、`receiver/`、`tools/` 的说明：uci 7 键 → 12 键、测试 225 → 263、四个 → 五个检查脚本、LuCI 标签页名、DuckDNS → DuckDNS / DNSPod、`AUTOPLAY_UPDATE_FEED`、`MUSIC_ELEMENT` → `PAGE_PLAYS_MUSIC`；把 0.1.0 时代的"尚未上车""不校验 Host""本地 CA"等现状描述改为 1.2.0 的实情；ADR-4/5/7/9 加"后续"注记；ROADMAP 补 0.1.1–1.2.0 已做、重排待办；SECURITY §1/§4 更新；AUDIT-0.1.1 与 UI-0.1.2 标为历史快照。
+- `receiver/README.md` 从上游 PlayPort 的 macOS 说明重写为本分叉的说明；`receiver/identity/README.md`、`receiver/NOTICE.md`、`box/README.md` 不再提示任何取得配件身份的途径（本项目不提供、不下载、不说明）。`box/skills/autoplay-install/SKILL.md`（上游 DashPlay 86 KB 的 B16/N1/玩客云装机向导，含下载共享身份的步骤）换成指向安装说明的短文。
+- 隐私：git 历史重写，一处个人邮箱改为 `autoplay@localhost`，CHANGELOG 中车主域名改为"车主自己的域名"；测试与工具里的示例蓝牙地址改用文档保留段；`.gitignore` 排除原始照片与视频目录。
+- 待定：`box/scripts/f50-*.py`、`prepare-*.py`、`skills/autoplay-install/downloads.json` 这组上游 B16 刷机/装机脚本按 ADR-11 不是安装路线、未被使用，是删除还是标注保留，待项目组决定。
+
 ## [1.2.0] — 2026-11-02 — 车机窗口比例下的界面；下拉与确认框不再交给浏览器
 
 两张页面（`https://…:18443/` 投屏页与设置面板、`http://…:18080/` 盒子设置页）在特斯拉的 773×601 带边框窗口、1256×706 无边框页、1256×560、1920×1200 和手机形状下逐屏截图核对（`docs/UI-1.2.0.md`）。功能、协议、画面几何和接收端都没有变；接收端只改了版本串（仍需在有网的机器上 `./gradlew build`，连同 1.1.0 未编译的四个文件）。
@@ -21,7 +31,7 @@
 - **声音（ADR-14，`docs/AUDIO.md`）**：新增 uci `audio_route_navigation`，**默认 `bluetooth`**——接收端不向 iPhone 提供任何 CarPlay 音频（`AirPlayConfig.disableAudioOutput`），音乐、导航播报、通话、Siri 全部经特斯拉蓝牙播出，页面无声、隐藏解锁条和音量、不打开音频输出；`carplay` 为备选（页面播导航，1.0.x 的做法）。LuCI「iPhone → 导航播报」切换；盒子设置页新增「声音」格显示当前模式；`run-receiver --audio-route-navigation`、`receiver-access.json` 的 `audioRouteNavigation`、`boot.ts playportPageAudio`。
 - **网页不再播放音乐**（两种模式都如此；上游 2026-11-01 实车：行驶中的特斯拉对播音乐的网页弹横幅→页面尺寸变化→CarPlay 每约 10 秒重协商）：`media` 类型的流丢弃并计数（`musicDropped`），提示一次"请在 iPhone 控制中心把音频输出选为特斯拉"；删除 `music-output.ts`、`aac-mp4.ts`、`MUSIC_ELEMENT`（ADR-5 冻结项结束）。
 - **F50 蓝牙与接收端（上游 10.25.1–10.31.3）**：hci0 出现后解除所有蓝牙 rfkill 的软阻塞（BlueZ 5.83 会让 hci0 带阻塞上线），硬阻塞给出 `rfkill-hard` 原因；蓝牙桥 ConnectProfile 超时后先清掉 BlueZ 残留的挂起请求再做链路恢复；配对代理加"代际"保护，BlueZ 取消一次确认后上一次尝试的迟到回调不能确认或清掉下一部手机的请求；每个被接受的 AirPlay 连接拿到完整的空闲宽限（`IdleReleaseTimer`，首次配对/换手机不再被上一部手机的空闲时间切断）；`cds.log` 出现 "invalid archive" 时删除被截断的 AppCDS 归档（否则每次启动多约 3 秒）。
-- **域名证书（上游 10.26–10.31）**：申请前先确认有默认路由、DNS 服务商和 CA 都能解析，否则 15 秒后再看且不计失败（开机首轮不再白白吃掉 60 秒退避）；acme.sh 的每个请求经 curl 壳加 `--connect-timeout 10 --max-time 90 --retry 2`（固定版本的 acme.sh 本身不改）；失败原因改为代码（`curl<N>`、`timeout`、`network`、`certificate`、`acme`），设置页据此给出文字；`docs/STATUS-MODEL.md` 同步。
+- **域名证书（上游 10.26–10.31）**：申请前先确认有默认路由、DNS 服务商和 CA 都能解析，否则 15 秒后再看且不计失败（开机首轮不再白白吃掉 60 秒退避）；acme.sh 的每个请求经 curl 壳加 `--connect-timeout 10 --max-time 90 --retry 2`（固定版本的 acme.sh 本身不改）；失败原因改为代码（`curl<N>`、`timeout`、`network`、`certificate`、`acme`），设置页据此给出文字；`box/docs/STATUS-MODEL.md` 同步。
 - 测试：盒子侧 261 个（+12），网页 `check-car` 的音乐段改为"丢弃音乐"规则并修正兼容显示段对 `document` 的隐式依赖；Kotlin 测试 +6（未运行）。
 - 版本：接收端、网页包、OpenWrt 包 1.1.0；LuCI 依赖 `autoplay (>=1.1.0)`。
 
@@ -40,7 +50,7 @@
 
 ## [1.0.0] — 2026-11-02 — 实车验证版
 
-首个在特斯拉车内实测通过的版本：F50（OpenWrt 25.12，5.4 内核）+ 特斯拉浏览器，无线 CarPlay 画面、触摸、导航播报已验证可用。
+首个在特斯拉车内实测通过的版本：F50（原厂固件 B13，按 mu300-linux 刷成 OpenWrt 25.12，5.4 内核；0.1.1 记录的"B13 无安装链"到此不再成立）+ 特斯拉浏览器，无线 CarPlay 画面、触摸、导航播报已验证可用。
 
 - 域名证书：新增**腾讯云（DNSPod）**作为自有域名证书的签发源，与 DuckDNS 并存（`dns_provider` 切换）。`own_domain.py` 增加 `dnspod` 分支（acme.sh `dns_dp` 插件 + `DP_Id`/`DP_Key`）；新增 `own_domain`/`dnspod_id`/`dnspod_token` 配置项与 LuCI「访问名称」表单；工厂重置会清除这些凭证。
 - 无线：安装时把 5 GHz 无线固定为中国区 `CN` / 信道 `149`（`90-autoplay-tesla`），解决厂商镜像国家码 `TR`（法规不含 149–165、信道锁在 36–48）导致特斯拉搜不到热点的问题。
