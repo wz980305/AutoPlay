@@ -1,60 +1,73 @@
 # AutoPlay
 
-> **1.2.0（2026-11-02）：** 两张页面在特斯拉 773×601 / 1256×706 等窗口形状下逐屏核对；投屏页的五个下拉改为页内大号选项表，二级菜单打开时自己滚入视野；盒子设置页换到同一套字号/触控尺度，配对码与按钮在首屏，「删除 iPhone」「立即升级」改为页内确认屏（不再用浏览器 `confirm()`）。功能与 1.1.0 相同。说明见 [`docs/UI-1.2.0.md`](docs/UI-1.2.0.md)。
+**让特斯拉用上无线 CarPlay，整套硬件只是一台两百块的中兴 F50 随身 WiFi。** 它刷成 OpenWrt 后装上本项目，iPhone 像连普通 CarPlay 车机一样连上它；CarPlay 的画面出现在特斯拉车机自带的浏览器里，手指点在屏幕上直接传回 iPhone；音乐、导航播报、通话和 Siri 都走特斯拉自己的蓝牙。不改车，不装 App，不需要在车里再塞一台安卓盒子。
 
-> **1.1.0（2026-11-02）：** 声音默认全部走特斯拉蓝牙（新 uci `audio_route_navigation`，`carplay` 为备选），网页不再播放音乐；引入 DashPlay 10.26–11.01 的 F50 蓝牙、空闲宽限、AppCDS 和证书申请可靠性修复。四个 Kotlin 文件未经编译（`receiver/docs/UNVERIFIED-KOTLIN.md`）。说明见 [`docs/AUDIO.md`](docs/AUDIO.md)、[`CHANGELOG.md`](CHANGELOG.md)。
+<p align="center"><img src="docs/images/tesla-model3-carplay-2026-11-02.jpg" width="640" alt="Model 3 车机浏览器里的 CarPlay 主屏"> <img src="docs/images/f50-in-hand-2026-11-02.jpg" width="240" alt="手里的中兴 F50，车机上是 CarPlay"></p>
 
-> **1.0.1（2026-11-02）：** 1.0.0 的收尾：补齐 DNSPod 的测试与中文翻译、修正两个过期断言、安装脚本保留车主选的 149–165 信道、文档记录实车事实；新增 [`docs/AUDIO.md`](docs/AUDIO.md) 说明哪些声音走蓝牙、哪些走网页。功能与 1.0.0 相同。
+[English](README.en.md) · 当前版本 **1.2.0**（2026-11-02）· [变更记录](CHANGELOG.md) · [安装使用说明](交付资料/AutoPlay-1.2.0-安装使用说明.md)
 
-> **1.0.0（2026-11-02）：** 首个在特斯拉车内实测通过的版本。新增腾讯云（DNSPod）自有域名证书支持（与 DuckDNS 并存），无线固定为中国区 CN / 信道 149（特斯拉搜不到热点的根因是厂商镜像国家码 TR 不含 149–165）。接收端、网页包、OpenWrt 包版本统一为 1.0.0。下文 0.1.x 说明是历史记录。
+## 为什么是这条路
 
-[English](README.en.md)
+特斯拉的车机不支持 CarPlay，也不允许装第三方应用，但它有一个能用的浏览器。于是现有的办法都是"在浏览器里显示一个别处渲染的 CarPlay"：有人在车里放树莓派或安卓盒子，有人用一台旧手机做中转。它们都要一台不小的设备、一根不短的线，还得处理发热和供电。
 
-> **0.1.1 更新（2026-10-31）：** 本版已完成 JDK 21 接收端编译与回归、前端类型检查/构建、盒子侧本机回归，并修复媒体恢复、配对持久化、状态与安装边界问题。完整结果与限制见 [0.1.1 审计报告](docs/AUDIT-0.1.1.md)。当前是本机验证过的工程测试版，尚未安装到 F50 或特斯拉。用户的 **F50 B13 不受现有 B16 刷机路径支持**；不得绕过内核校验。下文部分 0.1.0 说明是历史记录。
+AutoPlay 想做的是把这台"别处"缩到最小。CarPlay 的本质是 iPhone 通过 AirPlay 协议把 H.264 / H.265 视频流发给车机，车机只负责解码和显示。如果接收端不解码、不转码，只是把 iPhone 发来的视频原样转给特斯拉的浏览器，让浏览器用 WebCodecs 解码，那么接收端的工作就只剩下三件事：和 iPhone 讲蓝牙 iAP2 与 AirPlay、开一个 Wi-Fi 热点、转发字节。这三件事一颗随身 WiFi 的 SoC 完全够用——中兴 F50 用的紫光展锐 T760 本来就是给手机设计的，带 5 GHz Wi-Fi 和蓝牙，插 SIM 能上网，插车上的 USB 口就有电。
 
-AutoPlay 是 [PlayPort](https://github.com/youcci/playport) + [DashPlay](https://github.com/yizhixiaoheigou/DashPlay) / [openwrt-dashplay](https://github.com/yizhixiaoheigou/openwrt-dashplay) 的 GPL-3.0 硬分叉，只做**一个**目标：
+所以项目只做这一个目标：一台 F50，一辆特斯拉，一部 iPhone。其他车、其他盒子、有线 CarPlay、macOS 接收端，上游有，这里都删掉了。
 
-> 一台刷了 OpenWrt（[mu300-linux](https://github.com/dikeckaan/mu300-linux) 的 `mu300-linux` 镜像，厂商 5.4 内核，紫光展锐 T760）的**中兴 F50** 随身 WiFi，接车上 USB 供电，接收 iPhone 的无线 CarPlay，把画面显示在**特斯拉**车机自带的浏览器里。
+## 一帧画面是怎么到屏幕上的
 
-**状态：1.2.0，已在车上跑起来。** 1.0.0（2026-11-02）在一辆 2022 款 Model 3（AMD 车机）上实测通过：iPhone 15 Pro / iOS 27.2 的无线 CarPlay 画面、触摸、导航播报经 F50 显示在车机浏览器里，证书来自 Let's Encrypt（DNSPod 路线）。1.1.0 把所有声音默认交给特斯拉蓝牙，1.2.0 按车机的窗口形状重做了两张页面。还没有长期浸泡数据；已知事项见 `CHANGELOG.md` 各版的"未动的已知事项"。
+上车后，F50 开着一个 5 GHz 热点（局域网固定在 100.96.0.1/24——特斯拉的浏览器拒绝打开 192.168 这类私网地址，但 100.64/10 这段可以）。iPhone 靠近时，盒子通过蓝牙 iAP2 告诉它热点的名字和密码，iPhone 自己连上来，然后按 CarPlay 的规矩和盒子上的 JVM 接收端握手：配件认证、协商分辨率、开始发视频。
 
-<p align="center"><img src="docs/images/tesla-model3-carplay-2026-11-02.jpg" width="640" alt="Model 3 车机浏览器里的 CarPlay 主屏，地址栏是盒子自己的域名"> <img src="docs/images/f50-in-hand-2026-11-02.jpg" width="240" alt="手里的中兴 F50，车机上是 CarPlay"></p>
+接收端收到的每一帧 H.264 或 H.265，不拆不改，经一条 WSS 连接推给车机浏览器里打开的页面。页面用 WebCodecs 解码，画到一块 canvas 上；手指在 canvas 上的每一次按下、移动、抬起，原路送回 iPhone。车机浏览器的窗口形状变了（比如开了无边框模式），页面会让 iPhone 按新尺寸重新出图，而不是把旧画面拉伸。
 
-**这不是 Apple 认证产品。** 运行需要用户自己提供配件认证身份；仓库、包、文档、测试里都不含身份材料，也不会自动下载。公开流传的共享身份随时可能被撤销（见 `NOTICE.md`、`docs/SECURITY.md`）。
+声音不走这条路。从 1.1.0 起，接收端默认不向 iPhone 提供任何音频格式，iPhone 就按它不在 CarPlay 时的规则，把音乐、导航播报、通话和 Siri 全部交给已连接的蓝牙设备——也就是特斯拉本身。车机原生的媒体卡片和方向盘切歌照常可用，页面不出声，上车不需要"轻点一下开启声音"。如果经蓝牙听不到导航播报，有一个备选模式让页面来播导航（`docs/AUDIO.md`）。无论哪种模式页面都不播音乐：行驶中的特斯拉会对播音乐的网页弹出"视频只有声音"的横幅，横幅改变页面尺寸，CarPlay 就会每隔几秒重新协商一次。
 
-## 它怎么工作（一句话版）
+车机打开的是 `https://<你的域名>:18443/`。域名是你自己的（DuckDNS 或腾讯云 DNSPod），证书由盒子上的 acme.sh 向 Let's Encrypt 申请，走 DNS-01，不开任何端口；盒子自己的 dnsmasq 把这个名字解析到 100.96.0.1。这就是为什么 SIM 卡不是可选项：签发和续期都要上网，而且特斯拉不会停留在一个没有互联网的 Wi-Fi 上。
 
-F50 开 5 GHz 热点（100.96.0.1/24），用蓝牙 iAP2 引导 iPhone 连上来，JVM 接收端把 iPhone 发来的 H.264 原样经 WSS 转给车机浏览器，浏览器用 WebCodecs 解码画到 canvas 上；触摸原路回传。所有声音——音乐、通话、Siri、导航播报——默认走特斯拉自己的蓝牙（1.1.0，`docs/AUDIO.md`），页面只管画面和触摸。细节见 `docs/ARCHITECTURE.md`，依据见 `docs/DECISIONS.md`。
+更完整的架构在 `docs/ARCHITECTURE.md`，每一个"为什么这样做"在 `docs/DECISIONS.md`，特斯拉浏览器的各种硬约束和我们在实车上确认的事实在 `docs/TESLA.md`。
 
-## 目录
+## 现在到了哪一步
 
-| 目录 | 内容 | 来源 |
-|---|---|---|
-| `receiver/` | Kotlin/JVM 接收端（iAP2、AirPlay、MFi 签名接口、WSS 服务）和 TypeScript 投屏页 `receiver/web/`。已按特斯拉裁剪：去掉有线、macOS、麦克风上行、正在播放/封面/媒体会话、小鹏全屏家族；默认性能模式关、1920 上限、300mm 界面；状态驱动的提示、恢复中遮罩、整宽声音解锁条、rem 字号、iOS 27 深浅色、导航播报压低音乐、触摸最短按压。`web/src/flags.ts` 放常量 | PlayPort 硬分叉，DashPlay 的 63 个补丁按顺序落成 git 历史，再加 22 个裁剪与修复提交 |
-| `box/` | 盒子侧 Python：procd 守护（`supervision.py` 分组件重启、蓝牙 10/20/40/60 秒重试、接收端存活探测）、F50 蓝牙拉起（私有 BlueZ）、状态模型 `/var/run/autoplay/status.json`（9 个域，每项 `{state, reason, since}`）、设置页（S1/S2 已修：F50 上没有"数据线"文案，蓝牙故障显示红条和原因）、特斯拉常量（LAN 100.96.0.1/24、联网检测常驻应答、7 个 uci 键）、DuckDNS 证书退避与状态、升级日志与回滚、时钟下限、出厂重置、安装脚本、测试 | DashPlay，删掉 Debian/N1/玩客云/STA/外接路由/IPv6/本地 CA/有线之后 |
-| `openwrt/` | OpenWrt 25.12 的 apk 包：`autoplay`（`/opt/autoplay`、`/etc/init.d/autoplay`、`/etc/config/autoplay`，postinst 从 `/opt/dashplay` 迁移，`CONFLICTS dashplay`）、`autoplay-jre`（jlink 裁剪的 Temurin 21）、`luci-app-autoplay`（概览 + 4 个标签） | openwrt-dashplay，改名并精简 |
-| `tools/` | 本仓库新增：`probe/`（车机浏览器探测页）、`f50/`（加固脚本、测量服务、报告工具）、`car/`（触摸延迟测法） | AutoPlay |
-| `docs/` | 架构、构建、测试、路线图、特斯拉专项、安全、决策记录 | AutoPlay |
+**1.0.0（2026-11-02）在一辆 2022 款 Model 3（AMD 车机）上跑通了**：iPhone 15 Pro（iOS 27.2）的无线 CarPlay 画面、触摸、导航播报经 F50 显示在车机浏览器里，HTTPS 证书来自 Let's Encrypt（DNSPod 路线，国内 SIM 签发成功）。这一天也确认了两件事：这辆车只在 5 GHz 的 149–165 信道上搜得到热点，而 mu300-linux 镜像自带的国家码 TR 没有这些信道，所以安装包会把无线设为 CN / 149；车机浏览器打开自有域名的页面没有证书警告。
 
-## 快速入口
+**1.1.0** 把声音默认交给了特斯拉蓝牙，并引入了上游 DashPlay 十月下旬到十一月初在实车上做的一批可靠性修复：F50 蓝牙控制器上电时解除 rfkill 软阻塞、配对代理的"代际"保护、每个新连接完整的空闲宽限、损坏的 AppCDS 归档自动删除、证书申请前先确认网络通了再出手。**1.2.0** 没有改功能，只改界面：两张页面按车机浏览器真实的窗口形状（带边框 773×601、无边框 1256×706 CSS 像素）逐屏核对，投屏页的五个下拉改成页内的大号选项表，盒子设置页换到同一套字号和触控尺度，配对码和按钮在首屏，删除手机和升级不再依赖浏览器的 `confirm()` 弹窗（`docs/UI-1.2.0.md`）。
 
-- 先摸清车机浏览器：[`tools/probe/`](tools/probe/README.md)（一个 HTML 文件，在车机里打开）。
-- 第 1 周的配置加固：[`tools/f50/harden.sh`](tools/f50/README.md)（`--dry-run` 先看）。
-- 测量体系：[`tools/f50/measure.sh`](tools/f50/README.md) + `measure-report.py`；触摸延迟：[`tools/car/touch-latency.md`](tools/car/touch-latency.md)。
-- 怎么编译：[`docs/BUILD.md`](docs/BUILD.md)；怎么测：[`docs/TEST.md`](docs/TEST.md)。
-- 这次裁剪了什么、哪些没编译：[`receiver/docs/TRIM-LOG.md`](receiver/docs/TRIM-LOG.md)、[`receiver/docs/UNVERIFIED-KOTLIN.md`](receiver/docs/UNVERIFIED-KOTLIN.md)、[`box/docs/TRIM-LOG.md`](box/docs/TRIM-LOG.md)；盒子状态的含义：[`box/docs/STATUS-MODEL.md`](box/docs/STATUS-MODEL.md)。
-- 特斯拉要注意什么：[`docs/TESLA.md`](docs/TESLA.md)。
-- 接下来做什么、什么已经做了：[`docs/ROADMAP.md`](docs/ROADMAP.md)、[`CHANGELOG.md`](CHANGELOG.md)。
-- 为什么这样决定：[`docs/DECISIONS.md`](docs/DECISIONS.md)。
-- 安全边界：[`docs/SECURITY.md`](docs/SECURITY.md)。
+两件事还没有做：1.1.0 和 1.2.0 对接收端的 Kotlin 改动是在没有 Gradle 网络的环境里写的，**还没有编译过**（`receiver/docs/UNVERIFIED-KOTLIN.md` 列出了每一处，`cd receiver && ./gradlew build` 是拿到有网机器后的第一步）；"导航播报也走蓝牙"的默认值在行驶中是否稳定出声，也还要上车听。其他已知但未动的事项，每一版的 `CHANGELOG.md` 末尾都列了。没有长期浸泡数据。
 
-## 硬件前提
+## 你需要准备什么
 
-- 中兴 F50（型号 MU300），原厂固件 **B16**（DashPlay 的安装流程只认这一版），64GB 或 32GB 均可。
-- 刷机、root、回安卓：只看 mu300-linux 自己的文档（wiki：Installation、Going-Back-to-Android、Updating），本仓库不重复、不另写。
-- 车上：5V ≥3A、打火时不断电的 USB 供电，短而粗的线；散热片加小风扇，装在晒不到的地方；高耐久或工业级 microSD。这些不是建议，是前提——热和供电是 F50 在车里的两个最大风险（《硬件视角审查》H1、H2）。
-- 特斯拉：给盒子的 Wi-Fi 打开"行驶中保持连接"；iPhone 同时连特斯拉蓝牙并选为媒体来源；SIM 卡（证书续期和车机联网检测都需要）。
+**一台中兴 F50**，型号 MU300。我们这台原厂固件是 **B13**，刷成了 [mu300-linux](https://github.com/dikeckaan/mu300-linux) 的 OpenWrt 25.12 镜像（厂商 5.4 内核）。刷机、root、回安卓，请只看 mu300-linux 自己的文档；本仓库不写这些步骤，也不替它判断哪个固件版本能刷（`box/scripts/f50-install.py` 和 `box/skills/autoplay-install/` 是上游 DashPlay 面向 B16 的旧流程，不是我们的安装路线）。车上要给它 5 V、3 A 以上、打火时不断电的 USB 供电，线短而粗，加散热片，别放在太阳晒到的地方——发热和供电是 F50 在车里最大的两个风险。
 
-## 许可证
+**一张能上网的 SIM 卡**，理由见上一节。**一个自己的域名**：DuckDNS 的子域名，或者托管在腾讯云 DNSPod 的域名（国内 SIM 访问 DuckDNS 的接口是否通畅还没有验证，这正是加 DNSPod 路线的原因）。
 
-GPL-3.0，见 `LICENSE`。衍生自 PlayPort、DashPlay、openwrt-dashplay，它们又衍生自 DiPlay、xcertplay、WheelPlay，完整署名链见 `NOTICE.md`。CarPlay、iPhone、AirPlay、MFi 是 Apple Inc. 的商标；本项目与 Apple 及上述项目的作者无隶属或背书关系。
+**一套 CarPlay 配件认证身份**（`identity.pk8` 和 `certificate.p7b`）。CarPlay 要求配件通过 Apple 的 MFi 认证，AutoPlay 本身不是 Apple 认证产品，仓库、安装包、文档、测试里都不含任何身份材料，程序也不会去下载；它只会读取你放进 `/opt/autoplay/identity/offline-mfi/` 的文件。公开流传的共享身份随时可能被撤销，怎样取得合法的身份不在本项目讨论范围内（`docs/SECURITY.md`、`NOTICE.md`）。
+
+**车上**要做的设置只有三项：Wi-Fi 连盒子的热点并打开"行驶中保持连接"（否则一挂 D 挡 Wi-Fi 就断）；蓝牙连 iPhone 并选为媒体来源；浏览器收藏 `https://<你的域名>:18443/`。
+
+## 安装与日常使用
+
+完整步骤在[安装使用说明](交付资料/AutoPlay-1.2.0-安装使用说明.md)，这里只说轮廓。在电脑上编译接收端（JDK 21 + Gradle）和投屏页（Node），用 OpenWrt 的 Docker SDK 打出四个 apk：`autoplay`（程序本体，装到 `/opt/autoplay`）、`autoplay-jre`（jlink 裁剪的 Temurin 21）、`luci-app-autoplay` 和它的中文翻译。把它们推到盒子上 `apk add`，跑一次 `board_zte_f50.py --setup` 让 F50 的蓝牙用上私有的 BlueZ（不要 `apk add bluez-daemon`，它会带进不匹配的内核模块），放好身份文件，重启服务。安装脚本会把局域网改到 100.96.0.1、把 5 GHz 设成 CN / 149，并保留你在 LuCI 里改过的 149–165 内的信道。
+
+之后有三个地方可以看和改：
+
+- `https://<你的域名>:18443/` 是**投屏页**，车机浏览器打开的就是它。等待、连接中、重连中的状态都写在页面上；等待画面里有"设置"一行，画面出来以后则点 CarPlay 主屏上的"盒子设置"图标，打开的是同一个设置面板：夜间模式、语言、CarPlay 内容大小、帧率、编码，以及一些兼容选项。
+- `http://100.96.0.1:18080/` 是**盒子设置页**，面向车主：一眼看到热点、盒子、iPhone 三者的连接状态，添加或删除 iPhone（配对码在这里核对），看证书有效期和声音模式，下载诊断记录，恢复出厂设置。没有 JavaScript 也能用。
+- `http://100.96.0.1/` 是 **LuCI 后台**，"服务 → AutoPlay"下有四页：网络、iPhone（含导航播报走哪里）、自己的网址（DuckDNS / DNSPod 凭证）、程序更新。
+
+程序更新这一页目前还不能真的在线升级：`update.py` 会校验发布包的签名，而项目还没有自己的发布密钥和软件源，升级请按说明手动装新的 apk，配对、证书和身份文件都保留在 `/opt/autoplay/` 下。
+
+## 仓库里有什么
+
+`receiver/` 是 Kotlin/JVM 接收端：蓝牙 iAP2、AirPlay/CarPlay、MFi 签名接口、WSS 服务，以及 `receiver/web/` 里的 TypeScript 投屏页。它从 PlayPort 硬分叉而来，DashPlay 对 PlayPort 的 63 个补丁按原顺序落成了 git 历史，之后再按"只给特斯拉"裁剪：有线、macOS、麦克风上行、正在播放和封面、小鹏的全屏家族都去掉了（`receiver/docs/TRIM-LOG.md`）。
+
+`box/` 是盒子上的 Python：procd 守护和分组件重启、F50 蓝牙拉起、`/var/run/autoplay/status.json` 里的状态模型（蓝牙、Wi-Fi、上游网络、身份、手机、证书、更新、系统、特斯拉九个域，每项都是 `{state, reason, since}`）、设置页、证书维护、升级日志与回滚、出厂重置。它来自 DashPlay，删掉了 Debian、N1、玩客云、STA 模式、外接路由、IPv6、本地 CA 和有线之后改名为 autoplay（`box/docs/TRIM-LOG.md`、`box/docs/STATUS-MODEL.md`）。
+
+`openwrt/` 是上面三个 apk 的包定义和 LuCI 插件，来自 openwrt-dashplay。`tools/` 是本项目新增的：`probe/` 一个在车机里打开就能把浏览器能力测一遍的 HTML，`f50/` 的配置加固和测量脚本，`car/` 的触摸延迟测法。`docs/` 是架构、决策记录、构建、测试、特斯拉专项、声音、安全和两轮界面迭代的说明。
+
+怎么编译看 `docs/BUILD.md`，怎么跑测试看 `docs/TEST.md`（盒子侧 263 个单元测试、投屏页五个检查脚本、安装脚本和工具各自的测试，都在台式机上就能跑）。
+
+## 来历、致谢与许可
+
+AutoPlay 是 [PlayPort](https://github.com/youcci/playport)、[DashPlay](https://github.com/yizhixiaoheigou/DashPlay) 和 [openwrt-dashplay](https://github.com/yizhixiaoheigou/openwrt-dashplay) 的 GPL-3.0 硬分叉，它们又建立在 [DiPlay](https://github.com/shihabal3amri/DiPlay)、[xcertplay](https://github.com/shilapi/xcertplay) 和 WheelPlay 之上；F50 的蓝牙初始化、特斯拉模式、浏览器兼容修复和一批可靠性经验都来自 DashPlay 作者的实车工作。完整的署名链在 `NOTICE.md`。
+
+许可证 GPL-3.0（`LICENSE`）。CarPlay、iPhone、AirPlay、MFi 是 Apple Inc. 的商标，Tesla 是 Tesla, Inc. 的商标；本项目与 Apple、Tesla 以及上述上游项目的作者没有隶属或背书关系。
