@@ -1,0 +1,146 @@
+// Screenshots of the CarPlay page (dist/) and the box settings page at the Tesla browser's window shapes (1.2.0,
+// docs/UI-1.2.0.md). Everything is served and mocked locally: no box, iPhone or car is needed.
+//
+//   npm run build:offline                                   # dist/
+//   python3 ../../box/tools/render_settings_states.py out/box-states
+//   node scripts/ui-shots.mjs out/ui-shots [viewer|box]      # needs playwright-core and a Chromium (CHROME=<path>)
+//
+// Shapes (docs/TESLA.md): the windowed browser is about 773x601 CSS px and the borderless page 1256x706, both at a
+// device scale of about 1.53; a 560 px tall case stands in for a keyboard or a taller bottom bar; 1920x1200 at 1.0 is
+// the reference; the phone case is for the box page only (a pairing is also confirmed from a phone).
+// The viewer's box link, display API and WebSocket are mocked; its H.264 support probe is forced to "supported" so a
+// headless Chromium without a hardware decoder shows the page and not the browser check.
+import { mkdirSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { extname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = fileURLToPath(new URL('.', import.meta.url));
+const OUT = resolve(process.argv[2] ?? 'out/ui-shots'); mkdirSync(OUT, { recursive: true });
+const ONLY = process.argv[3] ?? '';
+const DIST = resolve(here, '../dist');
+const BOX_STATES = resolve(process.env.BOX_STATES ?? 'out/box-states');
+const TOKEN = '0123456789abcdef0123456789abcdef';
+const SHAPES = [
+  { w: 773, h: 601, dsf: 1.53, tag: 'tesla-window' },
+  { w: 1256, h: 706, dsf: 1.53, tag: 'tesla-borderless' },
+  { w: 1256, h: 560, dsf: 1.53, tag: 'tesla-short' },
+  { w: 1920, h: 1200, dsf: 1, tag: 'ref-1920' },
+  { w: 390, h: 844, dsf: 3, tag: 'phone' },
+];
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
+
+let chromium;
+try { ({ chromium } = await import('playwright-core')); }
+catch { ({ chromium } = await import('playwright')); }
+
+function serve(dir) {
+  const server = createServer(async (req, res) => {
+    const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    const file = join(dir, path === '/' ? 'index.html' : path);
+    try { const body = await readFile(file); res.writeHead(200, { 'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream' }); res.end(body); }
+    catch { res.writeHead(404); res.end('not found'); }
+  });
+  return new Promise(ok => server.listen(0, '127.0.0.1', () => ok({ server, url: `http://127.0.0.1:${server.address().port}/` })));
+}
+
+const dist = await serve(DIST);
+const box = await serve(BOX_STATES);
+const browser = await chromium.launch({ executablePath: process.env.CHROME, args: ['--no-sandbox'] });
+const shot = async (page, name, vp) => { const file = `${OUT}/${vp.tag}-${name}.png`; await page.screenshot({ path: file }); console.log('  saved', file); };
+
+async function viewer(vp, opts = {}) {
+  const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, deviceScaleFactor: vp.dsf, locale: 'zh-CN', colorScheme: 'dark' });
+  await ctx.addInitScript(() => { if (typeof VideoDecoder !== 'undefined') VideoDecoder.isConfigSupported = () => Promise.resolve({ supported: true }); });
+  if (opts.lang) await ctx.addInitScript(lang => { try { localStorage.setItem('f50-language', lang); } catch { /* no storage */ } }, opts.lang);
+  await ctx.route('**/receiver-access.json', r => r.fulfill({ json: { token: TOKEN, settingsPort: 18080, tesla: true, audioRouteNavigation: opts.route ?? 'bluetooth' } }));
+  await ctx.route('**/api/display*', r => r.request().method() === 'POST' ? r.fulfill({ json: { ok: true } })
+    : r.fulfill({ json: { width: 1920, height: 1080, fps: 30, uiScale: 85, hevc: false } }));
+  const page = await ctx.newPage();
+  page.on('pageerror', e => console.log('  pageerror:', e.message));
+  const sockets = []; const link = { down: false };
+  await page.routeWebSocket(/\/ws/, ws => {
+    if (link.down) { ws.close({ code: 1006, reason: 'box away' }); return; }
+    sockets.push(ws); ws.send(JSON.stringify({ type: 'hello', sessionActive: false, deviceName: 'iPhone' }));
+  });
+  await page.goto(`${dist.url}index.html`); await page.waitForTimeout(600);
+  return { ctx, page, sockets, link };
+}
+/** A painted picture without a decoder: a drawn canvas and the live state on #app. */
+async function goLive(page) {
+  await page.evaluate(() => {
+    const canvas = document.getElementById('screen'); canvas.width = 1920; canvas.height = 1080;
+    const c = canvas.getContext('2d'); const g = c.createLinearGradient(0, 0, 1920, 1080); g.addColorStop(0, '#1b2a34'); g.addColorStop(1, '#0e151a');
+    c.fillStyle = g; c.fillRect(0, 0, 1920, 1080); c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(0, 0, 150, 1080);
+    for (let i = 0; i < 8; i++) { c.fillStyle = `hsl(${i * 45},60%,50%)`; c.beginPath(); c.roundRect(260 + (i % 4) * 180, 200 + Math.floor(i / 4) * 180, 140, 140, 30); c.fill(); }
+    const app = document.getElementById('app'); app.dataset.state = 'live'; app.dataset.live = '1';
+    document.getElementById('overlay').hidden = true;
+  });
+  await page.waitForTimeout(300);
+}
+const settle = page => page.waitForTimeout(350);
+
+if (ONLY !== 'box') for (const vp of SHAPES) {
+  if (vp.tag === 'phone') continue;
+  console.log(`viewer ${vp.tag} ${vp.w}x${vp.h}@${vp.dsf}`);
+  const { ctx, page, sockets, link } = await viewer(vp);
+  await shot(page, 'viewer-waiting', vp);
+  await goLive(page); await shot(page, 'viewer-live', vp);
+  await page.evaluate(() => document.getElementById('btn-settings').click()); await page.waitForTimeout(500);
+  await shot(page, 'viewer-settings-general', vp);
+  const measured = await page.evaluate(() => ({ docW: document.documentElement.scrollWidth, winW: innerWidth,
+    label: getComputedStyle(document.querySelector('.settings-page .cell .main b')).fontSize, hint: getComputedStyle(document.querySelector('.settings-page .cell .main span')).fontSize,
+    cell: Math.round(document.querySelector('.settings-page .select-row').getBoundingClientRect().height) }));
+  await page.click('[data-picker="night-mode"]'); await settle(page); await shot(page, 'viewer-picker-night', vp);
+  await page.click('#picker-options .option:nth-child(3)'); await settle(page); await shot(page, 'viewer-settings-general-picked', vp);
+  await page.click('[data-settings-page="display"]'); await settle(page); await shot(page, 'viewer-settings-display', vp);
+  await page.click('[data-picker="ui-scale"]'); await settle(page); await shot(page, 'viewer-picker-ui', vp);
+  await page.keyboard.press('Escape'); await settle(page);
+  await page.click('#settings-display details > summary'); await page.waitForTimeout(700); await shot(page, 'viewer-settings-display-advanced', vp);
+  await page.click('[data-picker="codec"]'); await settle(page); await shot(page, 'viewer-picker-codec', vp);
+  await page.click('#picker-cancel'); await settle(page);
+  await page.click('[data-settings-page="connection"]'); await settle(page); await shot(page, 'viewer-settings-connection', vp);
+  await page.locator('#settings-connection details > summary').first().click(); await page.waitForTimeout(700); await shot(page, 'viewer-settings-connection-diagnostics', vp);
+  await page.locator('#settings-connection details > summary').nth(1).click(); await page.waitForTimeout(700); await shot(page, 'viewer-settings-connection-fallback', vp);
+  await page.click('#btn-close'); await page.waitForTimeout(400);
+  link.down = true; for (const ws of sockets) await ws.close({ code: 1006, reason: 'test' }).catch(() => {});
+  await page.waitForTimeout(2500); await shot(page, 'viewer-reconnecting', vp);
+  console.log('   ', JSON.stringify({ ...measured, state: await page.evaluate(() => document.getElementById('app').dataset.state) }));
+  await ctx.close();
+}
+if (ONLY !== 'box') {   // English labels (the longest strings) and the carplay route (the volume slider) at the windowed shape
+  const vp = SHAPES[0];
+  let { ctx, page } = await viewer(vp, { lang: 'en' });
+  await shot(page, 'viewer-waiting-en', vp);
+  await page.evaluate(() => document.getElementById('btn-settings').click()); await page.waitForTimeout(500); await shot(page, 'viewer-settings-general-en', vp);
+  await page.click('[data-picker="night-mode"]'); await settle(page); await shot(page, 'viewer-picker-night-en', vp);
+  await page.keyboard.press('Escape'); await settle(page);
+  await page.click('[data-settings-page="display"]'); await settle(page); await shot(page, 'viewer-settings-display-en', vp);
+  await page.click('#settings-display details > summary'); await page.waitForTimeout(700); await shot(page, 'viewer-settings-display-advanced-en', vp);
+  await ctx.close();
+  ({ ctx, page } = await viewer(vp, { route: 'carplay' }));
+  await page.evaluate(() => document.getElementById('btn-settings').click()); await page.waitForTimeout(500); await shot(page, 'viewer-settings-general-carplayroute', vp);
+  await ctx.close();
+}
+if (ONLY !== 'viewer') for (const vp of SHAPES) {
+  console.log(`box ${vp.tag} ${vp.w}x${vp.h}@${vp.dsf}`);
+  for (const state of ['fresh', 'live', 'live-open', 'pair-waiting', 'pair-confirm', 'bt-failed', 'ask-remove', 'ask-install']) {
+    for (const scheme of (vp.tag === 'tesla-window' || vp.tag === 'phone' ? ['dark', 'light'] : ['dark'])) {
+      const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, deviceScaleFactor: vp.dsf, locale: 'zh-CN', colorScheme: scheme });
+      const page = await ctx.newPage();
+      page.on('pageerror', e => console.log('  pageerror:', e.message));
+      await page.goto(`${box.url}box-${state}.html`); await page.waitForTimeout(300);
+      await shot(page, `box-${state}-${scheme}`, vp);
+      if (state === 'live' && scheme === 'dark') {
+        console.log('   ', JSON.stringify(await page.evaluate(() => {
+          const px = sel => { const e = document.querySelector(sel); return e ? Math.round(parseFloat(getComputedStyle(e).fontSize) * 10) / 10 : null; };
+          const rect = sel => { const e = document.querySelector(sel); if (!e) return null; const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; };
+          return { h1: px('h1'), label: px('.cell .main b'), hint: px('.cell .main span'), cell: rect('.cell'), btn: rect('.btn'), docW: document.documentElement.scrollWidth, winW: innerWidth };
+        })));
+      }
+      await ctx.close();
+    }
+  }
+}
+await browser.close(); dist.server.close(); box.server.close();

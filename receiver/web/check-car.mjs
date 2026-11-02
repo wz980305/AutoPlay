@@ -375,3 +375,48 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
   }
 }
 console.log('Compatible display: automatic below Chrome 120, neither low-latency canvas nor hardware preference.');
+{ // Option sheet (1.2.0, picker.ts): a car browser draws a native <select> list at the OS size, so the rows open an
+  // in-page sheet; the hidden <select> keeps the value and its change event, which main.ts listens to.
+  class Node {
+    constructor(tag){this.tag=tag;this.children=[];this.attrs={};this.listeners={};this.textContent='';this.hidden=false;this.disabled=false;this.open=false;}
+    setAttribute(k,v){this.attrs[k]=String(v);} getAttribute(k){return this.attrs[k]??null;}
+    addEventListener(type,fn){(this.listeners[type]??=[]).push(fn);}
+    dispatchEvent(ev){for(const fn of this.listeners[ev.type]??[])fn(ev);if(this['on'+ev.type])this['on'+ev.type](ev);return true;}
+    replaceChildren(...kids){this.children=kids;} append(...kids){this.children.push(...kids);}
+    querySelector(sel){const all=this.all();if(sel==='.main b')return all.find(n=>n.tag==='b')??null;if(sel==='b')return all.find(n=>n.tag==='b')??null;
+      if(sel==='[aria-selected=true]')return all.find(n=>n.attrs['aria-selected']==='true')??null;if(sel.startsWith('#'))return all.find(n=>n.id===sel.slice(1))??null;if(sel==='.value')return all.find(n=>n.className==='value')??null;return null;}
+    querySelectorAll(sel){return this.all().filter(n=>sel==='[data-picker]'?n.dataset?.picker:false);}
+    all(){const out=[];const walk=n=>{for(const k of n.children){out.push(k);walk(k);}};walk(this);return out;}
+    getBoundingClientRect(){return{top:0,bottom:0,height:0};} focus(){focused=this;}
+    set innerHTML(html){this.children=[];if(html.includes('<b>')){const b=new Node('b');const main=new Node('span');main.children=[b];this.children.push(main);}if(html.includes('check'))this.children.push(new Node('svg'));}
+    get className(){return this.attrs.class??'';} set className(v){this.attrs.class=v;}
+    get selectedOptions(){return this.options.filter(o=>o.selected);}
+    get value(){return (this.options??[]).find(o=>o.selected)?.value??'';} set value(v){for(const o of this.options??[])o.selected=o.value===v;}
+  }
+  let focused=null;
+  const option=(value,text,selected=false)=>({tag:'option',value,textContent:text,selected});
+  const select=new Node('select');select.id='fps';select.options=[option('30','30 fps',true),option('60','60 fps')];
+  const trigger=new Node('button');trigger.dataset={picker:'fps'};const main=new Node('span');const b=new Node('b');b.textContent='帧率';main.children=[b];const value=new Node('span');value.className='value';trigger.children=[main,value];
+  const root=new Node('section');root.children=[trigger,select];
+  const sheet=new Node('dialog');const title=new Node('h2');title.id='picker-title';const list=new Node('div');list.id='picker-options';const cancel=new Node('button');cancel.id='picker-cancel';sheet.children=[title,list,cancel];
+  let shown=0;sheet.showModal=()=>{shown++;sheet.open=true;};sheet.close=()=>{sheet.open=false;sheet.dispatchEvent({type:'close'});};
+  globalThis.document={getElementById:id=>id==='fps'?select:null,createElement:tag=>new Node(tag)};
+  globalThis.MutationObserver=class{constructor(fn){this.fn=fn;}observe(){observers.push(this);}};const observers=[];
+  const {attachPickers,refreshPickers}=await load('picker');
+  attachPickers(root,sheet);
+  assert.equal(value.textContent,'30 fps','the row shows the current option');
+  let changes=0;select.onchange=()=>changes++;
+  trigger.onclick();
+  assert.equal(shown,1);assert.equal(title.textContent,'帧率','the sheet is titled after the row');
+  assert.deepEqual(list.children.map(r=>[r.querySelector('b').textContent,r.attrs['aria-selected']]),[['30 fps','true'],['60 fps','false']]);
+  assert.equal(focused,list.children[0],'the current option takes focus');
+  list.children[1].onclick();
+  assert.deepEqual([select.value,value.textContent,changes,sheet.open],['60','60 fps',1,false],'a tap sets the select, fires change once, closes the sheet');
+  assert.equal(list.children.length,0,'closing empties the list');
+  trigger.onclick();list.children[1].onclick();
+  assert.equal(changes,1,'re-choosing the current option fires no change');
+  select.value='30';refreshPickers();assert.equal(value.textContent,'30 fps','a value set in code is mirrored on request');
+  select.disabled=true;observers[0].fn();assert.equal(trigger.disabled,true,'a disabled select greys its row');
+  delete globalThis.document;delete globalThis.MutationObserver;
+}
+console.log('Option sheet: rows mirror and set their hidden select, one change event per real change, the current option focused.');

@@ -12,6 +12,7 @@ import { isNight, parseNightMode } from './night';
 import { reachable, TESLA_HOPS } from './tesla-fullscreen';
 import { hudLines } from './debug-hud';
 import { compatDisplayOn } from './compat-display';
+import { attachPickers, refreshPickers } from './picker';
 import type { ServerMessage, ClientMessage } from './protocol';
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
@@ -88,6 +89,7 @@ function render() {
   showVoice();
   updateFullscreen();
   el<HTMLSelectElement>('language').value = language;
+  refreshPickers();
   el('app').dataset.state = state;
   volume.setAttribute('aria-label', t('volume'));
   el('audio-status').textContent = t(audio.isPlaying ? 'playing' : 'paused');
@@ -384,6 +386,7 @@ function setDisplayStatus(key: Key) {
 function showDisplay() {
   if (!display) return;
   el<HTMLSelectElement>('fps').value = String(display.fps); el<HTMLSelectElement>('ui-scale').value = String(display.uiScale);
+  refreshPickers();
   delete el('display-status').dataset.i18n;
   el('display-status').dataset.codec = display.hevc ? 'H.265' : 'H.264';
   el('display-status').textContent = `${display.width} × ${display.height} / ${display.fps} fps / ${display.hevc ? 'H.265' : 'H.264'}${display.pending ? ` · ${t('nextSession')}` : ''}`;
@@ -582,12 +585,28 @@ nightSelect.onchange = () => { localStorage.setItem('f50-night-mode', nightSelec
 darkQuery.addEventListener('change', () => { syncNight(); render(); });
 window.setInterval(() => { syncNight(); if (panel.open) render(); }, 30000);
 
-// Bluetooth route (audio_route_navigation=bluetooth): the page has no sound of its own; say so where the slider was.
+// Bluetooth route (audio_route_navigation=bluetooth): the page has no sound of its own; say so where the slider was,
+// under a "Sound" title instead of "Prompt volume".
 if (!pageAudio) {
-  el('sound-settings').querySelectorAll<HTMLElement>(':scope > :not(#sound-on-car)').forEach(node => { node.hidden = true; });
+  el('sound-settings').querySelectorAll<HTMLElement>(':scope > :not(#sound-on-car):not(#sound-title)').forEach(node => { node.hidden = true; });
   el('sound-on-car').hidden = false;
+  el('sound-title').dataset.i18n = 'soundTitle';
   document.querySelectorAll<HTMLElement>('[data-i18n="privacy"]').forEach(node => { node.hidden = true; });   // "tap for sound" does not apply
+  render();
 }
+// Native <select> lists are drawn by the car browser at the OS size; the rows open the page's own option sheet instead.
+attachPickers(panel, el<HTMLDialogElement>('picker'));
+// A second-level section (details) opened near the bottom of a short window unfolds below the fold: scroll it into
+// view, whole when it fits, else from its title (the 773×601 Tesla window shows about five rows).
+const settingsBody = panel.querySelector<HTMLElement>('.settings-body')!;
+panel.querySelectorAll<HTMLDetailsElement>('details').forEach(details => {
+  details.addEventListener('toggle', () => {
+    if (!details.open) return;
+    const own = details.getBoundingClientRect(), view = settingsBody.getBoundingClientRect();
+    if (own.bottom <= view.bottom) return;
+    details.scrollIntoView({ block: own.height > view.height ? 'start' : 'end', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  });
+});
 el('browser-check-show').onclick = () => {
   panel.close();
   (window as unknown as { F50BrowserCheck: { show(): void } }).F50BrowserCheck.show();

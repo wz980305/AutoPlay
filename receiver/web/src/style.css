@@ -88,9 +88,11 @@ summary { list-style:none; } summary::-webkit-details-marker { display:none; }
 .inner.advanced > form { padding:var(--space-2) var(--space-3) 0; }
 .inner.advanced > .foot { margin-top:var(--space-2); }
 .inner.advanced .cell .main span, .inner.advanced .foot { font-size:var(--t-caption); }
-select { background:none; border:0; color:var(--secondary); font-size:var(--t-body); text-align:right; min-width:0; max-width:55%; min-height:var(--hit-secondary); padding:.3rem 0; cursor:pointer; text-overflow:ellipsis; }
-select option { color:#000; }
-.cell select { margin-left:auto; }
+/* Choice rows (picker.ts): the row is a button showing the current option; the <select> behind it is hidden and only
+   holds the value. A native <select> list is drawn by the car browser at the OS size, outside this scale. */
+.select-row .value { margin-left:auto; font-size:var(--t-body); max-width:55%; }
+.select-row:disabled { color:var(--secondary); }
+.select-row:disabled .chev { opacity:.4; }
 
 /* iOS switch, scaled with the text. */
 .switch { appearance:none; -webkit-appearance:none; flex:none; width:3rem; height:1.8rem; margin:0; border-radius:.9rem; background:var(--fill);
@@ -184,6 +186,24 @@ button.text { border-radius:var(--radius); background:var(--cell); color:var(--l
 #display-status:not(:empty) { padding-top:var(--space-3); border-top:1px solid var(--sep); }
 #ui-hint { margin-top:0; }
 #night-schedule-hint { margin-top:var(--space-2); }
+
+/* Option sheet (picker.ts): the options as the page's own rows, centred over the dimmed settings page, sized to the
+   list (at most the window less a margin; a longer list scrolls inside), Cancel under them. */
+dialog.picker { position:fixed; top:0; right:0; bottom:0; left:0; margin:auto; width:min(30rem, calc(100% - 2 * var(--space-4))); height:fit-content; max-height:calc(100% - 2 * var(--space-4));
+  border-radius:var(--radius-sheet); background:var(--cell); box-shadow:0 12px 40px rgba(0,0,0,.5); }
+dialog.picker[open] { display:flex; flex-direction:column; animation:pop .18s cubic-bezier(.2,.8,.2,1); }
+dialog.picker::backdrop { background:rgba(0,0,0,.6); }
+@keyframes pop { from { opacity:0; transform:translateY(10px) scale(.98); } }
+.picker h2 { flex:none; padding:var(--space-3) var(--space-4) var(--space-2); }
+.picker .options { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; border-top:1px solid var(--sep); }
+.picker .option { min-height:var(--hit-primary); padding:var(--space-2) var(--space-4); }
+.picker .option + .option { border-top:.5px solid var(--sep); }
+.picker .option:active { background:var(--press); }
+.picker .option .main b { font-weight:400; }
+.picker .option[aria-selected=true] .main b { font-weight:600; }
+.picker .check { width:1.5rem; height:1.5rem; color:var(--tint); visibility:hidden; }
+.picker .option[aria-selected=true] .check { visibility:visible; }
+.picker .btn.plain { flex:none; width:auto; margin:var(--space-2) var(--space-4) var(--space-4); }
 @media (max-width:760px) {
   :root { font-size:18px; }
   .welcome { width:100%; min-width:0; }
@@ -196,10 +216,9 @@ button.text { border-radius:var(--radius); background:var(--cell); color:var(--l
   h2 { font-size:1.4rem; }
 }
 @media (max-width:480px) {
-  .cell.select-row { flex-wrap:wrap; row-gap:0; }
-  .cell.select-row .main { flex-basis:100%; }
-  .cell select { width:100%; max-width:none; text-align:left; color:var(--label); }
+  .select-row .value { max-width:45%; }
   .pair { grid-template-columns:1fr; }
+  dialog.picker { width:calc(100% - 2 * var(--space-3)); }
 }
 
 @media (prefers-reduced-motion:reduce) {
