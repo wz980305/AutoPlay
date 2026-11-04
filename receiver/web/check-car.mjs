@@ -31,14 +31,14 @@ assert.deepEqual(suggestedResolution(2560,1440,2560),{width:2560,height:1440},'a
 assert.deepEqual(suggestedResolution(3840,2160,2560),{width:2560,height:1440},'never beyond 2560');
 assert.deepEqual(suggestedResolution(1254*1.53,784*1.53,2560),{width:1918,height:1200},'Tesla: same as before');
 assert.deepEqual(suggestedResolution(2560,1440),{width:1920,height:1080},'1920 unless asked for more');
-{ // Tesla defaults (2026-10-26): performance mode off, long side capped at 1920 unless f50-allow-2560. The two shapes a
+{ // Tesla defaults (2026-10-26): performance mode off, long side capped at 1920 (the f50-allow-2560 switch went in 1.3.2). The two shapes a
   // Tesla page takes (Model 3/Y, DPR 1.53): windowed 773x601 CSS, borderless 1256x706 CSS (view-areas header).
   const dpr=1.53;
   assert.deepEqual(windowResolution(773,601,1920),{width:774,height:602},'first session, slow or unproven decoder: the window as it is');
   assert.deepEqual(windowResolution(773*dpr,601*dpr,1920),{width:1182,height:920},'fast decoder, windowed: real pixels');
   assert.deepEqual(windowResolution(1256*dpr,706*dpr,1920),{width:1920,height:1080},'fast decoder, borderless: 1922 px capped to 1920');
   assert.deepEqual(suggestedResolution(773,601,1920),{width:1280,height:996},'performance mode on, windowed: upsized to 1280');
-  assert.deepEqual(windowResolution(1256*dpr,706*dpr,2560),{width:1922,height:1080},'f50-allow-2560 only raises the cap; a Tesla never reaches it'); }
+  assert.deepEqual(windowResolution(1256*dpr,706*dpr,2560),{width:1922,height:1080},'why the 2560 switch went (1.3.2): in a Tesla it only ever added 2 px'); }
 // Normal mode: the window's own size, a 720 minimum width, the same maximum (2026-10-23).
 assert.deepEqual(windowResolution(876,518),{width:876,height:518},'a 2/3 window keeps its size');
 assert.deepEqual(windowResolution(490,580),{width:720,height:852},'the 1/3 window gets the minimum width');

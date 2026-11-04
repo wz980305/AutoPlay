@@ -21,7 +21,6 @@ const messages = {
   nightMode: ['夜间模式', 'Night mode'], nightSchedule: ['定时 18:30–06:30', '18:30–06:30'], nightSystem: ['跟随系统', 'System'], nightDay: ['始终白天', 'Always day'], nightNight: ['始终夜间', 'Always night'],
   latency: ['解码延迟', 'Decode delay'],
   debugHud: ['显示调试信息', 'Show debug info'],
-  allow2560: ['允许 2560 分辨率', 'Allow 2560 px'],
   compatDisplay: ['兼容显示', 'Compatible display'],
   ui: ['CarPlay 内容大小', 'Content size'],
   fps: ['帧率', 'Frame rate'], codec: ['视频编码', 'Video codec'], codecAuto: ['自动', 'Automatic'], standard: ['标准', 'Standard'], large: ['大', 'Large'], small: ['小', 'Small'], smaller: ['更小', 'Smaller'],

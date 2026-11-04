@@ -67,7 +67,8 @@ button.cell:disabled { opacity:1; color:var(--secondary); }
 .cell .main b { display:block; font-weight:500; }
 .cell .main span { display:block; color:var(--secondary); font-size:1rem; line-height:1.45; margin-top:.25rem; }
 .cell .value { color:var(--secondary); font-size:1rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; max-width:45%; }
-/* Icon tiles (iOS Settings): every row and every category carries one, a white glyph on a coloured rounded square. */
+/* Icon tiles (iOS Settings): every row carries one, a white glyph on a coloured rounded square; the three categories on
+   the left are plain words (1.3.2, asked for in the car). */
 .tile { width:2rem; height:2rem; flex:none; border-radius:.45rem; display:grid; place-items:center; color:#fff; }
 .tile .ico { width:1.25rem; height:1.25rem; }
 .tile.blue { background:var(--tint); } .tile.green { background:var(--green); } .tile.gray { background:var(--gray); }
@@ -190,8 +191,7 @@ dialog.picker::backdrop { background:rgba(0,0,0,.6); }
   dialog header { padding-left:var(--space-3); padding-right:var(--space-3); }
   .settings-layout { display:flex; flex-direction:column; gap:var(--space-2); padding:var(--space-2) var(--space-3) 0; }
   .settings-nav { flex:none; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--space-1); padding:0 .2rem .2rem 0; overflow:visible; }
-  .settings-nav button { min-width:0; padding:var(--space-1); gap:var(--space-1); justify-content:center; font-size:1rem; text-align:center; overflow-wrap:anywhere; }
-  .settings-nav .tile { width:1.6rem; height:1.6rem; } .settings-nav .tile .ico { width:1rem; height:1rem; }
+  .settings-nav button { min-width:0; padding:var(--space-1); justify-content:center; font-size:1rem; text-align:center; overflow-wrap:anywhere; }
   .settings-body { flex:1; min-height:0; }
   h2 { font-size:1.4rem; }
 }

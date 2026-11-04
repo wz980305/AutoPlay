@@ -300,10 +300,9 @@ class SettingsPage:
         elif found.get("latest"):
             cells += (f'<div class=cell><span class=main><b>已是最新</b></span>'
                       f'<span class=value>{escape(found["latest"])}</span></div>')
-        checked = (time.strftime("上次检查 %m-%d %H:%M", time.localtime(found["checked_at"]))
-                   if found.get("checked_at") else "还没有检查过")
+        # No "last checked" / "never checked" line under the button (1.3.2): the result cells above say what matters.
         return cells + (f'<form method=post action=/update>{ui.hidden(nonce)}<button class="cell action" name=action '
-                        f'value=check>检查更新</button></form><p class=note>{checked}</p>')
+                        'value=check>检查更新</button></form>')
 
     def ddns_block(self):
         """The own DuckDNS name: LuCI sets it; this page only tells how it is going."""

@@ -54,12 +54,10 @@ let display: Display | null = null;
  *  at the window's own pixels): the window's own size (minimum width 720). 2026-10-23, in Advanced. */
 const performanceMode = el<HTMLInputElement>('performance-mode');
 performanceMode.checked = readFlag('f50-performance-mode') === '1';
-/** The 2560 long side (a 2.5K screen's own pixels) only when this browser proved fast AND the owner allowed it in
- *  Advanced (f50-allow-2560): a Tesla's borderless page at 1.53 is 1922 px wide anyway, and an MCU2 (Atom) Tesla
- *  must never be sent 2560 (hardware review H1). */
-const allow2560 = el<HTMLInputElement>('allow-2560');
-allow2560.checked = readFlag('f50-allow-2560') === '1';
-allow2560.onchange = () => { saveFlag('f50-allow-2560', allow2560.checked ? '1' : '0'); lastAutoTarget = ''; urgentChange = 'manual'; scheduleAuto(); };
+/** The long side is capped at 1920 (1.3.2). The "Allow 2560" switch of 1.0-1.3.1 is gone: it only raised the cap for a
+ *  2.5K screen, a Tesla's widest page (borderless, 1256 CSS px at 1.53) is 1922 px and came out 2 px wider with it, and
+ *  an MCU2 (Atom) Tesla must never be sent 2560 (hardware review H1). The flag a browser may still hold is dropped. */
+try { localStorage.removeItem('f50-allow-2560'); } catch { /* Nothing to drop. */ }
 const performanceOn = () => performanceMode.checked;
 const nightSelect = el<HTMLSelectElement>('night-mode');
 nightSelect.value = parseNightMode(localStorage.getItem('f50-night-mode'));
@@ -361,7 +359,7 @@ function endExpectRestart() { expectRestart = false; window.clearTimeout(expectT
 async function saveDisplay(target: Display, how: { defer?: boolean; reason: string }): Promise<boolean> {
   if (displayBusy || !token) return false;
   displayBusy = true; el<HTMLButtonElement>('apply').disabled = true; el<HTMLFieldSetElement>('display-fields').disabled = true;
-  for (const id of ['codec', 'performance-mode', 'allow-2560']) el<HTMLInputElement | HTMLSelectElement>(id).disabled = true;
+  for (const id of ['codec', 'performance-mode']) el<HTMLInputElement | HTMLSelectElement>(id).disabled = true;
   setDisplayStatus('applying');
   // A renegotiation is coming: hold the layout from now, the session's end may arrive before this answer.
   const restart = active && !how.defer && (!display || !sameStream(display, target));
@@ -374,7 +372,7 @@ async function saveDisplay(target: Display, how: { defer?: boolean; reason: stri
     display = { ...target, pending: false }; setDisplayStatus('applied'); return true;
   } catch { if (restart) { endExpectRestart(); fit(); } setDisplayStatus('applyFail'); return false; }
   finally { displayBusy=false; el<HTMLButtonElement>('apply').disabled=false; el<HTMLFieldSetElement>('display-fields').disabled=false;
-    for (const id of ['codec', 'performance-mode', 'allow-2560']) el<HTMLInputElement | HTMLSelectElement>(id).disabled = false;
+    for (const id of ['codec', 'performance-mode']) el<HTMLInputElement | HTMLSelectElement>(id).disabled = false;
     render(); }
 }
 function scheduleAuto() {
@@ -405,12 +403,12 @@ async function adapt() {
   fit();
 }
 /** The window's own size, at the sharpest the box offers: the CSS size times the pixels used (the device pixel ratio
- *  with a fast decoder), long side 1280 to 1920 (2560 only with a fast decoder and f50-allow-2560). Each window size
+ *  with a fast decoder), long side 1280 to 1920. Each window size
  *  is its own CarPlay session (2026-10-23: one stream shared by several window shapes made small windows soft and
  *  cramped). */
 function autoTarget() {
   const pixels=fastDecoder()?Math.min(2,Math.max(1,window.devicePixelRatio||1)):1;
-  const max=fastDecoder()&&allow2560.checked?2560:1920, width=screen.clientWidth*pixels, height=screen.clientHeight*pixels;
+  const max=1920, width=screen.clientWidth*pixels, height=screen.clientHeight*pixels;
   return performanceOn() ? suggestedResolution(width,height,max) : windowResolution(width,height,max);
 }
 el<HTMLSelectElement>('codec').value = readFlag('f50-codec') || 'auto';
