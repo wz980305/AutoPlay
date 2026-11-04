@@ -36,11 +36,25 @@ cd /builder
 # Only our feed and luci (for luci.mk and its host tools): dependencies are runtime-only (EXTRA_DEPENDS),
 # so nothing from the package feeds is compiled.
 echo "src-link autoplay /feed" >> feeds.conf.default
-./scripts/feeds update luci autoplay >/dev/null 2>&1
-./scripts/feeds install -p autoplay -a >/dev/null 2>&1
-make defconfig >/dev/null 2>&1
+# Quiet when it works, the reason when it does not (a release run once failed here with no word, 2026-11-05).
+# Network steps (the luci feed from git.openwrt.org, the Temurin download from GitHub) are tried three times.
+quiet() { "$@" >/tmp/step.log 2>&1 || { echo "FAILED: $*" >&2; tail -60 /tmp/step.log >&2; return 1; }; }
+retry() { for try in 1 2 3; do quiet "$@" && return 0; echo "retrying in $((try * 20)) s ($try/3): $*" >&2; sleep $((try * 20)); done; return 1; }
+retry ./scripts/feeds update luci autoplay
+quiet ./scripts/feeds install -p autoplay -a
+quiet make defconfig
 cp /dl-local/* dl/ 2>/dev/null || true
-build() { make "$@" V=s >/tmp/build.log 2>&1 || { grep -B5 -A5 "ERROR:\|Hash mismatch\|hash" /tmp/build.log | tail -40; exit 1; }; }
+build() {
+    for try in 1 2 3; do
+        make "$@" V=s >/tmp/build.log 2>&1 && return 0
+        echo "FAILED ($try/3): make $*" >&2
+        grep -B5 -A5 "ERROR:\|Hash mismatch\|hash\|Download failed\|curl:\|wget:" /tmp/build.log | tail -40 >&2 || tail -60 /tmp/build.log >&2
+        # Only a failed download is worth another try; anything else fails now.
+        grep -q "Download failed\|curl:\|wget:\|Could not resolve\|Connection reset\|timed out" /tmp/build.log || exit 1
+        sleep $((try * 20))
+    done
+    exit 1
+}
 # A local bundle has its own hash; set it for this package only (the JRE keeps the one in its Makefile).
 build package/autoplay/compile ${LOCAL_HASH:+PKG_HASH=$LOCAL_HASH}
 build package/luci-app-autoplay/compile package/autoplay-jre/compile
