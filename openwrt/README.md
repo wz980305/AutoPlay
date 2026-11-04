@@ -10,7 +10,7 @@
 
 > **这不是 Apple 认证产品。** 运行需要你自己提供配件认证身份，见 [box/README.md](../box/README.md#认证身份)。
 
-前提是 F50 已按 [mu300-linux](https://github.com/dikeckaan/mu300-linux) 的文档刷成 OpenWrt（我们实测的那台原厂固件是 B13；刷机步骤本仓库不写）。装包走下面的手动路线，完整过程见 [安装使用说明](../交付资料/AutoPlay-1.2.0-安装使用说明.md)。
+前提是 F50 已按 [mu300-linux](https://github.com/dikeckaan/mu300-linux) 的文档刷成 OpenWrt（我们实测的那台原厂固件是 B13；刷机步骤本仓库不写）。装包走下面的手动路线，完整过程见 [安装使用说明](../交付资料/AutoPlay-1.3.0-安装使用说明.md)。
 
 ## 安装（手动）
 
@@ -27,7 +27,7 @@ python3 /opt/autoplay/board_zte_f50.py --setup     # F50 自己的 BlueZ（见�
 
 - 把 LAN 定为 `100.96.0.1/24`（RFC 6598 共享地址段，特斯拉浏览器能打开）、DHCP 给出网关和 DNS；LAN 已经是别的地址时会改，车和手机要重连一次；
 - 把 5 GHz 无线设为中国区 CN、信道 149（实车只在 149–165 上搜得到热点，mu300-linux 镜像的国家码 TR 没有这些信道）；已经在 149–165 里的信道保留，SSID 和密码不动；
-- 删掉 DashPlay 时代的 uci 选项和 dhcp 记录，只留十二项：`enabled`、`viewer_port`、`idle_release`、`dns_provider`、`duckdns_domain`、`duckdns_token`、`own_domain`、`dnspod_id`、`dnspod_token`、`audio_route_navigation`、`update_check`、`update_mirror`；
+- 删掉 DashPlay 时代的 uci 选项和 dhcp 记录（以及 1.1.0–1.2.0 的 `audio_route_navigation`），只留十一项：`enabled`、`viewer_port`、`idle_release`、`dns_provider`、`duckdns_domain`、`duckdns_token`、`own_domain`、`dnspod_id`、`dnspod_token`、`update_check`、`update_mirror`；
 - 从 DashPlay 升级过来时，搬 `/opt/dashplay/{state,identity}` 和独立 BlueZ 到 `/opt/autoplay`，把 `/etc/config/dashplay` 里的选项抄过来（`autoplay` 与 `dashplay` 包互斥，网页升级会先卸载旧包）；
 - 预生成 Java 的 AppCDS 归档，开机快几秒。
 
@@ -39,7 +39,7 @@ F50 用厂商 5.4 内核，不能装系统的 `bluez-daemon`（它会带入 6.12
 
 - 设置页：`http://100.96.0.1:18080/`（`http://100.96.0.2/` 也转到这里）。
 - 车机浏览器：`https://<你的域名>:18443/`——DuckDNS 名字或托管在腾讯云 DNSPod 的自有域名，都有 Let's Encrypt 正式证书，没有警告；没设域名时是 `https://autoplay.lan:18443/`，会有证书警告。
-- LuCI「服务 → AutoPlay」：概览（蓝牙、iPhone、证书、更新各一行，带原因）；「网络」看热点和网段；「iPhone」邀请/删除、导航播报走哪里；「自己的网址」选 DuckDNS 或 DNSPod 并填凭证；「程序更新」检查、升级、改镜像。
+- LuCI「服务 → AutoPlay」：概览（蓝牙、iPhone、证书、更新各一行，带原因）；「网络」看热点和网段；「iPhone」邀请/删除、空闲释放时间；「自己的网址」选 DuckDNS 或 DNSPod 并填凭证；「程序更新」检查、升级、改镜像。
 - 特斯拉 WiFi 要打开「行驶中保持连接」，否则一出 P 挡就断 WiFi。搜不到热点时到 LuCI「网络 → 无线」确认 5 GHz 在 149–165（安装时已设为 CN / 149）。
 
 状态与原因词：[box/docs/STATUS-MODEL.md](../box/docs/STATUS-MODEL.md)。

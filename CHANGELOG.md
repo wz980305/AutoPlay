@@ -2,7 +2,17 @@
 
 格式参考 Keep a Changelog；版本号从 0.1.0 起，1.0 之前不承诺兼容性。
 
-## [未发布] — 2026-11-03 — 发布到 GitHub 前的文档核对与隐私清理
+## [1.3.0] — 2026-11-05 — 设置面板按 iOS「设置」收口；网页不再有声音；修屏幕键盘
+
+车主上车一周后的清单（`docs/UI-1.3.0.md`）。接收端的 Kotlin 又改了三个文件，仍未编译（`receiver/docs/UNVERIFIED-KOTLIN.md`）。
+
+- **屏幕键盘（ADR-17）**：浏览器从后台拉回 CarPlay 页面时有时弹出车机键盘。画布不再可聚焦、不再在每次按下时 `focus()`（按键一直在 `window` 上监听）；页面重新可见、`pageshow`、窗口获焦时把浏览器恢复的焦点 `blur()` 掉（本页的对话框打开时除外）；`interactive-widget=overlays-content` + VirtualKeyboard API，万一键盘出现也不改变页面尺寸（否则 CarPlay 会重协商）。`check.mjs`/`check-runtime.mjs` 断言控制器绝不聚焦画布。台架上无法复现车机键盘，要上车确认。
+- **只剩"全部走特斯拉蓝牙"（ADR-16，`docs/AUDIO.md`）**：车主在车上确认默认模式可用后，删除 1.1.0 的备选 `carplay` 及其全部代码——网页 `audio.ts`、`audio-timing.ts`、`check-audio.mjs`、解锁条、音量滑杆、「声音」分组、duck、`?promptgain=`、`CAR_MUSIC`/`PAGE_PLAYS_MUSIC`/`PROMPT_BOOST`、`boot.ts playportPageAudio`、调试浮层的声音行、`stats` 的音频字段、浏览器检测的 Web Audio / AudioDecoder 两项；盒子 uci `audio_route_navigation`（升级时由 `90-autoplay-tesla` 与守护进程删掉旧键）、`supervisor_openwrt.audio_route_of()`、`run-receiver --audio-route-navigation`、`receiver-access.json` 的 `audioRouteNavigation`/`carMusic`/`tesla`、盒子页「声音」格、LuCI 下拉与译文、恢复出厂的键表；接收端 `ServerConfig.audioRouteNavigation`/`audioOverBluetooth`，`disableAudioOutput` 固定为 `true`。`run-receiver.py` 仍给 JVM 传 `--car-voice --audio-route-navigation bluetooth`，让 1.3.0 之前编译的接收端也全走蓝牙；新接收端接受并忽略。**代价**：某辆车经蓝牙听不到播报时没有开关可切，只能回 `v1.2.0`。
+- **设置面板（投屏页）**：每一行和左侧三个分类都有 iOS 式彩色圆角图标，选中的分类蓝色填充；行内不再有任何小字——删掉「当前请求：夜间」、页脚「本页语言与音量保存在此浏览器…」、「定时：18:30–06:30 使用夜间外观」（时间段进了选项名）、「改变 iPhone 输出的 CarPlay 文字与图标大小…」、永久的「1920 × 998 / 30 fps / H.265」状态行（只在应用过程中说话）、「高分辨率、编码与调试」、「分辨率随窗口自动调整…」、无边框模式 / 视频编码 / 四个开关的说明、「将离开当前画面…」；删掉整个「备用控制」（主屏幕 / 返回 / 刷新画面及 `knob` 发送代码）。标签不折行、当前值过长时截断；左栏 12rem → 11rem。「画质设置」改称「画质」；「连接与兼容性」的当前画面行加上编码。
+- **盒子设置页**：不再显示「上游在线；特斯拉自带音乐、地图可以上网。」和开机头几秒的"检测中"，只有上游不可用才有横幅；「声音」分组随音频路径删除。
+- 版本：接收端、网页包、OpenWrt 包 1.3.0；LuCI 依赖 `autoplay (>=1.3.0)`；OpenWrt 包与 `update.py` 的发布地址指向 `github.com/wz980305/AutoPlay`（尚无签名发布）。测试：盒子侧 237（−1，声音格的测试换成"无声音分组、无在线横幅"），网页四个检查脚本（−`check-audio`），类型检查、esbuild 构建、`ui-shots` 四形状截图通过。安装说明改名 `AutoPlay-1.3.0-安装使用说明.md`。
+
+### 2026-11-03 — 发布到 GitHub 前的文档核对与隐私清理（随 1.3.0 发布）
 
 功能代码没有变（只改了两处用法文本和一句状态页提示）；删掉了一组从未使用的上游脚本。
 

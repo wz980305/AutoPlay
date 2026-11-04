@@ -2,9 +2,22 @@
 
 > Superseded for compilation by 0.1.1 (2026-10-31): both modules now build and local tests pass on JDK 21. Hardware-dependent checks below remain open. See `../../docs/AUDIT-0.1.1.md`. This document preserves the original 0.1.0 audit history.
 
-> **Status (2026-11-03):** compiled and tested through 1.0.0. Uncompiled since: the 1.0.1 version string in `Main.kt`; the
-> four 1.1.0 files in the table below plus `Main.kt`'s "1.1.0" string; the 1.2.0 "1.2.0" string in `Main.kt`. Nothing else
-> in `receiver/` changed after 1.0.0. First step on a machine with JDK 21 and a Gradle network: `cd receiver && ./gradlew build`.
+> **Status (2026-11-05):** compiled and tested through 1.0.0. Uncompiled since: the 1.0.1 version string in `Main.kt`; the
+> four 1.1.0 files in the table below plus `Main.kt`'s "1.1.0" string; the 1.2.0 "1.2.0" string in `Main.kt`; the three
+> 1.3.0 files below. Nothing else in `receiver/` changed after 1.0.0. First step on a machine with JDK 21 and a Gradle
+> network: `cd receiver && ./gradlew build`.
+
+> **1.3.0 (2026-11-05): three files changed, still without a compiler** (ADR-16: every sound on the car's Bluetooth, no option).
+>
+> | File | Change | Risk |
+> |---|---|---|
+> | `server/.../ServerConfig.kt` | `audioRouteNavigation`, `audioOverBluetooth`, `AUDIO_ROUTE_*`, `audioRoute()` and the usage lines removed; `--audio-route-navigation` is now `-> nextValue(flag)` (consumes and discards the value) next to the already-ignored `--car-voice`; `build.gradle.kts` and `Main.kt` say 1.3.0 | A `when` branch whose expression value is discarded is legal Kotlin; `nextValue` is a local fun of `fromArgs`, so it is in scope |
+> | `server/.../CarPlayServer.kt` | `disableAudioOutput = true` (was `config.audioOverBluetooth`) | none |
+> | `server/src/test/.../AudioCapabilitiesTest.kt` | rewritten: `offersNoAudioAtAll` (no `audioFormats`/`audioLatencies`, `disableAudioOutput` on, feature bits cleared against a `copy(disableAudioOutput = false)`, no `audioInputFormats`), `theOldAudioFlagsAreAcceptedAndIgnored` (`fromArgs` returns the defaults unchanged, compared with data-class equality) | `AirPlayConfig` must be a data class for `.copy(...)` (it is: the 1.1.0 test used `copy(disableAudioOutput = true)`); the equality test depends on `ServerConfig` being a data class whose every field compares by value (`Path`, `String`, `Int`, `Boolean`; `accessToken` is taken from `base`) |
+>
+> The audio relay in `WebBridge.kt`/`WebHub.kt` and the protocol module's `AudioPacketCapture`/`CarPlayMediaEngine` were left
+> in place: with no audio offered the iPhone never opens a stream, so they are dormant; removing them is Kotlin surgery for
+> a machine that can compile.
 
 > **1.2.0 (2026-11-02):** only `Main.kt`'s fallback version string changed ("1.1.0" → "1.2.0"), still without a compiler; the 1.1.0 list below stands.
 

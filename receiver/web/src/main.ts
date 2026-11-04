@@ -1,11 +1,10 @@
 import { startup, startupStats } from './startup';
-import { AudioEngine } from './audio';
 import { InputController } from './input';
 import { VideoPlayer } from './video';
 import { Connection } from './ws';
 import { LagProbe } from './lag';
 import { suggestedResolution, windowResolution, areaSize, sameStream, frameRateCheck, type Area } from './display-fit';
-import { CAR_MUSIC, TESLA, PROMPT_BOOST } from './flags';
+import { TESLA } from './flags';
 import { statusHint } from './status';
 import { t, language, setLanguage, type Key } from './i18n';
 import { isNight, parseNightMode } from './night';
@@ -31,13 +30,8 @@ let reportFrames = 0, reportBytes = 0, reportStart = performance.now();
 // the iPhone's render and encode, our decode). An animating screen would answer with a frame it was
 // sending anyway, so only taps after at least 150 ms without a frame count.
 let lastPaintAt = 0, handledDownAt = 0, touchSum = 0, touchCount = 0;
-// Music as the iPhone sends it (stream 102, AAC): its bitrate is the iPhone's choice.
-let musicBytes = 0;
-/** A stream this page plays (type 100/101/102) arrived since the page loaded: only then is a locked AudioContext worth
- *  the "tap anywhere" bar (V7): a car that routes every sound over its Bluetooth never sees one. A reload starts over. */
-let audioSeen = false;
 // The same, per second, for the debug overlay (debug-hud.ts).
-let hudFrames = 0, hudBytes = 0, hudMusicBytes = 0, hudStart = performance.now();
+let hudFrames = 0, hudBytes = 0, hudStart = performance.now();
 /** The page's state (viewer audit V3): the status line is t(state) and the hint under it is hintFor(), a function of
  *  the state (the old one was chosen once at load and said "add your iPhone" under "the box is not answering"). */
 let state: Key = token ? 'connecting' : 'access';
@@ -71,14 +65,9 @@ const nightSelect = el<HTMLSelectElement>('night-mode');
 nightSelect.value = parseNightMode(localStorage.getItem('f50-night-mode'));
 const darkQuery = matchMedia('(prefers-color-scheme: dark)');
 let sentNight: boolean | null = null;
-const volume = el<HTMLInputElement>('volume');
-volume.value = String(Math.min(100, Math.max(0, Number(localStorage.getItem('playport-master') ?? 100) || 0)));
 
 /** Box settings page (pairing, hotspot), when the device startup announced one: same host, plain HTTP. */
 const boxPort = Number((window as unknown as { playportBoxSettingsPort?: number }).playportBoxSettingsPort) || 0;
-/** audio_route_navigation (boot.ts): false = the receiver offers the iPhone no audio, every sound is on the Tesla's
- *  Bluetooth and this page keeps its audio output closed and its sound controls hidden (docs/AUDIO.md). */
-const pageAudio = (window as unknown as { playportPageAudio?: boolean }).playportPageAudio !== false;
 if (boxPort) for (const id of ['box-link', 'box-link-panel']) {
   const link = el<HTMLAnchorElement>(id);
   link.href = `http://${location.hostname}${boxPort === 80 ? '' : `:${boxPort}`}/`;
@@ -86,25 +75,17 @@ if (boxPort) for (const id of ['box-link', 'box-link-panel']) {
 }
 function render() {
   setLanguage(language);
-  showVoice();
   updateFullscreen();
   el<HTMLSelectElement>('language').value = language;
   refreshPickers();
   el('app').dataset.state = state;
-  volume.setAttribute('aria-label', t('volume'));
-  el('audio-status').textContent = t(audio.isPlaying ? 'playing' : 'paused');
   el('connection-text').textContent = t(state);
   el('connection-hint').textContent = hintFor();
   // The box's own page is no help while the box itself does not answer.
   if (boxPort) el('box-link').hidden = !statusHint(state, 0).boxLink;
   el('overlay').hidden = painted || holding;
   el('app').dataset.live = String(painted || holding);
-  el('capabilities').textContent = !isSecureContext ? t('insecure') : typeof VideoDecoder === 'undefined' || typeof AudioDecoder === 'undefined' ? t('unsupported') : t('compatible');
-  document.querySelectorAll<HTMLButtonElement>('[data-command]').forEach(b => { b.disabled = !active; });
-  const night = isNight(parseNightMode(nightSelect.value), new Date(), darkQuery.matches);
-  el('night-status').textContent = `${t('nightNow')}${t(night ? 'nightOn' : 'nightOff')}`;
-  el('night-schedule-hint').hidden = nightSelect.value !== 'schedule';
-  el('night-status').title = t(darkQuery.matches ? 'browserDark' : 'browserLight');
+  el('capabilities').textContent = !isSecureContext ? t('insecure') : typeof VideoDecoder === 'undefined' ? t('unsupported') : t('compatible');
 }
 function fit() {
   // While CarPlay renegotiates, the last picture stays laid out as it was (the new areas belong to the next stream).
@@ -172,28 +153,9 @@ const video = new VideoPlayer(canvas, error, () => {
   }
   lastPaintAt = now;
 }, () => send({ type:'keyframe' }), fit, compatDisplay);
-// Music over the car's Bluetooth (CAR_MUSIC, flags.ts; found in a Tesla, 2026-10-14): the steering wheel, media card
-// and volume are the car's own; this page plays prompts (boosted). ?promptgain=1..8 overrides the boost. Music the
-// iPhone still sends here (~27 s after Siri) is dropped and the driver told once (1.1.0; a moving Tesla answers a
-// page playing music with its "video is audio-only" banner, whose resize renegotiated CarPlay every ~10 s upstream).
-const carMusic = CAR_MUSIC;
-const promptGain = Math.min(8, Math.max(1, Number(new URLSearchParams(location.search).get('promptgain')) || PROMPT_BOOST));
-const audio = new AudioEngine(error, { promptBoost: promptGain, idleClose: carMusic, onDroppedMusic: () => toast(t('musicDropped')) });
-/** Music over the car's Bluetooth: the car's media card shows the page's title and address whenever the page sounds
- *  (Siri, prompts; a Tesla, 2026-10-14); name it instead. The last voice stream to start wins; the title goes back when none is left. */
-const voiceLabels: Record<string, Key> = { speechrecognition: 'voiceSiri', telephony: 'voiceCall', default: 'voicePrompt' };
-const voices = new Map<number, Key>();
-function showVoice() {
-  const label = Array.from(voices.values()).pop() ?? null;
-  document.title = label ? `${t(label)} · ${t('brand')}` : t('brand');
-}
-function voiceStarted(streamType: number, name: string) {
-  if (!carMusic) return;
-  voices.delete(streamType);
-  if (voiceLabels[name]) voices.set(streamType, voiceLabels[name]);
-  showVoice();
-}
-function voiceStopped(streamType: number) { if (carMusic && voices.delete(streamType)) showVoice(); }
+// This page is silent (1.3.0, docs/AUDIO.md): the receiver offers the iPhone no audio at all, so music, navigation
+// prompts, calls and Siri all play on the Tesla's Bluetooth. Audio frames a receiver built before 1.3.0 might still
+// relay (wire types 3/4/6) are parsed by protocol.ts and dropped here.
 const lag = new LagProbe();
 const connection = new Connection(token, {
   onTiming(stats) { connection.send({type:'stats', stats:{ev:16,...stats}}); },
@@ -201,9 +163,7 @@ const connection = new Connection(token, {
     switch (message.kind) {
       case 'video-config': video.configure(message); break;
       case 'video-frame': video.pushFrame(message); break;
-      case 'audio-config': audioSeen = true; audio.handleConfig(message); voiceStarted(message.streamType, message.name); break;
-      case 'audio-packet': if (message.streamType === 102) { musicBytes += message.data.length; hudMusicBytes += message.data.length; } audio.handlePacket(message); break;
-      case 'audio-stopped': audio.stopStream(message.streamType); voiceStopped(message.streamType); break;
+      default: break;
     }
   },
   onServer(message) { lastHeard = performance.now(); server(message); },
@@ -212,7 +172,7 @@ const connection = new Connection(token, {
     if (value === 'open' && closedAt) { lifeEvent(11, { downMs: Math.round(performance.now() - closedAt), failures: connection.failures }); closedAt = 0; }
     if (value === 'closed') { if (!closedAt) { closedAt = performance.now(); linkDownAt = closedAt; } if (!wokeAt) wokeAt = closedAt; reset(shownOnce); state = 'reconnecting'; }
     else if (value === 'connecting') { if (state !== 'reconnecting') state = 'connecting'; }
-    else { state = 'waiting'; void loadDisplay(); void unlock(); }
+    else { state = 'waiting'; void loadDisplay(); }
     render();
   },
 });
@@ -237,7 +197,7 @@ let holding = false, holdAwakeMs = 0, holdForDisplay = false, shownOnce = false;
 function reset(hold = false, forDisplay = false) {
   sentNight = null; lag.reset();
   active = painted = false; input.reset(); canvas.inert = true;
-  video.close(); audio.stopAll();
+  video.close();
   holding = hold; holdAwakeMs = 0; holdForDisplay = forDisplay;
   if (hold) showRecovering(t(forDisplay ? 'adjusting' : 'recoveringNotice'));
   else { clearPicture(); hideRecovering(); }
@@ -260,8 +220,8 @@ function server(message: ServerMessage) {
   if (message.type === 'pong') { lag.pong(performance.now()); return; }
   // Straight back, also before CarPlay starts: the box pauses the picture while this page lags behind.
   if (message.type === 'mark') { connection.send({ type: 'ack', mark: message.mark ?? 0 }); return; }
-  // The iPhone lowers the music under a prompt or Siri and brings it back (duckAudio/unduckAudio via the box).
-  if (message.type === 'duck') { audio.duck(message.level ?? 1, message.ms ?? 0); return; }
+  // "duck" (the iPhone lowering music under a prompt): nothing to lower on a silent page; a pre-1.3.0 box may still send it.
+  if (message.type === 'duck') return;
   if (message.type === 'host-ui' && active) {
     openPanel(); return;
   }
@@ -274,16 +234,24 @@ function server(message: ServerMessage) {
   else { endExpectRestart(); void loadDisplay(); active = true; canvas.inert = false; state = 'starting'; syncNight(); }
   render();
 }
-async function unlock() {
-  if (!pageAudio || audio.isUnlocked) return;   // Bluetooth route: never open an audio output the Tesla could take for a media source
-  try { await audio.unlock(); } catch { /* Keep a truthful gesture hint; retry on next gesture. */ }
+/** The car's on-screen keyboard (1.3.0): a Tesla sometimes raised its keyboard when the browser was brought back to
+ *  this page. The keyboard follows the browser's focused element, so nothing in the live view may hold focus: the
+ *  canvas lost its tabindex and the focus() on every tap (input.ts; the keys are read on window anyway), and whatever
+ *  the browser restores focus to when the page is shown again is blurred, unless a dialog of this page is open (the
+ *  settings panel and the option sheet manage their own focus). A keyboard that still appears must not resize the
+ *  page: a smaller window would renegotiate CarPlay (the meta viewport's interactive-widget=overlays-content, and
+ *  the VirtualKeyboard API where the browser has it). */
+function dropStrayFocus() {
+  if (document.querySelector('dialog[open]')) return;
+  const focused = document.activeElement;
+  if (focused instanceof HTMLElement && focused !== document.body) focused.blur();
 }
-window.addEventListener('pointerdown', () => { void unlock(); });
-window.addEventListener('click', () => { void unlock(); });
-window.addEventListener('keydown', () => { void unlock(); });
-el('audio-unlock').onclick = () => { void unlock(); };
-function setVolume() { audio.setVolume(Number(volume.value) / 100); el('volume-value').textContent = `${volume.value}%`; localStorage.setItem('playport-master',volume.value); }
-volume.oninput = setVolume; setVolume();
+for (const event of ['pageshow', 'focus']) window.addEventListener(event, dropStrayFocus);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) dropStrayFocus(); });
+{
+  const keyboard = (navigator as unknown as { virtualKeyboard?: { overlaysContent: boolean } }).virtualKeyboard;
+  if (keyboard) try { keyboard.overlaysContent = true; } catch { /* Then the meta viewport alone decides. */ }
+}
 function openPanel() {
   if (!panel.open) {
     for (const id of ['toast', 'error-banner']) el('settings-notices').append(el(id));
@@ -336,9 +304,10 @@ let teslaChecking = false;
 function updateFullscreen() {
   const borderless = teslaBorderless();
   const label = t(borderless ? 'borderlessOn' : teslaChecking ? 'checkingNetwork' : 'fullscreen');
+  // The waiting screen's row explains the hop (a first-run screen); the settings row is a bare iOS-style row (1.3.0).
   const hint = t(borderless ? 'borderlessOnHint' : teslaChecking ? 'checkingNetworkHint' : 'fullscreenRowHint');
   el('fullscreen-text').textContent = label; el('welcome-fullscreen-text').textContent = label;
-  el('fullscreen-hint').textContent = hint; el('welcome-fullscreen-hint').textContent = hint;
+  el('welcome-fullscreen-hint').textContent = hint;
   for (const id of ['fullscreen', 'welcome-fullscreen']) {
     el(id).setAttribute('aria-label', label);
     el<HTMLButtonElement>(id).disabled = borderless || teslaChecking;
@@ -361,12 +330,6 @@ function toast(message: string) {
   el('toast').textContent = message; el('toast').hidden = false;
   window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => { el('toast').hidden = true; }, 6000);
 }
-// Fallback controls: home, back and a fresh keyframe only; previous/play/next are the car's own keys over Bluetooth.
-document.querySelectorAll<HTMLButtonElement>('[data-command]').forEach(button => button.onclick = () => {
-  const cmd = button.dataset.command;
-  if (cmd === 'home' || cmd === 'back') send({ type:'knob', knob:{ select:false, home:cmd==='home', back:cmd==='back', x:0,y:0,wheel:0 } });
-  else if (cmd === 'refresh') send({ type:'keyframe' });
-});
 /** The box's display as it is now: another page may have changed it (it sent back that page's fps, 2026-10-16). */
 async function fetchDisplay(): Promise<Display | null> {
   try { const r = await fetch('/api/display', { cache: 'no-store' }); return r.ok ? await r.json() as Display : null; }
@@ -383,13 +346,15 @@ function setDisplayStatus(key: Key) {
   const status = el('display-status');
   status.dataset.i18n = key; status.textContent = t(key);
 }
+/** The rows show the box's values; the status line under the button speaks only while something is happening (or a
+ *  change waits for the next session). The resolution, codec and frame rate in use are on the debug overlay and under
+ *  Connection (1.3.0; the permanent "1920 × 998 / 30 fps / H.265" line said the same thing a third time). */
 function showDisplay() {
   if (!display) return;
   el<HTMLSelectElement>('fps').value = String(display.fps); el<HTMLSelectElement>('ui-scale').value = String(display.uiScale);
   refreshPickers();
-  delete el('display-status').dataset.i18n;
-  el('display-status').dataset.codec = display.hevc ? 'H.265' : 'H.264';
-  el('display-status').textContent = `${display.width} × ${display.height} / ${display.fps} fps / ${display.hevc ? 'H.265' : 'H.264'}${display.pending ? ` · ${t('nextSession')}` : ''}`;
+  if (display.pending) setDisplayStatus('nextSession');
+  else { delete el('display-status').dataset.i18n; el('display-status').textContent = ''; }
 }
 function endExpectRestart() { expectRestart = false; window.clearTimeout(expectTimer); }
 /** defer: a sharper picture or another codec for shapes the phone already has; the box keeps it for the next session. */
@@ -464,8 +429,8 @@ window.addEventListener('pagehide', () => input.releaseAll());
 document.addEventListener('visibilitychange',()=>{
   pageEvent(document.hidden ? 1 : 2);
   if (document.hidden) { input.releaseAll(); return; }
-  // The picture at once instead of the phone's next keyframe; then the sound.
-  send({ type:'keyframe' }); fit(); scheduleAuto(); void unlock();
+  // The picture at once instead of the phone's next keyframe.
+  send({ type:'keyframe' }); fit(); scheduleAuto();
 });
 /** Straight into the viewer log, not only every 10 s: ev 1 hidden, 2 shown, 5 resized (3/4, DOM fullscreen, are gone). */
 function pageEvent(ev: number) {
@@ -486,9 +451,7 @@ let resizeTimer = 0;
 window.addEventListener('resize', () => { window.clearTimeout(resizeTimer); resizeTimer = window.setTimeout(() => pageEvent(5), 400); });
 window.setInterval(()=>{
   const now=performance.now(),fps=frames*1000/Math.max(1,now-lastStats);frames=0;lastStats=now;
-  el('stats').textContent=painted?`${canvas.width} × ${canvas.height} / ${fps.toFixed(0)} fps / ${t('latency')} ${video.decodeLatencyMs.toFixed(0)} ms`:t('noStream');
-  el('audio-unlock').hidden=!pageAudio||!active||!audioSeen||audio.isUnlocked;
-  el('audio-status').textContent=t(audio.isPlaying?'playing':'paused');
+  el('stats').textContent=painted?`${canvas.width} × ${canvas.height} / ${fps.toFixed(0)} fps / ${display?.hevc ? 'H.265' : 'H.264'} / ${t('latency')} ${video.decodeLatencyMs.toFixed(0)} ms`:t('noStream');
 },750);
 // Which browser the car runs.
 const chromeMajor=Number(/Chrome\/(\d+)/.exec(navigator.userAgent)?.[1] ?? 0),webView=/; wv\)/.test(navigator.userAgent)?1:0;
@@ -556,11 +519,11 @@ window.setInterval(()=>{
   const now=performance.now(),seconds=Math.max(1,(now-reportStart)/1000),stalls=video.takeStalls();
   send({type:'stats',stats:{fps:reportFrames/seconds,decodeMs:video.decodeLatencyMs,queue:video.decodeQueueSize,
     kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,borderless:teslaBorderless()?1:0,
-    width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),...(musicBytes?{musicKbps:musicBytes*8/1000/seconds}:{}),
-    ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,desync:video.desynchronized,build:BUILD,webView,carMusic:carMusic?1:0,teslaMode:TESLA?1:0,promptGain,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...audio.farReport(),...audio.duckReport(),...audio.musicReport(),pageAudio:pageAudio?1:0,...stalls,...lag.take(performance.now())}});
+    width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),
+    ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,desync:video.desynchronized,build:BUILD,webView,teslaMode:TESLA?1:0,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...stalls,...lag.take(performance.now())}});
   judgeDecoder(video.decodeLatencyMs, reportFrames/seconds);
   if (active) judgeFrameRate(stalls.caughtUp);
-  reportFrames=0;reportBytes=0;reportStart=now;touchSum=0;touchCount=0;musicBytes=0;
+  reportFrames=0;reportBytes=0;reportStart=now;touchSum=0;touchCount=0;
 },10000);
 // Debug overlay: off unless turned on in Display (kept in this browser); nothing is counted differently while it is off.
 const hud = el('debug-hud'), hudSwitch = el<HTMLInputElement>('debug-hud-on');
@@ -574,9 +537,8 @@ function updateHud() {
   const now = performance.now(), seconds = Math.max(0.25, (now - hudStart) / 1000);
   if (!hud.hidden) hud.textContent = hudLines({ width: painted ? canvas.width : 0, height: canvas.height, fps: hudFrames / seconds,
     hevc: display ? display.hevc : null, videoKbps: hudBytes * 8 / 1000 / seconds, decodeMs: video.decodeLatencyMs,
-    queue: video.decodeQueueSize, rttMs: lag.last, audio: audio.describe(), musicKbps: hudMusicBytes * 8 / 1000 / seconds,
-    playing: audio.isPlaying }, language === 'zh').join('\n');
-  hudFrames = 0; hudBytes = 0; hudMusicBytes = 0; hudStart = now;
+    queue: video.decodeQueueSize, rttMs: lag.last }, language === 'zh').join('\n');
+  hudFrames = 0; hudBytes = 0; hudStart = now;
 }
 window.setInterval(updateHud, 1000);
 render();fit();if(token) connection.connect();
@@ -585,15 +547,6 @@ nightSelect.onchange = () => { localStorage.setItem('f50-night-mode', nightSelec
 darkQuery.addEventListener('change', () => { syncNight(); render(); });
 window.setInterval(() => { syncNight(); if (panel.open) render(); }, 30000);
 
-// Bluetooth route (audio_route_navigation=bluetooth): the page has no sound of its own; say so where the slider was,
-// under a "Sound" title instead of "Prompt volume".
-if (!pageAudio) {
-  el('sound-settings').querySelectorAll<HTMLElement>(':scope > :not(#sound-on-car):not(#sound-title)').forEach(node => { node.hidden = true; });
-  el('sound-on-car').hidden = false;
-  el('sound-title').dataset.i18n = 'soundTitle';
-  document.querySelectorAll<HTMLElement>('[data-i18n="privacy"]').forEach(node => { node.hidden = true; });   // "tap for sound" does not apply
-  render();
-}
 // Native <select> lists are drawn by the car browser at the OS size; the rows open the page's own option sheet instead.
 attachPickers(panel, el<HTMLDialogElement>('picker'));
 // A second-level section (details) opened near the bottom of a short window unfolds below the fold: scroll it into

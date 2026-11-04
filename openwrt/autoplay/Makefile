@@ -7,12 +7,12 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=autoplay
-PKG_VERSION:=1.2.0
+PKG_VERSION:=1.3.0
 PKG_RELEASE:=1
 PKG_LICENSE:=GPL-3.0-only
 PKG_SOURCE:=autoplay-bundle-$(PKG_VERSION).tar
-# The fork's own releases (set the owner when AutoPlay publishes; the DashPlay bundles carry the old layout).
-PKG_SOURCE_URL:=https://github.com/yizhixiaoheigou/AutoPlay/releases/download/v$(PKG_VERSION)/
+# The fork's own releases (github.com/wz980305/AutoPlay; none is attached yet, so the bundle is built locally).
+PKG_SOURCE_URL:=https://github.com/wz980305/AutoPlay/releases/download/v$(PKG_VERSION)/
 # scripts/bump-autoplay.sh sets the hash of the release bundle; a local bundle (build-packages.sh) overrides it.
 PKG_HASH:=skip
 

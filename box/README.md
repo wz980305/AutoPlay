@@ -16,7 +16,7 @@
 
 ## 怎么装
 
-四个 apk 包（`autoplay`、`autoplay-jre`、`luci-app-autoplay` 和它的中文翻译）由仓库的 `openwrt/` 定义，用 OpenWrt 的 Docker SDK 打出来，推到盒子上 `apk add`，再跑一次 `python3 /opt/autoplay/board_zte_f50.py --setup` 让 F50 的蓝牙用上私有的 BlueZ（不要 `apk add bluez-daemon`），放好认证文件，重启服务。完整命令在 [安装使用说明](../交付资料/AutoPlay-1.2.0-安装使用说明.md) 和 [`openwrt/README.md`](../openwrt/README.md)。
+四个 apk 包（`autoplay`、`autoplay-jre`、`luci-app-autoplay` 和它的中文翻译）由仓库的 `openwrt/` 定义，用 OpenWrt 的 Docker SDK 打出来，推到盒子上 `apk add`，再跑一次 `python3 /opt/autoplay/board_zte_f50.py --setup` 让 F50 的蓝牙用上私有的 BlueZ（不要 `apk add bluez-daemon`），放好认证文件，重启服务。完整命令在 [安装使用说明](../交付资料/AutoPlay-1.3.0-安装使用说明.md) 和 [`openwrt/README.md`](../openwrt/README.md)。
 
 安装脚本（uci-defaults `90-autoplay-tesla`）会把 LAN 从 `192.168.77.1` 改成 **`100.96.0.1/24`**——特斯拉的浏览器打不开私网地址，100.64/10 这段可以——并把 5 GHz 无线设为中国区 CN / 信道 149：实车只在 149–165 上搜得到热点，而 mu300-linux 镜像的国家码 TR 没有这些信道。你在 LuCI 里改到 153–165 的信道会保留；SSID 和密码不动。
 
@@ -26,9 +26,9 @@
 2. 第一次使用，在设置页 `http://100.96.0.1:18080/` 点「添加 iPhone」，在 iPhone 的「设置 → 蓝牙」里点盒子的名字，两边核对六位配对码。之后 iPhone 靠近就会被蓝牙 iAP2 引导连上热点。
 3. 车机浏览器打开 `https://<你的域名>:18443/`（DuckDNS 名字或 DNSPod 托管的自有域名；没设域名时是 `https://autoplay.lan:18443/`，车机会报证书警告）。
 
-设置页能看到热点、盒子、iPhone 三者的状态，添加或删除 iPhone，看证书有效期和声音模式，下载诊断记录，恢复出厂设置；车机或手机打开 `http://100.96.0.2/` 也会转到它。OpenWrt 后台「服务 → AutoPlay」有四个标签页：网络、iPhone（含导航播报走哪里）、自己的网址（DuckDNS / DNSPod）、程序更新。
+设置页能看到热点、盒子、iPhone 三者的状态，添加或删除 iPhone，看证书有效期，下载诊断记录，恢复出厂设置；车机或手机打开 `http://100.96.0.2/` 也会转到它。OpenWrt 后台「服务 → AutoPlay」有四个标签页：网络、iPhone、自己的网址（DuckDNS / DNSPod）、程序更新。
 
-`/etc/config/autoplay` 一共十二项：开关、网页端口、空闲释放秒数、DNS 服务商、DuckDNS 名字和 token、自有域名和 DNSPod 的 ID 与 token、导航播报走哪里（默认 `bluetooth`：所有声音都走特斯拉蓝牙；`carplay`：页面播导航）、是否检查更新、更新镜像。网络仍由 OpenWrt 管。
+`/etc/config/autoplay` 一共十一项：开关、网页端口、空闲释放秒数、DNS 服务商、DuckDNS 名字和 token、自有域名和 DNSPod 的 ID 与 token、是否检查更新、更新镜像。声音没有选项：所有声音都走特斯拉蓝牙（1.1.0–1.2.0 的 `audio_route_navigation` 键升级时会被删掉，`docs/AUDIO.md`）。网络仍由 OpenWrt 管。
 
 每个状态都带一个原因词（蓝牙为什么没起来、证书还剩几天、程序为什么在重启），见 [docs/STATUS-MODEL.md](docs/STATUS-MODEL.md)。程序更新一页目前不能真的在线升级：`update.py` 校验发布签名，而项目还没有自己的发布密钥和软件源；升级按安装说明手动装新包，配对、证书、身份文件都保留在 `/opt/autoplay/` 下。
 
@@ -48,7 +48,7 @@ iPhone 只连接出示有效配件证书、并能用对应私钥签名的接收�
 程序包 `autoplay-bundle-<版本>.tar` 是 OpenWrt 包解开到 `/opt/autoplay` 的内容：先构建 `receiver/`（`./gradlew :server:installDist`，网页 `npm run build`），再在仓库根目录
 
 ```sh
-AUTOPLAY_VERSION=1.2.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
+AUTOPLAY_VERSION=1.3.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 ```
 
 它只打包 git 已提交的文件，另下载两份固定哈希的依赖：dbus-next 0.2.3（蓝牙桥接）和 acme.sh 3.1.6 连同 DuckDNS 与 DNSPod 两个 DNS 钩子（证书）。
@@ -57,7 +57,7 @@ AUTOPLAY_VERSION=1.2.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 
 ```sh
 cd box
-python3 -m unittest discover -s tests/onecloud      # 238 个
+python3 -m unittest discover -s tests/onecloud      # 237 个
 python3 -m unittest discover -s tests/bluetooth     # test_bluez / test_recovery 需要 dbus-next
 ```
 

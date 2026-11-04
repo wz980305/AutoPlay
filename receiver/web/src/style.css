@@ -20,7 +20,6 @@ button:disabled { opacity:.45; cursor:default; }
 [hidden] { display:none !important; }
 .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
 .ico { width:1.4rem; height:1.4rem; flex:none; display:block; }
-.ico.dim { color:var(--secondary); }
 
 /* Pinned to the window's edges, not 100vh/100dvh: a car browser kept 100dvh at 641 px after fullscreen changes
    while the window was 579, and CarPlay's bottom row (home button) went below the screen (2026-10-13). */
@@ -68,9 +67,12 @@ button.cell:disabled { opacity:1; color:var(--secondary); }
 .cell .main b { display:block; font-weight:500; }
 .cell .main span { display:block; color:var(--secondary); font-size:1rem; line-height:1.45; margin-top:.25rem; }
 .cell .value { color:var(--secondary); font-size:1rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; max-width:45%; }
+/* Icon tiles (iOS Settings): every row and every category carries one, a white glyph on a coloured rounded square. */
 .tile { width:2rem; height:2rem; flex:none; border-radius:.45rem; display:grid; place-items:center; color:#fff; }
 .tile .ico { width:1.25rem; height:1.25rem; }
 .tile.blue { background:var(--tint); } .tile.green { background:var(--green); } .tile.gray { background:var(--gray); }
+.tile.indigo { background:#5E5CE6; } .tile.orange { background:#FF9F0A; } .tile.purple { background:#BF5AF2; }
+.tile.red { background:var(--red); } .tile.teal { background:#30B0C7; } .tile.dark { background:#636366; }
 .chev { flex:none; display:block; }
 .chev::after { content:""; display:block; width:.5rem; height:.5rem; margin-right:.25rem; border:solid rgba(235,235,245,.55); border-width:0 2px 2px 0; transform:rotate(-45deg); }
 details[open] > summary .chev::after { transform:rotate(45deg); }
@@ -81,16 +83,16 @@ summary { list-style:none; } summary::-webkit-details-marker { display:none; }
 .foot + .group { margin-top:var(--space-4); }
 .inner { padding:var(--space-2) var(--space-3) var(--space-3); }
 .inner.text p { color:var(--secondary); font-size:var(--t-caption); line-height:1.5; margin:0 0 var(--space-1); overflow-wrap:anywhere; }
-/* Advanced: the switch rows and the form inside one details, separated like the group's own cells; captions allowed. */
-.inner.advanced { padding:0 0 var(--space-3); }
+/* Advanced: the codec row and the switch rows inside one details, separated like the group's own cells; captions allowed. */
+.inner.advanced { padding:0; }
 .inner.advanced > .cell { padding-left:var(--space-3); padding-right:var(--space-3); }
-.inner.advanced > .cell + .cell, .inner.advanced > form { border-top:.5px solid var(--sep); }
-.inner.advanced > form { padding:var(--space-2) var(--space-3) 0; }
-.inner.advanced > .foot { margin-top:var(--space-2); }
-.inner.advanced .cell .main span, .inner.advanced .foot { font-size:var(--t-caption); }
+.inner.advanced > :not([hidden]) ~ :not([hidden]) { border-top:.5px solid var(--sep); }   /* the hidden <select> behind a choice row is skipped */
 /* Choice rows (picker.ts): the row is a button showing the current option; the <select> behind it is hidden and only
    holds the value. A native <select> list is drawn by the car browser at the OS size, outside this scale. */
-.select-row .value { margin-left:auto; font-size:var(--t-body); max-width:55%; }
+/* As iOS lays a row out: the label keeps its line, the value takes what is left and is cut with an ellipsis. */
+.select-row .main { flex:0 0 auto; }
+.select-row .main b { white-space:nowrap; }
+.select-row .value { flex:1 1 auto; min-width:3em; margin-left:auto; text-align:right; font-size:var(--t-body); max-width:none; }
 .select-row:disabled { color:var(--secondary); }
 .select-row:disabled .chev { opacity:.4; }
 
@@ -102,10 +104,6 @@ summary { list-style:none; } summary::-webkit-details-marker { display:none; }
 .switch:checked { background:var(--green); }
 .switch:checked::after { transform:translateX(1.2rem); }
 
-.volume { gap:var(--space-2); }
-.volume input[type=range] { flex:1; min-width:0; height:var(--hit-secondary); margin:0; accent-color:#fff; }
-.volume output { min-width:3.2em; text-align:right; color:var(--secondary); font-variant-numeric:tabular-nums; }
-
 .btn { display:block; width:100%; min-height:var(--hit-primary); margin:var(--space-2) 0 0; padding:var(--space-2) var(--space-3); border:0; border-radius:var(--radius); background:var(--tint-under-white);
   color:#fff; font-weight:600; font-size:var(--t-body); text-align:center; transition:transform .1s ease-out; }
 .btn:active { transform:scale(.97); }
@@ -113,13 +111,6 @@ summary { list-style:none; } summary::-webkit-details-marker { display:none; }
 button.text { background:none; border:0; color:var(--tint); font-size:var(--t-body); font-weight:600; padding:var(--space-1) var(--space-2); min-height:var(--hit-secondary); min-width:var(--hit-primary); }
 button.text:active { opacity:.5; }
 fieldset { border:0; padding:0; margin:0; min-width:0; }
-.pair { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-2); margin:0 0 var(--space-2); }
-.pair label { display:flex; flex-direction:column; gap:.3rem; color:var(--secondary); font-size:1rem; }
-.pair input, .pair select { width:100%; min-width:0; max-width:none; min-height:var(--hit-secondary); padding:.4rem var(--space-2); border:0; border-radius:var(--radius);
-  background:var(--cell-hi); color:var(--label); font-size:var(--t-body); text-align:left; }
-#fallback-controls { display:flex; flex-wrap:wrap; gap:var(--hit-gap); }
-#fallback-controls button { min-height:var(--hit-primary); min-width:var(--hit-primary); padding:var(--space-1) var(--space-3); border:0; border-radius:var(--radius); background:var(--cell-hi); font-size:var(--t-body); }
-#fallback-controls button:active { background:var(--press); }
 
 /* Notices over the live picture: a plain translucent fill with an edge, never a blur (a backdrop-filter above the
    canvas costs the low-latency path, media_performance_audit #8). The toast sits bottom-centre, away from CarPlay's
@@ -133,16 +124,6 @@ fieldset { border:0; padding:0; margin:0; min-width:0; }
   padding:.3rem .5rem; border-radius:.4rem; background:rgba(0,0,0,.6); color:#fff; pointer-events:none; white-space:pre;
   font:var(--t-mono)/1.45 ui-monospace,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums; }
 #debug-hud[hidden] { display:none; }
-/* Sound unlock (viewer audit V7): in a Tesla the navigation prompts come through this page, and the browser plays
-   nothing before a tap; every reload (the borderless hop, the 15 s reload) loses that again. So: a full-width bar at the
-   very bottom edge (the picture fills the view, there is no chrome strip to put it in), large, that says "anywhere",
-   pulses once when it appears, and shows only while the AudioContext is suspended AND a stream this page plays
-   (type 100/101/102) has arrived; a car that routes everything over Bluetooth never sees it. */
-.unlock-bar { position:absolute; left:0; right:0; bottom:0; margin:0; padding:var(--space-3) var(--space-4) max(var(--space-3),env(safe-area-inset-bottom)); border:0;
-  border-top:1px solid var(--overlay-edge); background:var(--overlay); color:#fff; font-size:1.55rem; line-height:1.3; font-weight:600;
-  text-align:center; box-shadow:0 -8px 30px rgba(0,0,0,.35); animation:pulse .7s ease-out 1; }
-.unlock-bar:active { background:rgba(44,44,46,.95); }
-@keyframes pulse { 0% { transform:translateY(12px); opacity:0; } 60% { transform:translateY(-3px); opacity:1; } 100% { transform:none; } }
 @keyframes drop { from { opacity:0; transform:translate(-50%,10px); } }
 #error-banner { position:absolute; bottom:max(var(--space-3),env(safe-area-inset-bottom)); left:var(--space-3); right:var(--space-3); max-width:36rem; max-height:40vh; margin:auto;
   overflow:auto; padding:var(--space-2) var(--space-3); border-radius:var(--radius); background:var(--cell); box-shadow:inset 4px 0 var(--red), 0 8px 30px rgba(0,0,0,.4); }
@@ -168,24 +149,22 @@ button.text { border-radius:var(--radius); background:var(--cell); color:var(--l
 .settings-notices { flex:none; max-height:28vh; overflow:auto; }
 #settings-notices > #toast, #settings-notices > #error-banner { position:relative; inset:auto; transform:none; max-width:none; max-height:none;
   margin:var(--space-2) var(--space-4); animation:none; }
-.settings-layout { display:grid; grid-template-columns:12rem minmax(0,1fr); gap:var(--space-4); width:100%; max-width:1440px; margin:0 auto; flex:1; min-height:0;
+.settings-layout { display:grid; grid-template-columns:11rem minmax(0,1fr); gap:var(--space-4); width:100%; max-width:1440px; margin:0 auto; flex:1; min-height:0;
   padding:var(--space-3) max(var(--space-4),env(safe-area-inset-right)) 0 max(var(--space-4),env(safe-area-inset-left)); }
 .settings-nav { display:flex; flex-direction:column; gap:var(--space-2); padding-top:.25rem; overflow:auto; padding-bottom:var(--space-3); }
-.settings-nav button { flex:none; min-height:var(--hit-primary); border:0; border-radius:var(--radius); padding:var(--space-2) var(--space-3);
+.settings-nav button { flex:none; display:flex; align-items:center; gap:var(--space-2); min-height:var(--hit-primary); border:0; border-radius:var(--radius); padding:var(--space-2) var(--space-3);
   font-weight:500; text-align:left; background:var(--cell); color:var(--label); }
-.settings-nav button[aria-current=page] { background:#fff; color:#111; }
+/* The chosen category as the iPad's Settings sidebar shows it: the tint fills the row. */
+.settings-nav button[aria-current=page] { background:var(--tint); color:#fff; }
 .settings-nav button:active { background:var(--press); color:#fff; }
 .settings-body { min-width:0; overflow:auto; overscroll-behavior:contain; padding:0 .2rem max(var(--space-4),env(safe-area-inset-bottom)); scrollbar-gutter:stable; }
 .settings-page > .group-title:first-child { margin-top:.25rem; }
-.settings-page .page-note { margin-top:var(--space-4); }
 .spaced { margin-top:var(--space-3); }
 .picture-form { padding-bottom:var(--space-3); }
-.picture-form .pair { margin:var(--space-3) var(--space-3) 0; }
 .picture-form .btn { width:calc(100% - 2 * var(--space-3)); margin:var(--space-3) var(--space-3) 0; }
 #display-status { overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
 #display-status:not(:empty) { padding-top:var(--space-3); border-top:1px solid var(--sep); }
-#ui-hint { margin-top:0; }
-#night-schedule-hint { margin-top:var(--space-2); }
+#display-status:empty { display:none; }   /* no hairline under the button while nothing is happening (1.3.0) */
 
 /* Option sheet (picker.ts): the options as the page's own rows, centred over the dimmed settings page, sized to the
    list (at most the window less a margin; a longer list scrolls inside), Cancel under them. */
@@ -211,13 +190,12 @@ dialog.picker::backdrop { background:rgba(0,0,0,.6); }
   dialog header { padding-left:var(--space-3); padding-right:var(--space-3); }
   .settings-layout { display:flex; flex-direction:column; gap:var(--space-2); padding:var(--space-2) var(--space-3) 0; }
   .settings-nav { flex:none; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--space-1); padding:0 .2rem .2rem 0; overflow:visible; }
-  .settings-nav button { min-width:0; padding:var(--space-1); font-size:1rem; text-align:center; overflow-wrap:anywhere; }
+  .settings-nav button { min-width:0; padding:var(--space-1); gap:var(--space-1); justify-content:center; font-size:1rem; text-align:center; overflow-wrap:anywhere; }
+  .settings-nav .tile { width:1.6rem; height:1.6rem; } .settings-nav .tile .ico { width:1rem; height:1rem; }
   .settings-body { flex:1; min-height:0; }
   h2 { font-size:1.4rem; }
 }
 @media (max-width:480px) {
-  .select-row .value { max-width:45%; }
-  .pair { grid-template-columns:1fr; }
   dialog.picker { width:calc(100% - 2 * var(--space-3)); }
 }
 
@@ -225,5 +203,5 @@ dialog.picker::backdrop { background:rgba(0,0,0,.6); }
   *, *::before, *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
 }
 @media (prefers-reduced-transparency:reduce) {
-  .capsule, .unlock-bar, #recovering .notice, header { background:#2C2C2E; }
+  .capsule, #recovering .notice, header { background:#2C2C2E; }
 }

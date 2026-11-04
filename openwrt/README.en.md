@@ -10,7 +10,7 @@ The three packages of [AutoPlay](../box/README.en.md) for the ZTE F50 (OpenWrt 2
 
 > **Not an Apple-certified product.** It needs the accessory identity you supply: [box/README.en.md](../box/README.en.md#accessory-identity).
 
-Prerequisite: an F50 already flashed to OpenWrt following [mu300-linux](https://github.com/dikeckaan/mu300-linux)'s own documentation (the unit we verified shipped with stock B13; this repository gives no flashing steps). Packages are installed by hand as below; the full procedure is in the [install guide](../交付资料/AutoPlay-1.2.0-安装使用说明.md) (Chinese).
+Prerequisite: an F50 already flashed to OpenWrt following [mu300-linux](https://github.com/dikeckaan/mu300-linux)'s own documentation (the unit we verified shipped with stock B13; this repository gives no flashing steps). Packages are installed by hand as below; the full procedure is in the [install guide](../交付资料/AutoPlay-1.3.0-安装使用说明.md) (Chinese).
 
 ## Installing by hand
 
@@ -27,7 +27,7 @@ At install time (uci-defaults `90-autoplay-tesla` and the postinst):
 
 - sets the LAN to `100.96.0.1/24` (RFC 6598 shared address space, which the Tesla browser opens) with gateway and DNS in DHCP; a LAN on another address is changed, and car and phone reconnect once;
 - sets the 5 GHz radio to country CN, channel 149 (the car only finds the hotspot on 149–165, which the mu300-linux image's country code TR does not have); a channel already within 149–165 is kept, SSID and password are untouched;
-- removes the DashPlay-era uci options and dhcp records, leaving twelve options: `enabled`, `viewer_port`, `idle_release`, `dns_provider`, `duckdns_domain`, `duckdns_token`, `own_domain`, `dnspod_id`, `dnspod_token`, `audio_route_navigation`, `update_check`, `update_mirror`;
+- removes the DashPlay-era uci options and dhcp records (and 1.1.0–1.2.0's `audio_route_navigation`), leaving eleven options: `enabled`, `viewer_port`, `idle_release`, `dns_provider`, `duckdns_domain`, `duckdns_token`, `own_domain`, `dnspod_id`, `dnspod_token`, `update_check`, `update_mirror`;
 - when coming from DashPlay, moves `/opt/dashplay/{state,identity}` and the private BlueZ root to `/opt/autoplay` and copies the options from `/etc/config/dashplay` (`autoplay` and `dashplay` conflict; the online update removes the old packages first);
 - primes Java's AppCDS archive, which saves a few seconds at boot.
 
@@ -39,7 +39,7 @@ The F50 runs a vendor 5.4 kernel; OpenWrt's `bluez-daemon` pulls in 6.12 kernel 
 
 - Settings page: `http://100.96.0.1:18080/` (`http://100.96.0.2/` redirects there).
 - Car browser: `https://<your domain>:18443/` — a DuckDNS name or your own domain hosted at Tencent DNSPod, both with a Let's Encrypt certificate and no warning; without a domain it is `https://autoplay.lan:18443/`, with a certificate warning.
-- LuCI Services → AutoPlay: overview (one line each for Bluetooth, iPhone, certificate and update, with the reason); "network" shows the AP and the subnet; "iPhone" invites or removes and chooses where navigation prompts play; "Own address" picks DuckDNS or DNSPod and takes the credentials; "Program update" checks, upgrades, sets the mirror.
+- LuCI Services → AutoPlay: overview (one line each for Bluetooth, iPhone, certificate and update, with the reason); "network" shows the AP and the subnet; "iPhone" invites or removes and sets the idle release; "Own address" picks DuckDNS or DNSPod and takes the credentials; "Program update" checks, upgrades, sets the mirror.
 - The Tesla's Wi-Fi needs "stay connected while driving", otherwise it drops the Wi-Fi as soon as the car leaves Park. If the car cannot see the AP, check in LuCI → Network → Wireless that the 5 GHz radio is on 149–165 (set to CN / 149 at install).
 
 Status and reason words: [box/docs/STATUS-MODEL.md](../box/docs/STATUS-MODEL.md).

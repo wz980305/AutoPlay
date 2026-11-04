@@ -29,7 +29,7 @@ state = root / "state"
 
 BASE = dict(mode="openwrt", ssid="AutoPlay-5G", home="http://100.96.0.1:18080/", identity=True,
             entries=["https://car.example.com:18443/", "https://100.96.0.1:18443/"], name="car.example.com",
-            own_name="car.example.com", version="1.2.0", audio_route="bluetooth")
+            own_name="car.example.com", version="1.3.0")
 PHONES = {"02:00:00:00:00:01": "小王的 iPhone", "02:00:00:00:00:02": "家人的 iPhone"}
 LIVE = {"bluetooth": ("on", None), "identity": ("provided", None), "phone": ("live", None),
         "certificate": ("ok", None, {"not_after": "2027-01-28"}), "uplink": ("online", None)}
@@ -67,7 +67,7 @@ states = {
     "fresh": make({"identity": False}, cert={"bluetooth": ("on", None), "identity": ("missing", None),
                                             "certificate": ("issuing", "route")}),
     "live": make({}, devices=PHONES, presence={"active": "02:00:00:00:00:01", "last_phone": "02:00:00:00:00:02"},
-                 cert={**LIVE, "update": ("available", None, {"version": "1.3.0"})}),
+                 cert={**LIVE, "update": ("available", None, {"version": "1.4.0"})}),
     "pair-waiting": make({}, pair={"phase": "waiting", "found": [{"address": "02:00:00:00:00:03", "name": "iPhone 15 Pro"}], "error": ""},
                          cert={"bluetooth": ("on", None), "identity": ("provided", None)}),
     "pair-confirm": make({}, pair={"phase": "confirm", "name": "iPhone 15 Pro", "passkey": "482913", "request_id": "r1"},
@@ -78,7 +78,7 @@ states = {
     "ask-remove": make({}, devices=PHONES, presence={"active": "02:00:00:00:00:01"}, cert=LIVE,
                        query="ask=remove&phone=02%3A00%3A00%3A00%3A00%3A02"),
     "ask-install": make({}, devices=PHONES, cert=LIVE, query="ask=install",
-                        update_check={"available": True, "online": True, "latest": "1.3.0", "current": "1.2.0",
+                        update_check={"available": True, "online": True, "latest": "1.4.0", "current": "1.3.0",
                                       "checked_at": 1_793_500_000, "notes": "修复若干问题"}),
 }
 states["live-open"] = unfold(make({}, devices=PHONES, presence={"active": "02:00:00:00:00:01", "last_phone": "02:00:00:00:00:02"},

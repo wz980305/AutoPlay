@@ -10,16 +10,16 @@
 # 本仓库的工具
 python3 -m unittest discover -s tools/f50
 python3 -m unittest discover -s openwrt/tests      # 安装脚本 90-autoplay-tesla 对着假 uci（1.0.1）
-# 1.1.0 的四个 Kotlin 改动未在编写环境编译：./gradlew build 是上车前的第一步（receiver/docs/UNVERIFIED-KOTLIN.md）
+# 1.1.0–1.3.0 的 Kotlin 改动未在编写环境编译：./gradlew build 是上车前的第一步（receiver/docs/UNVERIFIED-KOTLIN.md）
 
 # 盒子侧：设置页、状态模型、守护（supervision）、升级日志与回滚、证书退避、时钟下限、出厂重置、平台、诊断、装机脚本
-cd box && python3 -m unittest discover -s tests/onecloud        # 238 个（删除上游刷机脚本的测试后），通过
+cd box && python3 -m unittest discover -s tests/onecloud        # 237 个（1.3.0：声音格的测试换成"无声音分组、无在线横幅"），通过
 
 # 蓝牙桥：test_reason、test_relay 等 7 个可直接跑；test_bluez、test_recovery 需要 dbus-daemon 和 dbus-next 0.2.3
 cd box && python3 -m unittest discover -s tests/bluetooth       # 没有 dbus-next 时那两个模块报 import 错误，是环境问题
 ```
 
-测试身份全是合成数据。裁剪前后的基线在 `box/docs/TEST-BASELINE.md`（375 → 225 是删掉的 Debian/N1/有线/STA 测试减去新模块的测试；1.2.0 为 263，删除上游刷机脚本及其 4 个测试文件后为 238）。
+测试身份全是合成数据。裁剪前后的基线在 `box/docs/TEST-BASELINE.md`（375 → 225 是删掉的 Debian/N1/有线/STA 测试减去新模块的测试；1.2.0 为 263，删除上游刷机脚本及其 4 个测试文件后为 238，1.3.0 为 237）。
 
 ### 投屏页（无浏览器）
 
@@ -31,7 +31,7 @@ npm test
 node scripts/build-esbuild.mjs                                   # 或 npm run build
 ```
 
-### 两张页面的截图（1.2.0，`docs/UI-1.2.0.md`）
+### 两张页面的截图（1.2.0 起，`docs/UI-1.2.0.md`、`docs/UI-1.3.0.md`）
 
 ```sh
 cd receiver/web && npm run build:offline
@@ -41,15 +41,15 @@ CHROME=/path/to/chromium node scripts/ui-shots.mjs out/ui-shots [viewer|box]  # 
 
 需要 `playwright-core` 和一个 Chromium；全部本地 mock，不碰盒子和手机。每个形状打印标签/说明字号、行高和有无横向溢出。
 
-五个检查脚本（`check`、`check-audio`、`check-car`、`check-browser`、`check-runtime`，0.1.1 起）用 `typescript` 即时编译被测模块，在 Node 里模拟 DOM 表面：输入控制器（含 30ms 最短按压、补发抬起）、音频时间线、车载模式和特斯拉默认值、状态提示（`status.ts`）、duck 渐变、浏览器检测。`check-flac.mjs` 随有线代码删除。这三步在 0.1.0 合并时都通过。
+四个检查脚本（`check`、`check-car`、`check-browser`、`check-runtime`，0.1.1 起；`check-audio` 随页面音频于 1.3.0 删除）用 `typescript` 即时编译被测模块，在 Node 里模拟 DOM 表面：输入控制器（含 30ms 最短按压、补发抬起、绝不聚焦画布）、车载模式和特斯拉默认值、状态提示（`status.ts`）、页内选项表、浏览器检测。`check-flac.mjs` 随有线代码删除。这三步在 0.1.0 合并时都通过。
 
 ### 接收端
 
 ```sh
-cd receiver && ./gradlew build          # 编译两个模块并跑测试；0.1.1 完成过，1.1.0/1.2.0 的改动还没编译
+cd receiver && ./gradlew build          # 编译两个模块并跑测试；0.1.1 完成过，1.1.0–1.3.0 的改动还没编译
 ```
 
-见 `docs/BUILD.md`：1.1.0 和 1.2.0 的 Kotlin 改动未编译，第一次跑之前先读 `receiver/docs/UNVERIFIED-KOTLIN.md`，它按文件列出了改动和风险。
+见 `docs/BUILD.md`：1.1.0 到 1.3.0 的 Kotlin 改动未编译，第一次跑之前先读 `receiver/docs/UNVERIFIED-KOTLIN.md`，它按文件列出了改动和风险。
 
 ### 探测页渲染
 
@@ -88,7 +88,8 @@ sh -n openwrt/autoplay/files/autoplay.init && sh -n box/scripts/build-bundle.sh
 - [ ] 夏天暴晒停车后上车，5 分钟内恢复正常，或者明确提示过热
 - [ ] 随机断电 200 次，零配对丢失、零文件系统错误（台架完成即可）
 - [ ] 进隧道 SIM 掉线时 CarPlay 不受影响（上游 10.25 已修，作为回归项）
-- [ ] 默认 `bluetooth` 模式：导航播报从车机扬声器出来、第一个字没被吃、播报时 iPhone 自己压低音乐；`carplay` 模式：页面播报时压低音乐；通话无回声（走车载蓝牙）
+- [ ] 声音全走蓝牙：导航播报从车机扬声器出来、第一个字没被吃、播报时 iPhone 自己压低音乐；通话无回声（走车载蓝牙）
+- [ ] 从后台拉回浏览器十次，屏幕键盘不再出现（1.3.0，`docs/UI-1.3.0.md` §六）
 
 阶段 1 的基线复现标准（技术路径 §六）：上电到出画面 ≤45 秒；触摸到画面 ≤200ms；≥30fps；连续 30 分钟音频不断；暴晒下 SoC <85°C；连续 10 次点火都能自动重连。
 
@@ -100,7 +101,7 @@ sh -n openwrt/autoplay/files/autoplay.init && sh -n box/scripts/build-bundle.sh
 
 1. 封面排空：音乐走车载蓝牙时 iPhone 仍发起封面文件传输，排空线程必须让隧道活过 256 次传输；长途多次切歌后看日志里有没有 `iAP2 received-file queue limit exceeded`。
 2. iOS 27 深浅色：iOS 27 手机上夜间模式能切换（日志 `appearance updates=true`），iOS 26 仍靠 `setNightMode`；2,2 / 1,1 的取值来自 dashplay-tesla 的实车观察，Apple 没有文档。
-3. duck/unduck（仅 `carplay` 模式有意义）：`grep 'audio duckAudio'` 看 iPhone 发来的原始 `volume`，dB 到线性的映射在有日志之前是猜的。
+3. duck/unduck：页面不再有可压低的声音（1.3.0），`grep 'audio duckAudio'` 只用来确认 iPhone 仍把压低音乐的事交给了蓝牙那边。
 4. 配对存储：第一次新配对后 `state/receiver/pairings.properties.bak` 出现；故意清空主文件后下次启动要回退到 `.bak`。
 5. DSCP：盒子上 `tcpdump -v` 看 18443 的流量 TOS 是否 0x88。
 6. 触摸释放：手指按着时挂倒挡冻结页面，日志应出现 `viewer client=N paused with a finger down: lifting it`，iPhone 上不能留下按住的按钮。

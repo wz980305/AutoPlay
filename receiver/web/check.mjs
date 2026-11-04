@@ -30,7 +30,9 @@ globalThis.window = {
 };
 const fireTimers = () => { for (const timer of timers.splice(0)) timer?.handler(); };
 const surface = Object.assign(new Element(), {
-  inert: false, style: {}, focus() {}, setPointerCapture() {},
+  inert: false, style: {}, setPointerCapture() {},
+  // 1.3.0: a focused element is what a car browser raises its keyboard for; the controller must never focus the surface.
+  focus() { throw new Error('InputController focused the surface'); },
   addEventListener: window.addEventListener, removeEventListener: window.removeEventListener,
   getBoundingClientRect: () => rect,
 });
@@ -108,4 +110,4 @@ assert.equal(messages.at(-1).contacts[0].down, false, 'nothing more to lift send
 controller.reset();
 controller.detach();
 assert.equal(listeners.size, 0);
-console.log('Viewer input check passed: keyboard isolation, native controls, portrait/landscape coordinates, multi-touch, minimum press, and release.');
+console.log('Viewer input check passed: keyboard isolation, no focus on the surface, native controls, portrait/landscape coordinates, multi-touch, minimum press, and release.');

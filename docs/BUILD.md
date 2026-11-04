@@ -2,7 +2,7 @@
 
 三个可构建的部分：接收端（JVM）、投屏页（web）、OpenWrt 包（apk）。盒子上的 Python（`box/`）不需要构建，但要打进程序包。
 
-> **构建状态：** 0.1.1 用 Temurin 21.0.13 与 Gradle 9.5.0 完成过构建和测试，1.0.0 在车上跑通；1.1.0 和 1.2.0 对接收端 Kotlin 的改动在没有 Gradle 网络的环境里写成，还没有编译——`receiver/docs/UNVERIFIED-KOTLIN.md` 是现行清单，`./gradlew build` 是第一步。
+> **构建状态：** 0.1.1 用 Temurin 21.0.13 与 Gradle 9.5.0 完成过构建和测试，1.0.0 在车上跑通；1.1.0 到 1.3.0 对接收端 Kotlin 的改动在没有 Gradle 网络的环境里写成，还没有编译——`receiver/docs/UNVERIFIED-KOTLIN.md` 是现行清单，`./gradlew build` 是第一步。
 
 ## 1. 接收端（`receiver/`）
 
@@ -45,7 +45,7 @@ esbuild 的产物不压缩、入口固定为 `assets/boot.js`；标记和 CSS �
 ```sh
 cd receiver/web
 tsc --noEmit -p tsconfig.offline.json   # 只查 src/（tsconfig.json 还覆盖 vite.config.ts，需要 node_modules/vite）
-node check.mjs && node check-audio.mjs && node check-car.mjs && node check-browser.mjs
+node check.mjs && node check-car.mjs && node check-browser.mjs && node check-runtime.mjs   # 或 npm test
 ```
 
 `check*.mjs` 以裸模块名导入 `typescript`。没有 `npm install` 时，把预装的拷贝软链进来（`node_modules/` 在 `.gitignore` 里）：
@@ -54,14 +54,14 @@ node check.mjs && node check-audio.mjs && node check-car.mjs && node check-brows
 mkdir -p node_modules && ln -sfn /opt/npm-tools/node_modules/typescript node_modules/typescript
 ```
 
-页面的常量在 `src/flags.ts`（`CAR_MUSIC`、`TESLA`、`PAGE_PLAYS_MUSIC`（1.1.0 起恒为 false，原 `MUSIC_ELEMENT` 随音乐路径一起删除）、`PROMPT_BOOST`），改默认值不需要改盒子。`tools/probe/index.html` 不需要构建，是单文件。
+页面的常量在 `src/flags.ts`（1.3.0 起只剩 `TESLA`；声音的常量随页面音频一起删除，`docs/AUDIO.md`），改默认值不需要改盒子。`tools/probe/index.html` 不需要构建，是单文件。
 
 ## 3. 程序包（`box/`）
 
 OpenWrt 包解开到 `/opt/autoplay` 的内容是 `autoplay-bundle-<版本>.tar`，由 `box/scripts/build-bundle.sh` 从本仓库打出（先完成第 1、2 节）：
 
 ```sh
-AUTOPLAY_VERSION=1.2.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar      # RECEIVER=<路径> 指定接收端构建目录，默认 ../receiver
+AUTOPLAY_VERSION=1.3.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar      # RECEIVER=<路径> 指定接收端构建目录，默认 ../receiver
 ```
 
 需要主机上有：接收端的 `installDist` 产物和 `web/dist/`、`javac` 21、pip、curl、unzip。它从经过审核的源码目录枚举顶层 Python 模块（不再依赖 `.git`，新增模块不会遗漏），另下载两份固定哈希的依赖：dbus-next 0.2.3（蓝牙桥）和 acme.sh 3.1.6 连同 DuckDNS、DNSPod 两个 DNS 钩子（证书）；`scan-sensitive.py` 的检查会拒绝打进个人文件。

@@ -223,9 +223,9 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             oemLabel = "盒子设置",
             icons = listOf(AirPlayIcon(180, 180, checkNotNull(javaClass.getResourceAsStream("/f50-settings.png")).use { it.readBytes() })),
             appearanceUpdates = appearanceUpdatesFor(selectedPhone),
-            // audio_route_navigation=bluetooth: no audioFormats/audioLatencies and no audio feature bits, so the
-            // iPhone sets up no audio stream and plays everything itself or on the Tesla's Bluetooth (docs/AUDIO.md).
-            disableAudioOutput = config.audioOverBluetooth,
+            // No audioFormats/audioLatencies and no audio feature bits (1.3.0, always): the iPhone sets up no audio
+            // stream and plays everything itself or on the Tesla's Bluetooth (docs/AUDIO.md, ADR-16).
+            disableAudioOutput = true,
         )
 
     private val listener = object : AirPlaySessionListener {

@@ -71,7 +71,8 @@ export class InputController {
       this.lift(event.pointerId);
     }
     if (this.pointers.size >= MAX_CONTACTS) return;
-    this.surface.focus({ preventScroll: true });
+    // Never focus the surface (1.3.0): the keys are read on window, and a focused element is what a car browser
+    // raises its on-screen keyboard for when it brings the page back (main.ts dropStrayFocus).
     this.surface.setPointerCapture(event.pointerId);
     const x = this.normalizeX(event.clientX), y = this.normalizeY(event.clientY);
     const now = performance.now();

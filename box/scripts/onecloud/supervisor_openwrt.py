@@ -61,16 +61,13 @@ DEFAULTS = {"enabled": "1",
             # A Tencent Cloud (DNSPod) name instead: dns_provider=dnspod with a full domain and the DNSPod API
             # ID/token; the certificate is issued with a DNS-01 challenge through acme.sh's dns_dp hook.
             "dns_provider": "", "own_domain": "", "dnspod_id": "", "dnspod_token": "",
-            # Where navigation prompts play (docs/AUDIO.md, ADR-14; DashPlay 2026.10.31's names). bluetooth (default):
-            # the receiver offers the iPhone no audio at all, so every sound, navigation included, plays on the Tesla's
-            # Bluetooth and the page is silent. carplay: the page plays navigation prompts (music, Siri and calls are on
-            # the Tesla's Bluetooth either way); the fallback when prompts are not heard over Bluetooth.
-            "audio_route_navigation": "bluetooth",
             # Look for a new release once a day (update.py; installed only when someone clicks it), and the URL
             # prefixes tried after GitHub (read by update.py itself).
             "update_check": "1", "update_mirror": ""}
+# Every sound is on the Tesla's Bluetooth since 1.3.0 (docs/AUDIO.md, ADR-16): audio_route_navigation (1.1.0-1.2.0)
+# joined the keys a box upgraded from an older release may still carry; it is ignored and removed on upgrade.
 OBSOLETE_OPTIONS = ("wifi", "settings_port", "java", "name", "bluetooth_service", "dbus_address", "public_ipv6",
-                    "shared_lan", "car_music", "car_voice", "tesla_mode", "answer_tesla_checks",
+                    "shared_lan", "car_music", "car_voice", "tesla_mode", "answer_tesla_checks", "audio_route_navigation",
                     "external_ssid", "external_key", "external_security", "external_channel", "external_network")
 
 # Constants of the Tesla-only box (no uci key): D1, D4, D8, D11, D14.
@@ -269,28 +266,14 @@ def plan_of(network):
     return (network["ssid"], network["key"], network["security"], network["channel"], str(network["address"].ip))
 
 
-AUDIO_ROUTES = ("carplay", "bluetooth")
-
-
-def audio_route_of(config, say=None):
-    """uci audio_route_navigation, or bluetooth (the default) for anything else (said once, never fatal)."""
-    value = (config.get("audio_route_navigation") or "bluetooth").strip().lower()
-    if value not in AUDIO_ROUTES:
-        if say:
-            say(f"autoplay.main.audio_route_navigation={value!r} is not carplay or bluetooth: every sound stays on the Tesla's Bluetooth")
-        return "bluetooth"
-    return value
-
-
-def receiver_command(root, network, handoff_file, viewer, idle_release, wireless=True, wait=False, audio_route="bluetooth"):
-    """run-receiver.py's command line. Tesla mode is constant (D8): --tesla makes the receiver offer no
-    microphone, no calls and no Siri, and the page play prompts louder. audio_route (uci audio_route_navigation):
-    bluetooth offers the iPhone no audio at all (docs/AUDIO.md)."""
+def receiver_command(root, network, handoff_file, viewer, idle_release, wireless=True, wait=False):
+    """run-receiver.py's command line. Tesla mode is constant (D8): --tesla makes the receiver offer the iPhone no
+    audio at all (every sound on the Tesla's Bluetooth, docs/AUDIO.md) and no microphone."""
     return [sys.executable, str(root / "run-receiver.py"), "--root", str(root), "--bind", str(network["address"].ip),
             "--channel", str(network["channel"]), "--security", network["security"],
             "--hotspot", str(handoff_file), "--interface", network["device"], "--web-host", "0.0.0.0",
             "--java", JAVA, "--settings-port", str(SETTINGS_PORT), "--viewer-port", str(viewer),
-            "--idle-release", str(idle_release), "--tesla", "--audio-route-navigation", audio_route] \
+            "--idle-release", str(idle_release), "--tesla"] \
         + ([] if wireless else ["--no-wireless"]) + (["--bind-wait", "120"] if wait else [])
 
 
@@ -557,7 +540,6 @@ def main():
     if viewer == SETTINGS_PORT or not viewer_port.valid(viewer):
         raise ValueError("Invalid autoplay.main.viewer_port")
     idle_release = int(config["idle_release"]) if config["idle_release"].isdigit() else 300
-    audio_route = audio_route_of(config, lambda text: print(text, flush=True))
     ddns = own_config(config)
     name = box_name(ddns)
     for relative in ["run-receiver.py", "phone-presence.py", "pair-phone.py", "pairing_window.py", "settings_page.py",
@@ -643,7 +625,7 @@ def main():
     def command(network, wireless, wait):
         state_files.save_json(handoff_file, {"ssid": network["ssid"], "passphrase": network["key"]}, sync=False)
         os.environ["CARPLAY_NETWORK_EPOCH"] = secrets.token_hex(4)
-        return receiver_command(root, network, handoff_file, viewer, idle_release, wireless, wait, audio_route)
+        return receiver_command(root, network, handoff_file, viewer, idle_release, wireless, wait)
 
     bluetooth = BluetoothManager(platform, root, state, status, say)
     receiver = ReceiverManager(platform, status, say, viewer, command)
@@ -768,7 +750,7 @@ def main():
             say(f"warning: {base_warning}")
         renewed = ensure_keystore(state)
         status.update(ssid=network["ssid"], home=f"http://{host}:{SETTINGS_PORT}/",
-                      entries=[f"https://{name}:{viewer}/", f"https://{host}:{viewer}/"], audio_route=audio_route)
+                      entries=[f"https://{name}:{viewer}/", f"https://{host}:{viewer}/"])
         if ddns:
             maintainer.append(own_domain.Maintainer(root, ddns, host, stopped, say, tesla=True, wake_file=WAN_UP_FILE))
             maintainer[0].start()

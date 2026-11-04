@@ -37,8 +37,8 @@
 |---|---|---|
 | **WebCodecs VideoDecoder** + **H.264 avc1.42E01F 1280×720** | `isConfigSupported` 的结果，分"无偏好"和"硬件优先"两次 | **A 档（主链路）成立的条件。** 两次都 unsupported → 这台车机走不了 WebCodecs，只能考虑 B/C 档 |
 | HEVC hvc1 1280×720 | 同上 | 可选。只有在支持、并且实测解码够快时才向 iPhone 申请 HEVC；浏览器没有 HEVC 软解兜底 |
-| WebCodecs AudioDecoder：AAC-LC / Opus | 浏览器音频模式下能否直接解 iPhone 发来的 AAC | 已定（ADR-14，1.1.0）：页面永远不播音乐，默认声音全部走车载蓝牙；此行只对 `carplay` 声音模式下的导航播报有意义 |
-| AudioEncoder | 麦克风上行需要 Opus 编码 | 特斯拉模式下不提供麦克风，此行只对浏览器音频模式有意义 |
+| WebCodecs AudioDecoder：AAC-LC / Opus | 浏览器音频模式下能否直接解 iPhone 发来的 AAC | 已定（ADR-14/16）：页面没有任何声音，全部走车载蓝牙；此行仅作记录 |
+| AudioEncoder | 麦克风上行需要 Opus 编码 | 特斯拉模式下不提供麦克风，此行仅作记录 |
 | MSE MediaSource + avc1 / hvc1 / mp4a / flac | `isTypeSupported` | **B 档（驻车兼容）**。Tesla 行车时 `<video>` 被禁，所以 B 档只能驻车用。页面里已没有 MSE 代码（1.1.0），此行仅作记录 |
 | WebRTC RTCPeerConnection + 视频解码能力 | 存在性 + `RTCRtpReceiver.getCapabilities('video')` 的编解码器列表 | **C 档**。列表里有 H264 才有意义；H265 需要 Chrome 136+ |
 | MediaStreamTrackProcessor（主线程） | 存在性 | **C′ 档**（WheelPlay 的"直接 Canvas"）：WebRTC 收流后不经 `<video>` 直接画到 canvas。HTTP 页面下主线程可用才成立；成立的话可以省掉整套证书方案（推断，待上车验证） |

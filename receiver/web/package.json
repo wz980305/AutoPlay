@@ -1,11 +1,11 @@
 {
   "name": "autoplay-viewer",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "node check.mjs && node check-audio.mjs && node check-car.mjs && node check-browser.mjs && node check-runtime.mjs",
+    "test": "node check.mjs && node check-car.mjs && node check-browser.mjs && node check-runtime.mjs",
     "build": "tsc && vite build",
     "build:offline": "tsc --noEmit -p tsconfig.offline.json && node scripts/build-esbuild.mjs",
     "preview": "vite preview"

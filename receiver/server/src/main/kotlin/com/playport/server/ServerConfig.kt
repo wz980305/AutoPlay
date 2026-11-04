@@ -38,29 +38,12 @@ data class ServerConfig(
     val mdns: String = "jmdns",
     val insecureHttp: Boolean = false,
     val accessToken: String = generateToken(),
-    /**
-     * Where navigation prompts and alerts play (uci autoplay.main.audio_route_navigation; the names are DashPlay
-     * 2026.10.31's). "carplay" (this bare receiver's default): the page plays them, music/Siri/calls stay on the
-     * Tesla's Bluetooth (the 7-format declaration verified while driving). "bluetooth" (the box's default, ADR-14):
-     * the receiver offers the iPhone no audio at all (AirPlayConfig.disableAudioOutput), so every sound, navigation
-     * included, plays on the iPhone or the Tesla's Bluetooth; the page shows no sound controls. docs/AUDIO.md.
-     */
-    val audioRouteNavigation: String = AUDIO_ROUTE_CARPLAY,
 ) {
     val mfiDirectory: Path get() = identityDir.resolve("offline-mfi")
-    /** No CarPlay audio offered at all: navigation goes the Bluetooth way with everything else. */
-    val audioOverBluetooth: Boolean get() = audioRouteNavigation == AUDIO_ROUTE_BLUETOOTH
 
     companion object {
         private const val TOKEN_BYTES = 16
         const val DEFAULT_UI_SCALE = 85
-        const val AUDIO_ROUTE_CARPLAY = "carplay"
-        const val AUDIO_ROUTE_BLUETOOTH = "bluetooth"
-        val AUDIO_ROUTES = setOf(AUDIO_ROUTE_CARPLAY, AUDIO_ROUTE_BLUETOOTH)
-
-        /** "carplay" or "bluetooth" (case-insensitive); anything else is an IllegalArgumentException. */
-        fun audioRoute(value: String): String =
-            value.trim().lowercase().also { require(it in AUDIO_ROUTES) { "audio route must be carplay or bluetooth: $value" } }
 
         fun generateToken(): String {
             val bytes = ByteArray(TOKEN_BYTES).also(SecureRandom()::nextBytes)
@@ -96,10 +79,11 @@ data class ServerConfig(
                     "--fps" -> config = config.copy(displayFps = nextValue(flag).toInt())
                     "--ui-scale" -> config = config.copy(uiScale = com.shilapi.xcertplay.airplay.CarPlayUiScale.sanitize(nextValue(flag).toInt()))
                     "--hevc" -> config = config.copy(hevc = true)
-                    // Calls and Siri are always on the car's own Bluetooth now (AirPlayInfoPlist offers neither):
-                    // the flag the box's launcher still passes is accepted and ignored for one release.
+                    // Every sound is on the car's own Bluetooth since 1.3.0 (AirPlayInfoPlist offers the iPhone no
+                    // audio at all): the two flags the box's launcher passes for older receiver builds (1.0.0's
+                    // --car-voice, 1.1.0-1.2.0's --audio-route-navigation <carplay|bluetooth>) are accepted and ignored.
                     "--car-voice" -> {}
-                    "--audio-route-navigation" -> config = config.copy(audioRouteNavigation = audioRoute(nextValue(flag)))
+                    "--audio-route-navigation" -> nextValue(flag)
                     "--rhd" -> config = config.copy(rightHandDrive = true)
                     "--bind" -> config = config.copy(bindAddress = nextValue(flag))
                     "--identity-dir" -> config = config.copy(identityDir = Path.of(nextValue(flag)))
@@ -151,9 +135,6 @@ data class ServerConfig(
                   --ui-scale <75|85|100|115>  CarPlay size as physical width 350|300|250|200 mm (default: 85 = 300 mm)
                   --hevc                    Offer H.265/HEVC video (sharper at the same bitrate; browser must support it)
                   --rhd                     Right-hand-drive layout
-                  --audio-route-navigation <carplay|bluetooth>
-                                            carplay: the page plays navigation prompts (default); bluetooth: no CarPlay audio
-                                            is offered, every sound goes the Tesla Bluetooth way (docs/AUDIO.md)
                   --bind <address>          Bind address (default: auto-detect LAN address)
                   --identity-dir <path>     Directory containing offline-mfi/ (default: ./identity)
                   --state-dir <path>        AirPlay identity + pairing state (default: ~/.playport)

@@ -13,14 +13,12 @@ async function access() {
   try {
     const response = await fetch('./receiver-access.json', { cache: 'no-store', credentials: 'same-origin' });
     if (!response.ok) return;
-    // The box's carMusic/tesla fields are ignored since the Tesla-only build: those are constants now (flags.ts).
-    // audioRouteNavigation (1.1.0, uci audio_route_navigation): "bluetooth" means the receiver offers the iPhone no
-    // audio at all and this page shows no sound controls; anything else (or absent) is the page playing prompts.
-    const value = await response.json() as { token?: string; settingsPort?: number; audioRouteNavigation?: string };
+    // Only the token and the settings port are read. The carMusic/tesla fields of older boxes are constants since the
+    // Tesla-only build (flags.ts); audioRouteNavigation (1.1.0–1.2.0) is gone with the page's sound (1.3.0).
+    const value = await response.json() as { token?: string; settingsPort?: number };
     if (typeof value.token === 'string' && /^[0-9a-f]{32}$/.test(value.token)) localStorage.setItem('playport-token', value.token);
-    const flags = window as unknown as { playportBoxSettingsPort?: number; playportPageAudio?: boolean };
+    const flags = window as unknown as { playportBoxSettingsPort?: number };
     if (Number.isInteger(value.settingsPort)) flags.playportBoxSettingsPort = value.settingsPort;
-    flags.playportPageAudio = value.audioRouteNavigation !== 'bluetooth';
   } catch { /* No box behind this page, or storage blocked: the page asks for a token as before. */ }
 }
 start();

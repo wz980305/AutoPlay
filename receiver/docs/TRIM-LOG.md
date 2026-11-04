@@ -88,14 +88,18 @@ in the web UI and i18n only.
 - `receiver/README.md` is still upstream PlayPort's (macOS) README with a fork notice on top; a Tesla-only README is
   the box trim's job once the install path is final.
 
-## Since this log was written (as of 1.2.0, 2026-11-03)
+## Since this log was written (as of 1.3.0, 2026-11-05)
 
 - The frozen MSE music path behind `MUSIC_ELEMENT` is gone: 1.1.0 deleted `music-output.ts` and `aac-mp4.ts`, and
   `flags.ts` now has `PAGE_PLAYS_MUSIC = false` — the page never plays music (ADR-14, `../../docs/AUDIO.md`).
 - "Music, calls and Siri on the car's Bluetooth" became "every sound, navigation prompts included" with the 1.1.0
-  default `audio_route_navigation=bluetooth`; `carplay` keeps the page-played prompts described above.
-- `--car-voice` is still accepted and ignored, and `run-receiver.py` still passes it and still writes
-  `carMusic`/`tesla` into `receiver-access.json`; that follow-up is open.
+  default `audio_route_navigation=bluetooth`; 1.3.0 removed the `carplay` alternative and with it the whole page-audio
+  path (`audio.ts`, `audio-timing.ts`, `check-audio.mjs`, the unlock bar, the volume slider, `CAR_MUSIC`,
+  `PAGE_PLAYS_MUSIC`, `PROMPT_BOOST`, `boot.ts playportPageAudio`), the HUD's sound line and the browser check's two
+  audio rows (ADR-16). The receiver always sets `disableAudioOutput = true`; its wire-level audio relay is dormant.
+- `--car-voice` and `--audio-route-navigation` are accepted and ignored; `run-receiver.py` passes both for receiver
+  builds before 1.3.0 and no longer writes `carMusic`/`tesla`/`audioRouteNavigation` into `receiver-access.json`.
+- The canvas no longer carries `tabindex` and `InputController` never focuses it (1.3.0, ADR-17: the car's keyboard).
 - View areas remain implemented in the receiver and `display-fit.ts` but the page still never calls `areaPlan`.
 - `receiver/README.md` was rewritten for the fork on 2026-11-03; the Kotlin changes since 1.0.0 are listed in
   `UNVERIFIED-KOTLIN.md`.

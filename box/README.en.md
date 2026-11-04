@@ -16,7 +16,7 @@ In the car: a SIM with data (certificate issuance and renewal, and the car's con
 
 ## Installing
 
-Four apk packages (`autoplay`, `autoplay-jre`, `luci-app-autoplay` and its Chinese translation) are defined in the repository's `openwrt/` and built with the OpenWrt Docker SDK; copy them to the box, `apk add` them, run `python3 /opt/autoplay/board_zte_f50.py --setup` once so the F50's Bluetooth uses the private BlueZ (do not `apk add bluez-daemon`), place the identity files, restart the service. Full commands: the [install guide](../交付资料/AutoPlay-1.2.0-安装使用说明.md) (Chinese) and [`openwrt/README.en.md`](../openwrt/README.en.md).
+Four apk packages (`autoplay`, `autoplay-jre`, `luci-app-autoplay` and its Chinese translation) are defined in the repository's `openwrt/` and built with the OpenWrt Docker SDK; copy them to the box, `apk add` them, run `python3 /opt/autoplay/board_zte_f50.py --setup` once so the F50's Bluetooth uses the private BlueZ (do not `apk add bluez-daemon`), place the identity files, restart the service. Full commands: the [install guide](../交付资料/AutoPlay-1.3.0-安装使用说明.md) (Chinese) and [`openwrt/README.en.md`](../openwrt/README.en.md).
 
 The install script (uci-defaults `90-autoplay-tesla`) moves the LAN from `192.168.77.1` to **`100.96.0.1/24`** — a Tesla's browser refuses private addresses but accepts the 100.64/10 range — and sets the 5 GHz radio to country CN / channel 149: the car only finds the hotspot on 149–165, which the mu300-linux image's country code (TR) does not have. A channel you set in LuCI within 149–165 is kept; SSID and password are untouched.
 
@@ -26,9 +26,9 @@ The install script (uci-defaults `90-autoplay-tesla`) moves the LAN from `192.16
 2. The first time, open the settings page at `http://100.96.0.1:18080/`, tap "Add iPhone", tap the box's name in the iPhone's Settings → Bluetooth, and compare the six-digit code on both sides. Afterwards the iPhone is bootstrapped onto the hotspot over Bluetooth iAP2 whenever it comes near.
 3. Open `https://<your domain>:18443/` in the car's browser (a DuckDNS name or your own DNSPod-hosted domain; without one it is `https://autoplay.lan:18443/` with a certificate warning).
 
-The settings page shows the hotspot–box–iPhone chain, adds and removes iPhones, shows certificate expiry and the audio mode, offers a diagnostics download and a factory reset; `http://100.96.0.2/` from the car or a phone redirects to it. LuCI's Services → AutoPlay has four tabs: Network, iPhone (including where navigation prompts play), Own address (DuckDNS / DNSPod), Program update.
+The settings page shows the hotspot–box–iPhone chain, adds and removes iPhones, shows certificate expiry, offers a diagnostics download and a factory reset; `http://100.96.0.2/` from the car or a phone redirects to it. LuCI's Services → AutoPlay has four tabs: Network, iPhone, Own address (DuckDNS / DNSPod), Program update.
 
-`/etc/config/autoplay` has twelve options: on/off, viewer port, idle-release seconds, DNS provider, DuckDNS name and token, own domain plus DNSPod ID and token, where navigation prompts play (default `bluetooth`: every sound on the Tesla's Bluetooth; `carplay`: the page plays prompts), update check, update mirror. The network stays OpenWrt's.
+`/etc/config/autoplay` has eleven options: on/off, viewer port, idle-release seconds, DNS provider, DuckDNS name and token, own domain plus DNSPod ID and token, update check, update mirror. Sound has no option: every sound plays on the Tesla's Bluetooth (the `audio_route_navigation` key of 1.1.0–1.2.0 is removed on upgrade, `docs/AUDIO.md`). The network stays OpenWrt's.
 
 Every state carries a reason word (why Bluetooth is down, how many days the certificate has left, why the program restarted): [docs/STATUS-MODEL.md](docs/STATUS-MODEL.md). The update tab cannot yet update online: `update.py` verifies release signatures and the project has no release key or feed of its own; upgrade by installing new packages as the guide describes — pairings, certificate and identity stay under `/opt/autoplay/`.
 
@@ -48,7 +48,7 @@ How to obtain a legitimate identity is outside this project's scope; a shared id
 The bundle `autoplay-bundle-<version>.tar` is what the OpenWrt package unpacks to `/opt/autoplay`. Build `receiver/` first (`./gradlew :server:installDist`, and `npm run build` for the page), then from the repository root:
 
 ```sh
-AUTOPLAY_VERSION=1.2.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
+AUTOPLAY_VERSION=1.3.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 ```
 
 It packs committed files only and downloads two pinned dependencies: dbus-next 0.2.3 (Bluetooth bridge) and acme.sh 3.1.6 with the DuckDNS and DNSPod DNS hooks (certificates).
@@ -57,7 +57,7 @@ Tests use the standard library `unittest` only, no network:
 
 ```sh
 cd box
-python3 -m unittest discover -s tests/onecloud      # 238
+python3 -m unittest discover -s tests/onecloud      # 237
 python3 -m unittest discover -s tests/bluetooth     # test_bluez / test_recovery need dbus-next
 ```
 

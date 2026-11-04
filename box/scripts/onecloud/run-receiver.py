@@ -36,15 +36,11 @@ def durable_write(path, text):
         os.close(directory)
 
 
-AUDIO_ROUTES = ("carplay", "bluetooth")   # uci audio_route_navigation (DashPlay 2026.10.31's names; docs/AUDIO.md)
-
-
-def write_browser_access(root, token, settings_port=18080, tesla=True, audio_route="bluetooth"):
-    """Authorize viewers on the receiver LAN; admin login remains separate. tesla (constant on this box, D8): the
-    music goes over the car's own Bluetooth (the page leaves the media card and keys to the car, prompts louder)
-    and the Tesla browser's ways (fullscreen through a listed video site) are on. audio_route: "bluetooth" (the
-    default: the receiver offers the iPhone no audio, the page shows no sound controls, boot.ts playportPageAudio) or
-    "carplay" (the page plays navigation prompts)."""
+def write_browser_access(root, token, settings_port=18080):
+    """Authorize viewers on the receiver LAN; admin login remains separate. The file carries the token and this box's
+    settings port only (1.3.0): the page's Tesla ways are constants (web/src/flags.ts) and its sound is gone with
+    the audio route (every sound is on the Tesla's Bluetooth, docs/AUDIO.md), so the carMusic/tesla and
+    audioRouteNavigation fields of 1.0.0-1.2.0 are no longer written (boot.ts never read the first two)."""
     if not re.fullmatch(r"[0-9a-f]{32}", token):
         raise ValueError("Unexpected browser token format")
     dist = root / "playport/web/dist"
@@ -53,11 +49,7 @@ def write_browser_access(root, token, settings_port=18080, tesla=True, audio_rou
     # settings page (settings_page.py; port 80, or another one on OpenWrt, where LuCI has 80).
     (dist / "receiver-access.js").unlink(missing_ok=True)
     path = dist / "receiver-access.json"
-    if audio_route not in AUDIO_ROUTES:
-        raise ValueError("Unexpected audio route")
-    flags = {"carMusic": True, "tesla": True} if tesla else {}
-    flags["audioRouteNavigation"] = audio_route
-    content = json.dumps({"token": token, "settingsPort": int(settings_port), **flags}) + "\n"
+    content = json.dumps({"token": token, "settingsPort": int(settings_port)}) + "\n"
     # Written only when it changes (the token is stable across starts): the file sits in the program directory on
     # the SD card, where the receiver serves it from; a symlink into tmpfs is not known to be followed by the
     # receiver's own-page check, so the write is avoided instead of moved (reliability_audit #11).
@@ -130,12 +122,9 @@ def main():
     parser.add_argument("--settings-port", type=int, default=18080, help="port of the box settings page")
     parser.add_argument("--viewer-port", type=int, default=0,
                         help="port of the viewer page (default: the saved config's, else 18443)")
-    # Tesla mode (constant on this box; the flag stays so that a lab receiver can run without it, D8): music, calls
-    # and Siri over the car's own Bluetooth (the receiver offers no microphone) and the Tesla browser's fullscreen.
+    # Tesla mode (constant on this box; the flag stays so that a lab receiver can run without it, D8): every sound
+    # over the car's own Bluetooth (the receiver offers no audio and no microphone) and the Tesla browser's fullscreen.
     parser.add_argument("--tesla", action="store_true", help="Tesla mode: car Bluetooth audio and the Tesla browser's fullscreen")
-    parser.add_argument("--audio-route-navigation", choices=AUDIO_ROUTES, default="bluetooth",
-                        help="bluetooth (default): the receiver offers the iPhone no audio at all, every sound goes the "
-                             "Tesla Bluetooth way; carplay: the page plays navigation prompts (docs/AUDIO.md)")
     parser.add_argument("--idle-release", type=int, default=300,
                         help="end wireless CarPlay after this many seconds without a viewer page (0: never)")
     parser.add_argument("--no-wireless", action="store_true",
@@ -177,7 +166,7 @@ def main():
     if not re.fullmatch(r"[0-9a-f]{32}", token):   # missing, or emptied by a power cut
         token = secrets.token_hex(16)
         durable_write(token_path, token + "\n")
-    write_browser_access(root, token, args.settings_port, args.tesla, args.audio_route_navigation)
+    write_browser_access(root, token, args.settings_port)
     env = dict(os.environ, BT_BRIDGE_PYTHON="/usr/bin/python3", BT_BRIDGE_READY_WAIT="15", BT_BRIDGE_CONNECT_TIMEOUT="8",
                BT_BRIDGE_RECOVERY_STATE=str(state / "bluetooth-recovery.stamp"),
                CARPLAY_PRESENCE_HELPER=str(root / "phone-presence.py"),
@@ -222,8 +211,10 @@ def main():
         "-XX:+AutoCreateSharedArchive", "-XX:SharedArchiveFile=" + str(state / "app-cds.jsa"), "-cp",
         # launcher/onecloud-launcher.jar (source in launcher/) warms the handshake crypto in parallel.
         str(root / "launcher/onecloud-launcher.jar") + ":" + str(root / "playport/server/build/install/server/lib/*"),
-        "onecloud.Launcher", "--bind", args.bind, *(["--car-voice"] if args.tesla else []),
-        "--audio-route-navigation", args.audio_route_navigation,
+        "onecloud.Launcher", "--bind", args.bind,
+        # Receiver builds before 1.3.0 default to page audio (and 1.0.0's to calls on the page): these two flags keep
+        # every sound on the Tesla's Bluetooth with them too. A 1.3.0 receiver accepts and ignores both.
+        *(["--car-voice", "--audio-route-navigation", "bluetooth"] if args.tesla else []),
         "--identity-dir", str(root / "identity"), "--state-dir", str(state),
         "--bt-bridge", str(root / "linux-bt-bridge/bt-bridge"), "--token", token,
     ]

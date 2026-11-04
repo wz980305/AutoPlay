@@ -146,30 +146,6 @@ assert.equal(aspectChanged({width:1280,height:720},{width:1920,height:720}),true
   assert.equal(sizeWrites,writes,'but a canvas of the same size keeps showing the last picture');
   player.configure(config(1082,1280,0x41));await Promise.resolve();
   assert.equal(canvas.width,1082,'A new size resizes the canvas');assert.equal(canvas.height,1280); }
-{ // This page never plays music (1.1.0, flags.ts PAGE_PLAYS_MUSIC; DashPlay 2026-11-01 in a moving Tesla): a "media"
-  // stream opens no state, its packets go nowhere, the page is told once; prompts keep the Web Audio path; the iPhone's
-  // duck commands are only counted.
-  for(let i=0;i<10;i++)await Promise.resolve();   // let the previous block's pending H.265 adoption settle before VideoDecoder is swapped below
-  const edges=[];let packets=0;let told=0;
-  class Node {gain={value:1,cancelScheduledValues(){},setValueAtTime(v){this.value=v;},linearRampToValueAtTime(v,at){this.value=v;this.rampedTo=at;}};connect(to){edges.push(to);}disconnect(){}}
-  globalThis.AudioContext=class {state='running';currentTime=0;destination={speaker:true};createGain(){return new Node();}createDynamicsCompressor(){const n=new Node();n.threshold={};n.knee={};n.ratio={};n.attack={};n.release={};return n;}createBuffer(){return {copyToChannel(){},duration:0.02};}createBufferSource(){packets++;return {connect(){},disconnect(){},start(){},set buffer(b){}};}resume(){return Promise.resolve();}};
-  globalThis.window=globalThis.window??{};window.setTimeout=window.setTimeout??(()=>1);window.clearTimeout=window.clearTimeout??(()=>{});
-  const {AudioEngine}=await load('audio',s=>s.replace(/^import .*?;$/gm,'')+'\nconst PAGE_PLAYS_MUSIC=false;const AudioCodec={AacLc:1,Opus:2,Lpcm:3};\nfunction audioStartTime(now){return now;}');
-  const audio=new AudioEngine(()=>{},{promptBoost:3,onDroppedMusic:()=>told++});assert.equal(edges.length,1);assert.equal(edges[0].speaker,true);
-  audio.handleConfig({streamType:102,codec:1,name:'media',sampleRate:48000,channels:2,description:new Uint8Array([0x11,0x90])});
-  assert.equal(audio.streams.has(102),false,'no stream state for music');assert.equal(told,1,'the page is told');
-  audio.handlePacket({streamType:102,timestampUs:0,data:new Uint8Array([1,2])});assert.equal(packets,0,'its packets go nowhere');
-  audio.handleConfig({streamType:100,codec:3,name:'media',sampleRate:48000,channels:2,description:new Uint8Array()});
-  assert.equal(audio.streams.has(100),false,'"media" PCM on the main stream is music too');assert.equal(told,1,'told once per session');
-  assert.deepEqual(audio.musicReport(),{musicDropped:2},'counted for the viewer log');assert.deepEqual(audio.musicReport(),{},'afresh each report');
-  await audio.unlock();assert.equal(audio.isUnlocked,true);
-  audio.handleConfig({streamType:7,codec:3,name:'default',sampleRate:16000,channels:1,description:new Uint8Array()});
-  assert.ok(audio.streams.has(7),'navigation still plays on the page');
-  audio.handlePacket({streamType:7,timestampUs:0,data:new Uint8Array(320)});assert.equal(packets,1,'and its PCM is scheduled');
-  assert.deepEqual(audio.describe(),[{name:'default',codec:'PCM',sampleRate:16000,channels:1}]);
-  audio.duck(0.2,500);assert.deepEqual(audio.duckReport(),{ducks:1},'duck is counted, nothing to lower');
-  audio.duck(1,300);assert.deepEqual(audio.duckReport(),{unducks:1});assert.deepEqual(audio.duckReport(),{});
-  audio.stopStream(7);assert.equal(audio.streams.size,0);audio.stopAll();assert.equal(audio.isPlaying,false); }
 { // The pong waits behind every queued frame, so its round trip is how far the picture lags behind.
   const {LagProbe}=await load('lag');const probe=new LagProbe();
   probe.sent(0);probe.sent(1000);probe.pong(120);probe.pong(1900);
@@ -186,7 +162,7 @@ assert.equal(isNight('schedule',at(18,29),true),false);assert.equal(isNight('sch
 assert.equal(isNight('schedule',at(0,0),false),true);assert.equal(isNight('schedule',at(6,29),false),true);assert.equal(isNight('schedule',at(6,30),true),false);
 assert.equal(isNight('system',at(12,0),true),true);assert.equal(isNight('system',at(23,0),false),false);
 assert.equal(isNight('day',at(23,0),true),false);assert.equal(isNight('night',at(12,0),false),true);
-console.log('Car checks passed: aspect fit, hiccups, decode backlog, music dropped (Tesla), night schedule.');
+console.log('Car checks passed: aspect fit, hiccups, decode backlog, night schedule.');
 { // View areas (2026-10-14): a window shape seen before is an area switch, never a reconnect.
   const windowed={width:1280,height:996}, full={width:1920,height:1080};
   const start={width:1280,height:996,hevc:true,fps:30};
@@ -309,21 +285,16 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
 }
 
 { // Tesla-only build (flags.ts): the box's carMusic/tesla fields are constants now; boot reads the token and the
-  // settings port only, and a stale receiver-access.json with the old fields changes nothing.
+  // settings port only, and a stale receiver-access.json with the old fields (or 1.1.0-1.2.0's audioRouteNavigation,
+  // gone with the page's sound in 1.3.0) changes nothing.
   const flags=await load('flags');
-  assert.deepEqual([flags.CAR_MUSIC,flags.TESLA,flags.PAGE_PLAYS_MUSIC,flags.PROMPT_BOOST],[true,true,false,3]);
+  assert.deepEqual(Object.keys(flags),['TESLA'],'the sound flags went with audio.ts');assert.equal(flags.TESLA,true);
   const savedWindow=globalThis.window, savedFetch=globalThis.fetch, savedStorage=globalThis.localStorage;
   const stored={};globalThis.window={};globalThis.localStorage={setItem(k,v){stored[k]=v;}};
   const {access}=await load('boot',s=>s.replace(/^import .*?;$/gm,'const startup={mark(){}};').replace('async function access()', 'export async function access()'));
-  globalThis.fetch=async()=>({ok:true,json:async()=>({token:'0123456789abcdef0123456789abcdef',settingsPort:18080,tesla:false,carMusic:false})});await access();
+  globalThis.fetch=async()=>({ok:true,json:async()=>({token:'0123456789abcdef0123456789abcdef',settingsPort:18080,tesla:false,carMusic:false,audioRouteNavigation:'carplay'})});await access();
   assert.equal(stored['playport-token'],'0123456789abcdef0123456789abcdef');assert.equal(window.playportBoxSettingsPort,18080);
-  assert.equal(window.playportCarMusic,undefined,'no runtime car flags any more');
-  assert.equal(window.playportPageAudio,true,'no audioRouteNavigation: the page plays prompts');
-  // audio_route_navigation=bluetooth (1.1.0): the page is silent and says so.
-  globalThis.window={};globalThis.fetch=async()=>({ok:true,json:async()=>({token:'0123456789abcdef0123456789abcdef',settingsPort:18080,audioRouteNavigation:'bluetooth'})});await access();
-  assert.equal(window.playportPageAudio,false);
-  globalThis.window={};globalThis.fetch=async()=>({ok:true,json:async()=>({token:'0123456789abcdef0123456789abcdef',settingsPort:18080,audioRouteNavigation:'carplay'})});await access();
-  assert.equal(window.playportPageAudio,true);
+  assert.deepEqual(Object.keys(window),['playportBoxSettingsPort'],'no runtime car or sound flags any more');
   globalThis.window=savedWindow;globalThis.fetch=savedFetch;globalThis.localStorage=savedStorage;
 }
 
@@ -339,14 +310,11 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
   assert.equal(statusHint('reconnecting',12.2).seconds,12);
   assert.equal(statusHint('access',0).key,'accessHint');
 }
-{ // Debug overlay (2026-10-16): three short lines, the music bitrate on the music stream, nothing for no picture yet.
+{ // Debug overlay (2026-10-16; two lines since 1.3.0, the page plays no sound): nothing for no picture yet.
   const {hudLines}=await load('debug-hud');
-  const sample={width:1280,height:846,fps:29.6,hevc:false,videoKbps:2412,decodeMs:63.4,queue:1,rttMs:41.2,
-    audio:[{name:'media',codec:'AAC',sampleRate:44100,channels:2},{name:'default',codec:'PCM',sampleRate:16000,channels:1}],musicKbps:256.4,playing:true};
-  assert.deepEqual(hudLines(sample,true),['1280×846 · 30 fps · H.264 · 2.4 Mbps','解码 63 ms · 队列 1 · 往返 41 ms','声音 音乐 AAC 44.1 kHz 256 kbps · 播报 PCM 16 kHz 单声道']);
-  assert.deepEqual(hudLines({...sample,width:0,hevc:null,rttMs:-1,audio:[],musicKbps:0,playing:false},false),
-    ['No picture yet','Decode 63 ms · Queue 1 · RTT –','Sound none']);
-  assert.equal(hudLines({...sample,playing:false},true)[2].endsWith('（静音中）'),true);
+  const sample={width:1280,height:846,fps:29.6,hevc:false,videoKbps:2412,decodeMs:63.4,queue:1,rttMs:41.2};
+  assert.deepEqual(hudLines(sample,true),['1280×846 · 30 fps · H.264 · 2.4 Mbps','解码 63 ms · 队列 1 · 往返 41 ms']);
+  assert.deepEqual(hudLines({...sample,width:0,hevc:null,rttMs:-1},false),['No picture yet','Decode 63 ms · Queue 1 · RTT –']);
 }
 
 { // Compatible display (2026-10-17): a Tesla on Chrome 113 decoded at full rate and showed nothing with the

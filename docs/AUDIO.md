@@ -1,44 +1,38 @@
-# 声音走向：默认全部走特斯拉蓝牙，网页可选播导航
+# 声音走向：全部走特斯拉蓝牙，网页无声
 
-自 1.1.0 起（ADR-14）：**默认 `audio_route_navigation = bluetooth`——盒子不向 iPhone 提供任何 CarPlay 音频，音乐、导航播报、提示音、通话、Siri 全部由 iPhone 经它和特斯拉之间的蓝牙播出，CarPlay 网页只管画面和触摸、没有声音。** 备选 `carplay`：网页播放导航播报和提示音（1.0.x 的做法），其余仍走蓝牙；经蓝牙听不到播报时用它。LuCI「服务 → AutoPlay → iPhone → 导航播报」切换，或：
+自 1.3.0 起（ADR-16）只有一种模式：**盒子不向 iPhone 提供任何 CarPlay 音频，音乐、导航播报、提示音、通话、Siri 全部由 iPhone 经它和特斯拉之间的蓝牙播出；CarPlay 网页只管画面和触摸，没有声音，也没有任何声音设置。** 1.1.0–1.2.0 的 `audio_route_navigation` 选项（备选 `carplay`：网页播导航播报）连同网页端的 Web Audio 代码一起删除；需要时在 git 历史的 `v1.2.0` 标签里。
 
-```sh
-uci set autoplay.main.audio_route_navigation=carplay   # 或 bluetooth
-uci commit autoplay && /etc/init.d/autoplay restart
-```
+## 一、各路声音怎么走
 
-## 一、两种模式下各路声音怎么走
+| 声音 | 走向 |
+|---|---|
+| 音乐 / 播客 | iPhone → 特斯拉蓝牙 A2DP → 车扬声器；切歌、音量、媒体卡片是车的原生功能（AVRCP） |
+| 导航播报 / 提示音 | iPhone 自己混进 A2DP，和不用 CarPlay、只连车机蓝牙导航时一样 |
+| 通话 / Siri / 麦克风 | iPhone ↔ 特斯拉蓝牙 HFP；接收端从不声明 telephony/speechRecognition 和任何输入格式 |
+| F50 自己的蓝牙 | 只传 iAP2 控制信令（配对引导、Wi-Fi 凭证交接、会话），不传声音 |
 
-| 声音 | `bluetooth`（默认） | `carplay` |
-|---|---|---|
-| 音乐 / 播客 | iPhone → 特斯拉蓝牙 A2DP → 车扬声器；切歌、音量、媒体卡片是车的原生功能（AVRCP） | 同左。iPhone 偶尔仍把音乐发到网页（Siri 之后约 27 秒）：**网页丢弃它并提示一次**，不播放（见 §二） |
-| 导航播报 / 提示音 | iPhone 自己混进 A2DP（和不用 CarPlay、只连车机蓝牙导航时一样） | iPhone → AirPlay（Wi-Fi，101 号流和 100 号流的 default/alert 类型）→ F50 → WebSocket → 车机浏览器 Web Audio → 车扬声器；上车后要**轻点页面一次**解锁声音，播报经 3 倍限幅放大，音量在页面滑杆 |
-| 通话 / Siri / 麦克风 | iPhone ↔ 特斯拉蓝牙 HFP | 同左（两种模式下接收端都不声明 telephony/speechRecognition 和任何输入格式） |
-| F50 自己的蓝牙 | 只传 iAP2 控制信令（配对引导、Wi-Fi 凭证交接、会话），不传声音 | 同左 |
+协议上就一件事：接收端的 `/info` 里没有 `audioFormats`/`audioLatencies`，features 没有音频位（`AirPlayConfig.disableAudioOutput = true`，`CarPlayServer.airPlayConfig`）。iPhone 于是不建立任何音频流（上游 2026-10-31 在实机上看到的 "no audio SETUP"），按它不在 CarPlay 时的规则把所有声音路由到已连接的蓝牙设备——也就是特斯拉。
 
-协议上两种模式的区别只有一处：`/info` 里有没有 `audioFormats`/`audioLatencies` 和 features 的音频位（`AirPlayConfig.disableAudioOutput`）。`bluetooth` 模式下 iPhone 不建立任何音频流（上游 2026-10-31 在实机上看到的 "no audio SETUP"），于是按它不在 CarPlay 时的规则把所有声音路由到已连接的蓝牙设备——也就是特斯拉。
+## 二、为什么删掉网页播导航的备选
 
-## 二、为什么网页永远不播音乐（两种模式都如此）
-
-DashPlay 2026-11-01 在行驶中的特斯拉上发现：网页一旦通过媒体元素播放音乐，车机弹出"行车中视频只有声音"的横幅，横幅改变页面尺寸，CarPlay 随之每约 10 秒重协商一次。AutoPlay 1.1.0 起 `AudioEngine` 对 audioType 为 `media` 的流（102 号 AAC、100 号 "media" PCM）不建立任何状态、丢弃数据、记入统计（`musicDropped`），并提示驾驶者一次"请在 iPhone 控制中心把音频输出选为特斯拉"。0.1.0 冻结的 MSE 音乐路径（`music-output.ts`、`aac-mp4.ts`、`MUSIC_ELEMENT`）随之删除，ADR-5 的冻结项到此结束。
+- **实车已经确认走蓝牙可用**（车主确认，2026-11-05 记录）：音乐、导航播报、通话都从特斯拉蓝牙播出，没有再切回 `carplay` 的需要。
+- 备选模式拖着一整套只在备选下才用的代码：`audio.ts`（340 行 Web Audio：解锁、PCM/AAC 解码、限幅放大、duck、丢弃音乐）、`audio-timing.ts`、解锁条、音量滑杆、「声音」分组、`?promptgain=`、调试浮层的声音行、接收端的 `--audio-route-navigation` 和 uci 键、LuCI 下拉、盒子页的「声音」格，以及三处测试。它们的失效模式（页面没解锁就没播报、Web Audio 和画面不同步、特斯拉对发声页面弹横幅）正是 1.1.0 想摆脱的。
+- 浏览器检测随之不再要求 Web Audio / AudioDecoder：车机浏览器只需要 WebCodecs 视频解码。
 
 ## 三、对使用的影响
 
-- **上车要做的事**（`bluetooth` 模式）：车机蓝牙连 iPhone 并把它选为媒体来源；打开 AutoPlay 页面。没有"轻点开启声音"这一步。iPhone 没连车机蓝牙时，所有声音会从 iPhone 自己的扬声器出来——这是 iOS 的默认路由，不是故障。
-- **`carplay` 模式多一步**：打开页面后轻点一次，否则导航没声音；页面没开或没解锁只影响播报，音乐通话照常。
-- **duck（播报时压低音乐）**：`bluetooth` 模式下由 iPhone 自己处理，和普通蓝牙车机一样；`carplay` 模式下 iPhone 发来的 `duckAudio` 命令只计数，网页里已没有可压低的音乐。
-- **延迟**：`bluetooth` 模式下播报经 A2DP，音乐没在放时 A2DP 要先把流打开，普通蓝牙车机常见的"第一个字被吃掉"可能出现；`carplay` 模式下播报经 Wi-Fi + Web Audio，和画面之间可能有几百毫秒不同步。
+- **上车要做的事**：车机蓝牙连 iPhone 并把它选为媒体来源；打开 AutoPlay 页面。没有"轻点开启声音"这一步，页面里也没有音量。
+- iPhone 没连车机蓝牙时，所有声音会从 iPhone 自己的扬声器出来——这是 iOS 的默认路由，不是故障。
+- **duck（播报时压低音乐）** 由 iPhone 自己处理，和普通蓝牙车机一样；盒子转发来的 `duck` 消息页面直接忽略。
+- **延迟**：播报经 A2DP，音乐没在放时 A2DP 要先把流打开，普通蓝牙车机常见的"第一个字被吃掉"可能出现。
+- **没有退路**：若某辆车经蓝牙听不到导航播报，1.3.0 起没有开关可切，只能回到 `v1.2.0` 的代码（`git checkout v1.2.0 -- receiver/web/src/audio.ts …`）。做这个决定的依据是实车确认，见上。
 
-## 四、还没有实车答案的
+## 四、兼容旧接收端
 
-1. `bluetooth` 模式下导航播报在行驶中是否稳定听到、第一个字有没有被吃；来电铃声和 Siri 是否照常。
-2. 故意不连车机蓝牙时声音去了哪（预期：iPhone 扬声器）。
-3. iOS 27.2 下 Siri 结束后那约 27 秒的 102 号音乐流是否还出现（`stats` 里的 `musicDropped` 会说）。
-
-把结果记到 `docs/TESLA.md` §7。
+网页、盒子脚本和接收端一起发布，但接收端的 Kotlin 自 1.1.0 起没有在有网的机器上编译过（`receiver/docs/UNVERIFIED-KOTLIN.md`）。为了让盒子脚本装在一台跑着更早接收端（默认在网页播导航）的盒子上也保持全部走蓝牙，`run-receiver.py` 仍给 JVM 传 `--car-voice --audio-route-navigation bluetooth`；1.3.0 的接收端接受并忽略这两个参数。`receiver-access.json` 只剩 `token` 和 `settingsPort`。升级时安装脚本和守护进程会删掉旧配置里的 `audio_route_navigation` 键。
 
 ## 五、代码位置
 
-- 接收端：`ServerConfig.audioRouteNavigation` / `audioOverBluetooth`，`CarPlayServer.airPlayConfig`（`disableAudioOutput`），`AirPlayInfoPlist.build`；测试 `AudioCapabilitiesTest`。
-- 盒子：`supervisor_openwrt.audio_route_of()` → `run-receiver.py --audio-route-navigation` → JVM 参数 + `receiver-access.json` 的 `audioRouteNavigation`；设置页「声音」格；LuCI `audio_route_navigation`。
-- 网页：`boot.ts` → `playportPageAudio`；`main.ts` 隐藏解锁条/音量、不打开音频输出；`audio.ts` 丢弃 media 流；`flags.ts PAGE_PLAYS_MUSIC`。
+- 接收端：`CarPlayServer.airPlayConfig`（`disableAudioOutput = true`），`AirPlayInfoPlist.build`；测试 `AudioCapabilitiesTest`（不声明音频；旧参数被忽略）。
+- 盒子：`run-receiver.py`（JVM 参数、`receiver-access.json`）；`supervisor_openwrt.OBSOLETE_OPTIONS` 与 `90-autoplay-tesla` 删除旧键。
+- 网页：`main.ts` 对 wire 类型 3/4/6（旧接收端可能仍转发的音频帧）只解析不处理；`debug-hud.ts` 两行；`public/browser-check.js` 不检查音频 API。

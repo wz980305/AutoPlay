@@ -38,15 +38,15 @@ copy with a symlink (node_modules/ is gitignored):
 mkdir -p node_modules && ln -sfn /opt/npm-tools/node_modules/typescript node_modules/typescript
 ```
 
-## Since then (1.1.0 / 1.2.0)
+## Since then (1.1.0 / 1.2.0 / 1.3.0)
 
 - `npm run build:offline` = `tsc --noEmit -p tsconfig.offline.json && node scripts/build-esbuild.mjs`.
-- `npm test` runs five scripts: `check.mjs`, `check-audio.mjs`, `check-car.mjs`, `check-browser.mjs`, `check-runtime.mjs`.
-- 1.1.0 deleted the MSE music path (`music-output.ts`, `aac-mp4.ts`; `flags.ts` has `PAGE_PLAYS_MUSIC = false`).
+- `npm test` runs four scripts: `check.mjs`, `check-car.mjs`, `check-browser.mjs`, `check-runtime.mjs` (`check-audio.mjs` went with the page's audio in 1.3.0).
+- 1.1.0 deleted the MSE music path (`music-output.ts`, `aac-mp4.ts`); 1.3.0 deleted the rest of the page's audio (`audio.ts`, `audio-timing.ts`, the sound flags): `flags.ts` only has `TESLA` left (`../../docs/AUDIO.md`).
 - 1.2.0 added `src/picker.ts` (the in-page option sheet that replaces native `<select>` lists) and
   `scripts/ui-shots.mjs`, which screenshots the viewer and the box page at the Tesla browser's window shapes
   (needs `playwright-core` and a Chromium: `CHROME=/path/to/chromium node scripts/ui-shots.mjs out/ui-shots`;
-  `../../docs/UI-1.2.0.md`). `scripts/benchmark-media.mjs` is the media micro-benchmark from 0.1.1.
+  `../../docs/UI-1.2.0.md`, `../../docs/UI-1.3.0.md`). `scripts/benchmark-media.mjs` is the media micro-benchmark from 0.1.1.
 - Sizes are larger than the numbers below (`index.html` 12.7 KB, `style.css` 20 KB source); those are the
   2026-10-26 snapshot.
 

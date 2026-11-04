@@ -69,8 +69,8 @@ msgstr "诊断记录在 AutoPlay 设置页下载。在这里保存修改会重�
 msgid "Adding an iPhone"
 msgstr "添加 iPhone"
 
-msgid "Open the settings page on the Tesla or another device (not on the iPhone being added: it must stay in Settings → Bluetooth) and tap \"Add iPhone\". Pair the iPhone with the Tesla over Bluetooth as well and pick it as the media source: music, calls and Siri go over the car's own Bluetooth; the CarPlay page shows the screen and plays navigation prompts."
-msgstr "在特斯拉或另一台设备上打开设置页（不要在要添加的那部 iPhone 上：它要停在「设置 → 蓝牙」），点「添加 iPhone」。iPhone 也要用蓝牙连上特斯拉并选为媒体来源：音乐、通话和 Siri 走车机蓝牙；CarPlay 画面显示屏幕并播放导航提示。"
+msgid "Open the settings page on the Tesla or another device (not on the iPhone being added: it must stay in Settings → Bluetooth) and tap \"Add iPhone\". Pair the iPhone with the Tesla over Bluetooth as well and pick it as the media source: music, navigation prompts, calls and Siri all play over the car's own Bluetooth; the CarPlay page only shows the screen."
+msgstr "在特斯拉或另一台设备上打开设置页（不要在要添加的那部 iPhone 上：它要停在「设置 → 蓝牙」），点「添加 iPhone」。iPhone 也要用蓝牙连上特斯拉并选为媒体来源：音乐、导航播报、通话和 Siri 都从车机蓝牙播出；CarPlay 页面只显示画面。"
 
 msgid "Release the iPhone after (seconds)"
 msgstr "无人观看多久后释放 iPhone（秒）"
@@ -86,18 +86,6 @@ msgstr "在 duckdns.org 免费注册，添加一个子域名，把它和页面�
 
 msgid "DuckDNS token"
 msgstr "DuckDNS token"
-
-msgid "Navigation prompts"
-msgstr "导航播报"
-
-msgid "Over the Tesla's Bluetooth too (default): the box offers the iPhone no audio at all, so every sound, navigation included, plays on the Tesla over Bluetooth (or on the iPhone when it is not paired with the car) and the CarPlay page is silent. On the CarPlay page: the page plays navigation prompts (tap it once for sound; they are boosted and have their own volume there) while music, Siri and calls stay on the Tesla over Bluetooth; use it when prompts are not heard over Bluetooth."
-msgstr "也走特斯拉蓝牙（默认）：盒子不向 iPhone 提供任何音频，所有声音（含导航）都从特斯拉蓝牙播出（iPhone 没连车机蓝牙时会从 iPhone 自己发声），CarPlay 页面无声。在 CarPlay 页面：页面播放导航播报（上车后轻点页面一次开启声音，播报会放大并有自己的音量），音乐、Siri、通话仍走特斯拉蓝牙；经蓝牙听不到播报时用它。"
-
-msgid "On the CarPlay page"
-msgstr "在 CarPlay 页面"
-
-msgid "Over the Tesla's Bluetooth too"
-msgstr "也走特斯拉蓝牙"
 
 msgid "DNS provider"
 msgstr "DNS 服务商"

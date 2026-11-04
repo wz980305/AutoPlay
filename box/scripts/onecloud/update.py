@@ -30,9 +30,9 @@ import tempfile
 import time
 import urllib.request
 
-# The fork's release location: set these when AutoPlay releases are published (the DashPlay feeds carry packages
+# The fork's release location (github.com/wz980305/AutoPlay; no signed release exists yet, docs/ROADMAP.md). The DashPlay feeds carry packages
 # with the old names, which this box no longer installs).
-OWNER = os.environ.get("AUTOPLAY_UPDATE_OWNER", "yizhixiaoheigou")
+OWNER = os.environ.get("AUTOPLAY_UPDATE_OWNER", "wz980305")
 REPO = os.environ.get("AUTOPLAY_UPDATE_REPO", "AutoPlay")
 FEED_REPO = os.environ.get("AUTOPLAY_UPDATE_FEED_REPO", "openwrt-autoplay")
 # Where the latest manifest and the installed version's OpenWrt packages (to go back to) come from. The environment

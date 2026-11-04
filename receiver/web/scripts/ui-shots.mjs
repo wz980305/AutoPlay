@@ -1,5 +1,5 @@
 // Screenshots of the CarPlay page (dist/) and the box settings page at the Tesla browser's window shapes (1.2.0,
-// docs/UI-1.2.0.md). Everything is served and mocked locally: no box, iPhone or car is needed.
+// docs/UI-1.2.0.md; 1.3.0, docs/UI-1.3.0.md). Everything is served and mocked locally: no box, iPhone or car is needed.
 //
 //   npm run build:offline                                   # dist/
 //   python3 ../../box/tools/render_settings_states.py out/box-states
@@ -54,7 +54,7 @@ async function viewer(vp, opts = {}) {
   const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, deviceScaleFactor: vp.dsf, locale: 'zh-CN', colorScheme: 'dark' });
   await ctx.addInitScript(() => { if (typeof VideoDecoder !== 'undefined') VideoDecoder.isConfigSupported = () => Promise.resolve({ supported: true }); });
   if (opts.lang) await ctx.addInitScript(lang => { try { localStorage.setItem('f50-language', lang); } catch { /* no storage */ } }, opts.lang);
-  await ctx.route('**/receiver-access.json', r => r.fulfill({ json: { token: TOKEN, settingsPort: 18080, tesla: true, audioRouteNavigation: opts.route ?? 'bluetooth' } }));
+  await ctx.route('**/receiver-access.json', r => r.fulfill({ json: { token: TOKEN, settingsPort: 18080 } }));
   await ctx.route('**/api/display*', r => r.request().method() === 'POST' ? r.fulfill({ json: { ok: true } })
     : r.fulfill({ json: { width: 1920, height: 1080, fps: 30, uiScale: 85, hevc: false } }));
   const page = await ctx.newPage();
@@ -90,7 +90,7 @@ if (ONLY !== 'box') for (const vp of SHAPES) {
   await page.evaluate(() => document.getElementById('btn-settings').click()); await page.waitForTimeout(500);
   await shot(page, 'viewer-settings-general', vp);
   const measured = await page.evaluate(() => ({ docW: document.documentElement.scrollWidth, winW: innerWidth,
-    label: getComputedStyle(document.querySelector('.settings-page .cell .main b')).fontSize, hint: getComputedStyle(document.querySelector('.settings-page .cell .main span')).fontSize,
+    label: getComputedStyle(document.querySelector('.settings-page .cell .main b')).fontSize, value: getComputedStyle(document.querySelector('.settings-page .select-row .value')).fontSize,
     cell: Math.round(document.querySelector('.settings-page .select-row').getBoundingClientRect().height) }));
   await page.click('[data-picker="night-mode"]'); await settle(page); await shot(page, 'viewer-picker-night', vp);
   await page.click('#picker-options .option:nth-child(3)'); await settle(page); await shot(page, 'viewer-settings-general-picked', vp);
@@ -102,25 +102,21 @@ if (ONLY !== 'box') for (const vp of SHAPES) {
   await page.click('#picker-cancel'); await settle(page);
   await page.click('[data-settings-page="connection"]'); await settle(page); await shot(page, 'viewer-settings-connection', vp);
   await page.locator('#settings-connection details > summary').first().click(); await page.waitForTimeout(700); await shot(page, 'viewer-settings-connection-diagnostics', vp);
-  await page.locator('#settings-connection details > summary').nth(1).click(); await page.waitForTimeout(700); await shot(page, 'viewer-settings-connection-fallback', vp);
   await page.click('#btn-close'); await page.waitForTimeout(400);
   link.down = true; for (const ws of sockets) await ws.close({ code: 1006, reason: 'test' }).catch(() => {});
   await page.waitForTimeout(2500); await shot(page, 'viewer-reconnecting', vp);
   console.log('   ', JSON.stringify({ ...measured, state: await page.evaluate(() => document.getElementById('app').dataset.state) }));
   await ctx.close();
 }
-if (ONLY !== 'box') {   // English labels (the longest strings) and the carplay route (the volume slider) at the windowed shape
+if (ONLY !== 'box') {   // English labels (the longest strings) at the windowed shape
   const vp = SHAPES[0];
-  let { ctx, page } = await viewer(vp, { lang: 'en' });
+  const { ctx, page } = await viewer(vp, { lang: 'en' });
   await shot(page, 'viewer-waiting-en', vp);
   await page.evaluate(() => document.getElementById('btn-settings').click()); await page.waitForTimeout(500); await shot(page, 'viewer-settings-general-en', vp);
   await page.click('[data-picker="night-mode"]'); await settle(page); await shot(page, 'viewer-picker-night-en', vp);
   await page.keyboard.press('Escape'); await settle(page);
   await page.click('[data-settings-page="display"]'); await settle(page); await shot(page, 'viewer-settings-display-en', vp);
   await page.click('#settings-display details > summary'); await page.waitForTimeout(700); await shot(page, 'viewer-settings-display-advanced-en', vp);
-  await ctx.close();
-  ({ ctx, page } = await viewer(vp, { route: 'carplay' }));
-  await page.evaluate(() => document.getElementById('btn-settings').click()); await page.waitForTimeout(500); await shot(page, 'viewer-settings-general-carplayroute', vp);
   await ctx.close();
 }
 if (ONLY !== 'viewer') for (const vp of SHAPES) {

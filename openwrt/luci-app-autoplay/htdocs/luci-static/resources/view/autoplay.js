@@ -93,7 +93,7 @@ return view.extend({
 		o = s.taboption('iphone', form.DummyValue, '_iphone', _('Adding an iPhone'));
 		o.rawhtml = true;
 		o.cfgvalue = function() {
-			return _('Open the settings page on the Tesla or another device (not on the iPhone being added: it must stay in Settings → Bluetooth) and tap "Add iPhone". Pair the iPhone with the Tesla over Bluetooth as well and pick it as the media source: music, calls and Siri go over the car\'s own Bluetooth; the CarPlay page shows the screen and plays navigation prompts.') +
+			return _('Open the settings page on the Tesla or another device (not on the iPhone being added: it must stay in Settings → Bluetooth) and tap "Add iPhone". Pair the iPhone with the Tesla over Bluetooth as well and pick it as the media source: music, navigation prompts, calls and Siri all play over the car\'s own Bluetooth; the CarPlay page only shows the screen.') +
 				' <a class="btn cbi-button cbi-button-action" target="_blank" href="http://' + host + ':' + port + '/">' + _('Add iPhone') + '</a>';
 		};
 
@@ -103,14 +103,8 @@ return view.extend({
 		o.datatype = 'uinteger';
 		o.placeholder = '300';
 
-		// Where navigation prompts play (1.1.0; docs/AUDIO.md, ADR-14). Music, Siri and calls are on the Tesla's
-		// Bluetooth either way (the receiver offers the iPhone no call or Siri audio). The names are DashPlay 2026.10.31's.
-		o = s.taboption('iphone', form.ListValue, 'audio_route_navigation', _('Navigation prompts'),
-			_('Over the Tesla\'s Bluetooth too (default): the box offers the iPhone no audio at all, so every sound, navigation included, plays on the Tesla over Bluetooth (or on the iPhone when it is not paired with the car) and the CarPlay page is silent. On the CarPlay page: the page plays navigation prompts (tap it once for sound; they are boosted and have their own volume there) while music, Siri and calls stay on the Tesla over Bluetooth; use it when prompts are not heard over Bluetooth.'));
-		o.value('bluetooth', _('Over the Tesla\'s Bluetooth too'));
-		o.value('carplay', _('On the CarPlay page'));
-		o.default = 'bluetooth';
-		o.rmempty = false;
+		// No sound option (1.3.0; docs/AUDIO.md, ADR-16): the box offers the iPhone no audio at all, so every sound
+		// plays over the Tesla's Bluetooth. The audio_route_navigation key of 1.1.0-1.2.0 is removed on upgrade.
 
 		// A public name with a Let's Encrypt certificate, obtained by DNS-01 over the SIM (nothing has to reach the
 		// box). Two providers: a free DuckDNS sub-domain, or a Tencent Cloud (DNSPod) domain.

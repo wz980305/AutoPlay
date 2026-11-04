@@ -1,7 +1,7 @@
-# AutoPlay 1.2.0 安装 / 卸载 / 使用说明
+# AutoPlay 1.3.0 安装 / 卸载 / 使用说明
 
 > 适用：中兴 F50（MU300，已 Root + OpenWrt 25.12，内核 5.4）上的无线 CarPlay，画面投到特斯拉车机浏览器。
-> 1.0.0 是**首个在特斯拉车内实测通过的版本**（无线 CarPlay 画面、触摸、导航播报已验证）；1.0.1 是它的收尾；**1.1.0 把声音默认全部交给特斯拉蓝牙**（见第三节），并引入 DashPlay 10.26–11.01 的可靠性修复；**1.2.0 只改界面**：两张页面按特斯拉的窗口形状核对，下拉与确认框改在页内画（见第六节），功能与 1.1.0 相同。接收端四个 Kotlin 文件自 1.1.0 起未经编译，第一次构建时留意 `receiver/docs/UNVERIFIED-KOTLIN.md`。
+> 1.0.0 是**首个在特斯拉车内实测通过的版本**（无线 CarPlay 画面、触摸、导航播报已验证）；1.0.1 是它的收尾；**1.1.0 把声音默认全部交给特斯拉蓝牙**（见第三节），并引入 DashPlay 10.26–11.01 的可靠性修复；**1.2.0 只改界面**：两张页面按特斯拉的窗口形状核对，下拉与确认框改在页内画（见第六节）；**1.3.0** 按上车一周后的清单收口：设置面板按 iOS「设置」的样子（每行图标、无小字），网页里的声音和「备用控制」删掉，盒子页不再报"上游在线"，并修浏览器拉回时偶尔弹键盘的问题（见第七节）。接收端的 Kotlin 自 1.1.0 起未经编译（1.3.0 又改了三个文件），第一次构建时留意 `receiver/docs/UNVERIFIED-KOTLIN.md`。
 
 ---
 
@@ -21,12 +21,12 @@
 # 编译投屏页
 (cd receiver/web && npm ci && npm run build)
 # 打程序包
-AUTOPLAY_VERSION=1.2.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
+AUTOPLAY_VERSION=1.3.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 # 用 Docker SDK 打 apk
 sh openwrt/scripts/build-packages.sh out/ autoplay-bundle.tar
 ```
 
-产物在 `out/`：`autoplay-1.2.0-r1.apk`、`autoplay-jre-*_<架构>.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk`。
+产物在 `out/`：`autoplay-1.3.0-r1.apk`、`autoplay-jre-*_<架构>.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk`。
 
 ### 3. 装到 F50（手动路线）
 ```sh
@@ -77,18 +77,11 @@ uci commit autoplay
 
 ---
 
-## 三、声音（1.1.0）
+## 三、声音
 
-默认 **所有声音走特斯拉蓝牙**：盒子不向 iPhone 提供 CarPlay 音频，音乐、导航播报、通话、Siri 全部由 iPhone 经特斯拉蓝牙播出，CarPlay 页面无声。前提：iPhone 连着特斯拉蓝牙并被选为媒体来源；没连时声音会从 iPhone 自己出来。
+**所有声音走特斯拉蓝牙**：盒子不向 iPhone 提供 CarPlay 音频，音乐、导航播报、通话、Siri 全部由 iPhone 经特斯拉蓝牙播出，CarPlay 页面无声，页面里没有任何声音设置。前提：iPhone 连着特斯拉蓝牙并被选为媒体来源；没连时声音会从 iPhone 自己出来。
 
-经蓝牙听不到导航播报时，改为页面播放（1.0.x 的做法，上车后要轻点页面一次开声音）：LuCI「服务 → AutoPlay → iPhone → 导航播报」选「在 CarPlay 页面」，或
-
-```sh
-uci set autoplay.main.audio_route_navigation=carplay   # 改回：bluetooth
-uci commit autoplay && /etc/init.d/autoplay restart
-```
-
-两种模式下页面都不再播放音乐（行驶中的特斯拉会对播音乐的网页弹横幅并让 CarPlay 反复重连）。细节见 `docs/AUDIO.md`。
+1.1.0–1.2.0 里"改为页面播放导航"的备选（LuCI「导航播报」下拉、`uci audio_route_navigation`）在 1.3.0 删掉了：车上已确认走蓝牙可用，备选只剩成本。升级时安装脚本会自动删掉旧配置里的这个键，不用手动处理。页面也不能播音乐（行驶中的特斯拉会对播音乐的网页弹横幅并让 CarPlay 反复重连）。细节见 `docs/AUDIO.md`。
 
 ---
 
@@ -119,9 +112,10 @@ apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
 
 ### 关键注意
 - 蓝牙必须用私有 BlueZ，**不要 `apk add bluez-daemon`**（会带入不匹配的 6.12 内核模块）。
-- **1.1.0 上车第一件事**：开一段导航，确认播报从车机扬声器出来、第一个字没被吃掉；来电、Siri 照常。听不到就切回页面播报（第三节）。
+- 开一段导航，留意播报的第一个字有没有被吃掉；来电、Siri 照常。
 - 盒子需长期有 SIM（证书续期 + 特斯拉联网检测）。
 - **1.2.0 上车看一眼界面**：设置 → 夜间模式弹出的是页内选项表（大字、可点）而不是浏览器的小下拉；盒子页点一部手机 → 「删除此 iPhone…」出现确认屏而不是浏览器弹窗。若选项表没有出现，把车机浏览器版本记到 `docs/TESLA.md` 并反馈。
+- **1.3.0 上车看一眼**：从别的应用切回浏览器十次左右，屏幕键盘不再出现；设置面板三页每行都有图标、没有小字。
 - **在线升级目前不可用**：`update.py` 校验发布签名，而项目还没有自己的发布密钥和软件源（仓库里的公钥仍是上游 DashPlay 的），设置页「程序更新」会报找不到或拒绝。升级请按第一节手动 `apk add` 新包（配对、证书、认证身份都在 `/opt/autoplay/` 下保留）；勿手动覆盖 `/opt/autoplay/{state,identity}`。
 
 ## 六、1.2.0 的界面变化（`docs/UI-1.2.0.md`）
@@ -130,3 +124,10 @@ apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
 - 二级菜单（画质与兼容、连接与兼容性、备用控制；盒子页的手机行）打开时自动滚进视野。
 - 盒子设置页（`http://100.96.0.1:18080/`）字号和按钮尺寸与投屏页一致；添加 iPhone 时整页只显示配对码和「一致 / 不一致」；「删除此 iPhone…」「立即升级」先进入确认屏再执行，没有浏览器弹窗。
 - 操作和地址都没有变化；不需要重新配对或重新申请证书。
+
+## 七、1.3.0 的变化（`docs/UI-1.3.0.md`）
+
+- 设置面板：每行一个彩色图标 + 标签 + 当前值，和 iOS「设置」一样；行内不再有说明文字；「常用」只剩夜间模式和语言，「显示」是画质、无边框模式、画质与兼容，「连接」是打开盒子网页和连接与兼容性。「声音」分组和「备用控制」删除。
+- 浏览器被拉回时偶尔弹出的屏幕键盘：画面不再持有浏览器焦点，页面重新可见时清掉焦点；键盘即使出现也不改变页面尺寸。
+- 盒子设置页：不再显示"上游在线"的横幅，只有上游不可用时才提示。
+- 操作和地址都没有变化；不需要重新配对或重新申请证书。升级时旧配置里的 `audio_route_navigation` 键会被自动删掉。

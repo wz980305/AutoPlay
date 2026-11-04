@@ -9,7 +9,7 @@ Two modules:
 - `protocol/` — the CarPlay stack inherited from DiPlay/xcertplay: iAP2 over Bluetooth (pairing, the Wi-Fi credential hand-over, session start), AirPlay/CarPlay over Wi-Fi (RTSP, pairing, the video and touch streams), and the MFi authentication exchange against a user-supplied accessory identity.
 - `server/` — the receiver proper: the AirPlay server, the Bluetooth bootstrap through the box's `bt-bridge` helper, the display negotiation (view areas for the browser's window shapes), and a WSS server that serves the viewer page in `web/` and relays video, touch and session state to it.
 
-Video is forwarded as the iPhone sends it, H.264 or H.265, never decoded here; the browser decodes with WebCodecs. Audio: with `--audio-route-navigation bluetooth` (what the box passes by default since 1.1.0) the receiver offers the iPhone no audio formats, so every sound stays on the car's Bluetooth; with `carplay` the navigation prompt and alert streams are relayed to the page, which plays them. Telephony, Siri and the microphone are never offered in either mode. `../docs/AUDIO.md` has the details.
+Video is forwarded as the iPhone sends it, H.264 or H.265, never decoded here; the browser decodes with WebCodecs. Audio: the receiver offers the iPhone no audio formats at all (1.3.0; `AirPlayConfig.disableAudioOutput` is always on), so every sound, navigation prompts included, stays on the car's Bluetooth and the page is silent; telephony, Siri and the microphone are never offered. The audio relay of the wire protocol (types 3/4/6) is still in the code but never carries anything. `../docs/AUDIO.md` has the details.
 
 What the trim removed, and why: `docs/TRIM-LOG.md`. The Kotlin changes made since 1.0.0 without a compiler at hand: `docs/UNVERIFIED-KOTLIN.md` — `./gradlew build` is the first thing to run on a machine with a Gradle network.
 
@@ -23,7 +23,7 @@ cd receiver
 ./gradlew :server:installDist   # server/build/install/server/{bin,lib} → /opt/autoplay/playport/lib on the box
 ```
 
-The viewer page is built separately (`web/README-build.md`): `npm ci && npm run build`, or `npm run build:offline` with a preinstalled esbuild; `npm test` runs its five check scripts.
+The viewer page is built separately (`web/README-build.md`): `npm ci && npm run build`, or `npm run build:offline` with a preinstalled esbuild; `npm test` runs its four check scripts.
 
 ## Running
 
@@ -39,7 +39,7 @@ On the box the receiver is not started by hand: `box/scripts/onecloud/run-receiv
 | `--ui-scale <75\|85\|100\|115>` | 85 | CarPlay content size as the physical width told to the phone (350/300/250/200 mm; 85 = 300 mm, the Tesla default) |
 | `--hevc` | off | offer H.265 (the page asks for it when the browser decodes it) |
 | `--rhd` | off | right-hand-drive layout |
-| `--audio-route-navigation <carplay\|bluetooth>` | `carplay` in code; the box passes `bluetooth` | see above |
+| `--audio-route-navigation <value>`, `--car-voice` | accepted and ignored | the box passes both for receiver builds before 1.3.0 (`docs/AUDIO.md` §四) |
 | `--bind <address>` | auto | bind address |
 | `--identity-dir <path>` | `./identity` | directory containing `offline-mfi/` (see `identity/README.md`) |
 | `--state-dir <path>` | `~/.playport` | AirPlay identity and pairing state (the box uses `/opt/autoplay/state`) |

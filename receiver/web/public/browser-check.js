@@ -42,11 +42,9 @@
  add('WebSocket',typeof w.WebSocket==='function',true,zh?'接收画面与发送触控。':'Receives the picture, sends touches.','old');
  add(zh?'JavaScript 模块':'JavaScript modules','noModule' in d.createElement('script'),true,zh?'播放器的脚本格式。':'The player script format.','old');
  add('Canvas',!!d.createElement('canvas').getContext('2d'),true,zh?'绘制画面。':'Draws the picture.','old');
- add('Web Audio',!!w.AudioContext,true,zh?'导航播报的声音。':'Navigation prompt sound.','old');
  add('Pointer Events',!!w.PointerEvent,true,zh?'画面内触控。':'Touch on the picture.','old');
  add(zh?'设置弹窗':'Settings dialog',!!d.createElement('dialog').showModal,true,zh?'打开设置需要。':'Needed to open Settings.','old');
  add(zh?'WebCodecs 视频解码':'WebCodecs video decoding',!!w.VideoDecoder,true,zh?'缺少 VideoDecoder 无法显示画面。':'Without VideoDecoder there is no picture.','video');
- add(zh?'音频解码':'Audio decoding',!!w.AudioDecoder,false,zh?'缺少时压缩格式的播报没有声音。':'Without it compressed prompts are silent.');
  if(w.VideoDecoder&&typeof w.VideoDecoder.isConfigSupported==='function'){
   pending++;var completed=false;
   function result(ok,detail){if(completed)return;completed=true;add(zh?'H.264 解码探测':'H.264 decode probe',ok,true,detail,'video');pending--;finish();}

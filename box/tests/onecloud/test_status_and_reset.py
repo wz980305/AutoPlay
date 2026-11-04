@@ -134,18 +134,17 @@ class PageBannerTests(unittest.TestCase):
         self.status.set("certificate", "ok", None, not_after="2027-01-01")
         self.assertNotIn("过期", self.page.render(""))
 
-    def test_the_sound_cell_follows_the_audio_route(self):
-        # 1.1.0 (ADR-14): the supervisor publishes uci audio_route_navigation; the page says what navigation does.
-        self.assertNotIn("导航播报", self.page.render(""), "nothing until the supervisor says which route is on")
-        self.status.update(audio_route="bluetooth")
+    def test_no_sound_group_and_no_online_banner(self):
+        # 1.3.0: every sound is on the Tesla's Bluetooth (no audio route to show), and an upstream that is online is
+        # no news; only a down upstream gets a banner (certificates cannot renew, the car will not stay on the hotspot).
+        self.status.update(audio_route="carplay", tesla_upstream="online", tesla_internet="上游在线；特斯拉自带音乐、地图可以上网。")
         html = self.page.render("")
-        self.assertIn("走特斯拉蓝牙", html)
-        self.assertIn("CarPlay 页面无声", html)
-        self.status.update(audio_route="carplay")
-        html = self.page.render("")
-        self.assertIn("在 CarPlay 页面", html)
-        self.assertIn("轻点页面一次开启声音", html)
-        self.assertNotIn("页面无声", html)
+        for text in ("导航播报", "声音", "上游在线", "可以上网"):
+            self.assertNotIn(text, html)
+        self.status.update(tesla_upstream="offline", tesla_internet="上游不可用（没有 4G 信号）；局域网 CarPlay 正常；特斯拉自带音乐、地图不能上网。")
+        self.assertIn("上游不可用", self.page.render(""))
+        self.status.update(tesla_upstream="unknown", tesla_internet="上游状态检测中；局域网 CarPlay 正常。")
+        self.assertNotIn("检测中", self.page.render(""))
 
     def test_pairing_lost_tells_the_owner_to_re_add(self):
         self.status.set("phone", "pairing-lost", "pairing-lost")
@@ -196,16 +195,16 @@ class PageBannerTests(unittest.TestCase):
         nonce = self.page.pairing.nonce
         reply = self.page.apply("/update", {"nonce": nonce, "action": "install"})
         self.assertEqual(reply, {"ask": "install"})
-        (self.state / "update-check.json").write_text(json.dumps({"available": True, "online": True, "latest": "1.3.0", "current": "1.2.0", "checked_at": 1}))
+        (self.state / "update-check.json").write_text(json.dumps({"available": True, "online": True, "latest": "1.4.0", "current": "1.3.0", "checked_at": 1}))
         html = self.page.render("ask=install")
-        self.assertIn("现在升级到 1.3.0？", html)
+        self.assertIn("现在升级到 1.4.0？", html)
         self.assertIn("立即升级", html)
         self.assertNotIn("confirm(", html)
         with patch("settings_page.update.launch", return_value="正在升级") as launch:
             self.assertEqual(self.page.apply("/update", {"nonce": nonce, "action": "install", "confirmed": "1"}), "正在升级")
         launch.assert_called_once()
         # nothing to install (offline or none found): the normal page instead of an empty question
-        (self.state / "update-check.json").write_text(json.dumps({"available": False, "latest": "1.2.0", "checked_at": 1}))
+        (self.state / "update-check.json").write_text(json.dumps({"available": False, "latest": "1.3.0", "checked_at": 1}))
         self.assertIn("我的 iPhone", self.page.render("ask=install"))
 
 
