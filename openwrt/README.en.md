@@ -10,7 +10,7 @@ The three packages of [AutoPlay](../box/README.en.md) for the ZTE F50 (OpenWrt 2
 
 > **Not an Apple-certified product.** It needs the accessory identity you supply: [box/README.en.md](../box/README.en.md#accessory-identity).
 
-Prerequisite: an F50 already flashed to OpenWrt following [mu300-linux](https://github.com/dikeckaan/mu300-linux)'s own documentation (the unit we verified shipped with stock B13; this repository gives no flashing steps). Packages are installed by hand as below; the full procedure is in the [install guide](../交付资料/AutoPlay-1.3.1-安装使用说明.md) (Chinese).
+Prerequisite: an F50 already flashed to OpenWrt following [mu300-linux](https://github.com/dikeckaan/mu300-linux)'s own documentation (the unit we verified shipped with stock B13; this repository gives no flashing steps). Packages are installed by hand as below; the full procedure is in the [install guide](../交付资料/AutoPlay-1.3.2-安装使用说明.md) (Chinese).
 
 ## Installing by hand
 
@@ -46,7 +46,7 @@ Status and reason words: [box/docs/STATUS-MODEL.md](../box/docs/STATUS-MODEL.md)
 
 ## Updating
 
-**Online update** (since 1.3.1, `docs/RELEASE.md`): every version is a signed Release of `github.com/wz980305/AutoPlay`. A box on 1.3.0 or earlier installs 1.3.1 once by the manual route below (it carries the project's own public key; the older packages carry upstream DashPlay's); after that, Services → AutoPlay → Program update, or the settings page's update section: one check a day, a new version is only announced; "upgrade now" downloads the signed release from GitHub (or a mirror), does not run while CarPlay is in use, backs up pairings, certificate and settings first, stops if the plan touches the kernel, kernel modules or the system BlueZ, and reinstalls the previous version when the new one does not come up (receiver not answering within about 4 minutes, or Bluetooth not powered). Progress is journaled in `state/update-journal.json`; after a power cut the next boot finishes or rolls back.
+**Online update** (since 1.3.1, `docs/RELEASE.md`): every version is a signed Release of `github.com/wz980305/AutoPlay`. A box on 1.3.0 or earlier installs 1.3.1 or later once by the manual route below (they carry the project's own public key; the older packages carry upstream DashPlay's); after that, Services → AutoPlay → Program update, or the settings page's update section: one check a day, a new version is only announced; "upgrade now" downloads the signed release from GitHub (or a mirror), does not run while CarPlay is in use, backs up pairings, certificate and settings first, stops if the plan touches the kernel, kernel modules or the system BlueZ, and reinstalls the previous version when the new one does not come up (receiver not answering within about 4 minutes, or Bluetooth not powered). Progress is journaled in `state/update-journal.json`; after a power cut the next boot finishes or rolls back.
 
 By hand: `apk update && apk add --upgrade --simulate --allow-untrusted /tmp/autoplay-upgrade/*.apk` to see the plan, then without `--simulate` once it contains user-space packages only. Do not remove and reinstall, do not sysupgrade, do not overwrite `/opt/autoplay/{state,identity}`.
 

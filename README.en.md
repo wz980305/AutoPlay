@@ -4,7 +4,7 @@
 
 <p align="center"><img src="docs/images/tesla-model3-carplay-2026-11-02.jpg" width="640" alt="CarPlay home screen inside the Model 3's browser"> <img src="docs/images/f50-in-hand-2026-11-02.jpg" width="240" alt="The ZTE F50 in hand, CarPlay on the car screen"></p>
 
-[中文](README.md) · current release **1.3.1** (2026-11-05) · [changelog](CHANGELOG.md) · [install and usage guide (Chinese)](交付资料/AutoPlay-1.3.1-安装使用说明.md)
+[中文](README.md) · current release **1.3.2** (2026-11-05) · [changelog](CHANGELOG.md) · [install and usage guide (Chinese)](交付资料/AutoPlay-1.3.2-安装使用说明.md)
 
 ## Why this route
 
@@ -46,7 +46,7 @@ Two things are not done. The 1.1.0 to 1.3.0 changes to the receiver's Kotlin wer
 
 ## Installing and using it
 
-The full procedure is in the [install guide](交付资料/AutoPlay-1.3.1-安装使用说明.md) (Chinese); here is the outline. On a computer, build the receiver (JDK 21 + Gradle) and the viewer page (Node), then use the OpenWrt Docker SDK to produce four apk packages: `autoplay` (the program, installed under `/opt/autoplay`), `autoplay-jre` (a jlink-trimmed Temurin 21), `luci-app-autoplay` and its Chinese translation. Copy them to the box, `apk add` them, run `board_zte_f50.py --setup` once so the F50's Bluetooth uses the private BlueZ (do not `apk add bluez-daemon`; it pulls in mismatched kernel modules), place the identity files, restart the service. The install script moves the LAN to 100.96.0.1, sets the 5 GHz radio to CN / 149, and keeps any channel in 149–165 you chose in LuCI.
+The full procedure is in the [install guide](交付资料/AutoPlay-1.3.2-安装使用说明.md) (Chinese); here is the outline. On a computer, build the receiver (JDK 21 + Gradle) and the viewer page (Node), then use the OpenWrt Docker SDK to produce four apk packages: `autoplay` (the program, installed under `/opt/autoplay`), `autoplay-jre` (a jlink-trimmed Temurin 21), `luci-app-autoplay` and its Chinese translation. Copy them to the box, `apk add` them, run `board_zte_f50.py --setup` once so the F50's Bluetooth uses the private BlueZ (do not `apk add bluez-daemon`; it pulls in mismatched kernel modules), place the identity files, restart the service. The install script moves the LAN to 100.96.0.1, sets the 5 GHz radio to CN / 149, and keeps any channel in 149–165 you chose in LuCI.
 
 After that there are three places to look and change things:
 
@@ -54,7 +54,7 @@ After that there are three places to look and change things:
 - `http://100.96.0.1:18080/` is the **box settings page**, for the owner: the hotspot–box–iPhone chain at a glance, adding and removing iPhones (the pairing code is confirmed here), certificate expiry, a diagnostics download, a factory reset. It works without JavaScript.
 - `http://100.96.0.1/` is **LuCI**; under Services → AutoPlay there are four tabs: Network, iPhone, Own address (DuckDNS / DNSPod credentials), Program update.
 
-Since 1.3.1 every version is a signed GitHub Release (`docs/RELEASE.md`): the box checks once a day, announces a new version on its settings page and in LuCI, and on "upgrade now" backs up pairings, certificate and settings, downloads the way back first, installs, and rolls back by itself if the new version does not come up. A box still on an earlier version is updated by hand once, to 1.3.1 (which carries the project's own public key); after that no computer is needed. Pairings, certificates and identity stay under `/opt/autoplay/`.
+Since 1.3.1 every version is a signed GitHub Release (`docs/RELEASE.md`): the box checks once a day, announces a new version on its settings page and in LuCI, and on "upgrade now" backs up pairings, certificate and settings, downloads the way back first, installs, and rolls back by itself if the new version does not come up. A box still on an earlier version is updated by hand once, to 1.3.1 or later (which carry the project's own public key); after that no computer is needed. Pairings, certificates and identity stay under `/opt/autoplay/`.
 
 ## What is in the repository
 

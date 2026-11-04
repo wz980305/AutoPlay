@@ -34,8 +34,8 @@
 在自己电脑上做同样的事（需要 JDK 21、Node、Docker、`gh`）：
 
 ```sh
-sh box/scripts/release.sh 1.3.1                      # 只构建到 out/release-1.3.1，不发布
-AUTOPLAY_RELEASE_KEY_FILE=~/autoplay-release.key sh box/scripts/release.sh 1.3.1 --publish
+sh box/scripts/release.sh 1.3.2                      # 只构建到 out/release-1.3.2，不发布
+AUTOPLAY_RELEASE_KEY_FILE=~/autoplay-release.key sh box/scripts/release.sh 1.3.2 --publish
 ```
 
 ## 四、盒子那边发生什么
@@ -53,10 +53,10 @@ CarPlay 在用时不升级；升级约 1 分钟断开 CarPlay；升级不碰 `/o
 
 ## 五、第一次接上这条链（一次性）
 
-升级前要下载"当前已装版本"的包，而且盒子要先带着新公钥——所以**已经装着 1.3.0 或更早版本的盒子要手动装一次 1.3.1**（第一个带包、带新公钥的发布）：
+升级前要下载"当前已装版本"的包，而且盒子要先带着新公钥——所以**已经装着 1.3.0 或更早版本的盒子要手动装一次 1.3.1 或更新的版本**（1.3.1 是第一个带包、带新公钥的发布；直接装最新的也一样）：
 
 ```sh
-# 从 Release v1.3.1 下载到电脑，再 scp 到盒子 /tmp/autoplay-upgrade/
+# 从最新的 Release（v1.3.1 或更新）下载到电脑，再 scp 到盒子 /tmp/autoplay-upgrade/
 ssh root@100.96.0.1 'cd /tmp/autoplay-upgrade && apk update && apk add --upgrade --allow-untrusted \
     autoplay-jre-*_$(cat /etc/apk/arch).apk autoplay-[0-9]*.apk luci-app-autoplay-*.apk luci-i18n-autoplay-zh-cn-*.apk'
 ```
