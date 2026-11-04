@@ -6,6 +6,8 @@
 # push of a tag vX.Y.Z: the same, then release.sh --publish signs the manifest and SHA256SUMS with the Ed25519
 #   release key in the AUTOPLAY_RELEASE_KEY secret (its public half ships in the autoplay package) and creates
 #   the Release "vX.Y.Z" with every file. Boxes see it at the next daily check.
+# manual run with `tag` set: builds and publishes that existing tag with THIS workflow (the one on the branch the
+#   run is started from), for a tag whose own run failed in the workflow itself (v1.3.1: the umask below).
 name: release
 on:
   push:
@@ -13,6 +15,11 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'publish this existing tag (vX.Y.Z) with the current workflow; empty: build only'
+        required: false
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -20,6 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { ref: "${{ inputs.tag || github.ref }}" }
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - uses: actions/setup-node@v4
@@ -43,9 +51,11 @@ jobs:
     permissions:
       contents: write   # the Release (tags only; a branch run never publishes)
     env:
-      VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+      VERSION: ${{ inputs.tag || (startsWith(github.ref, 'refs/tags/v') && github.ref_name || '') }}
+      PUBLISH: ${{ (inputs.tag != '' && inputs.tag != null) || startsWith(github.ref, 'refs/tags/v') }}
     steps:
       - uses: actions/checkout@v4
+        with: { ref: "${{ inputs.tag || github.ref }}" }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '21' }
       - uses: actions/setup-node@v4
@@ -59,17 +69,18 @@ jobs:
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "building AutoPlay $v (${GITHUB_REF})"
       - name: build everything (not published)
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ env.PUBLISH != 'true' }}
         run: sh box/scripts/release.sh "${{ steps.version.outputs.version }}" out/release
       - name: build, sign and publish the Release
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ env.PUBLISH == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           AUTOPLAY_RELEASE_KEY: ${{ secrets.AUTOPLAY_RELEASE_KEY }}
         run: |
           [ -n "$AUTOPLAY_RELEASE_KEY" ] || { echo "the AUTOPLAY_RELEASE_KEY secret is not set: docs/RELEASE.md" >&2; exit 1; }
-          umask 077
-          printf '%s\n' "$AUTOPLAY_RELEASE_KEY" > "$RUNNER_TEMP/release.key"
+          # Owner-only for the key file alone: a umask left on for release.sh made the copies it hands the OpenWrt
+          # SDK container unreadable there (v1.3.1's first two runs failed in build-packages.sh).
+          (umask 077; printf '%s\n' "$AUTOPLAY_RELEASE_KEY" > "$RUNNER_TEMP/release.key")
           AUTOPLAY_RELEASE_KEY_FILE="$RUNNER_TEMP/release.key" sh box/scripts/release.sh "${{ steps.version.outputs.version }}" out/release --publish
           rm -f "$RUNNER_TEMP/release.key"
       - name: keep the build output

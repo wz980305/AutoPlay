@@ -28,6 +28,9 @@ if [ -n "$bundle" ]; then
     local_hash=$(sha256sum "$bundle" | cut -d" " -f1)
 fi
 mkdir -m 777 "$stage/out"
+# The container builds as its own user: everything handed to it must be readable whatever this shell's umask
+# (a release run under umask 077 failed here, 2026-11-05).
+chmod -R a+rX "$stage/feed" "$stage/dl"
 docker run --rm --cap-drop ALL --security-opt no-new-privileges \
     -v "$stage/feed:/feed:ro" -v "$stage/dl:/dl-local:ro" -v "$stage/out:/out" \
     -e JRE_ARCHES="$jre_arches" -e LOCAL_HASH="$local_hash" --entrypoint sh "$image" -c '

@@ -4,7 +4,9 @@
 
 ## [未发布]
 
-- `openwrt/scripts/build-packages.sh`：SDK 容器里的网络步骤（luci feed、Temurin 下载）失败时重试三次，任何一步失败都打印日志尾部（v1.3.1 的第一次发布运行在这里失败且没有留下原因）。
+- v1.3.1 标签的发布运行两次失败在 OpenWrt 打包：工作流在调用 `release.sh` 前设了 `umask 077`（本意只为私钥文件），交给 SDK 容器的源文件和程序包于是只有属主可读，容器里的构建用户读不到。现在 `umask` 只作用于写私钥那一行，`build-packages.sh` 也把交给容器的副本统一设为可读。
+- 工作流可以手动发布一个已有标签（Run workflow，`tag` 填 `vX.Y.Z`），用当前分支上的工作流构建并发布它；v1.3.1 由此发布，版本号不变。
+- `openwrt/scripts/build-packages.sh`：SDK 容器里的网络步骤（luci feed、Temurin 下载）失败时重试三次，任何一步失败都打印日志尾部（上面那次失败没有留下任何原因）。
 
 ## [1.3.1] — 2026-11-05 — 在线升级接通：自己的发布密钥、单仓库 Release、GitHub Actions 发布
 
