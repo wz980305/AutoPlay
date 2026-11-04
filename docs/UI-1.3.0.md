@@ -53,7 +53,7 @@
 cd receiver/web && npm run build:offline && npm test
 python3 ../../box/tools/render_settings_states.py out/box-states
 CHROME=/path/to/chromium node scripts/ui-shots.mjs out/ui-1.3.0        # 投屏页 4 形状 × 12 张（带边框窗口另有 5 张英文），盒子页 5 形状 × 8 状态
-cd ../../box && python3 -m unittest discover -s tests/onecloud           # 237
+cd ../../box && python3 -m unittest discover -s tests/onecloud           # 238
 ```
 
 截图在 `UI审查截图/1.3.0/`（随交付资料），台式机上量到的数字：773 × 601 下主标签 24 px、当前值 24 px、行高 72 px，无横向溢出。改动经另一个没看过修改过程的 agent 审查过一遍（它找出的英文标签截断、空状态行下的多余分隔线、两条死 CSS 规则已修）。

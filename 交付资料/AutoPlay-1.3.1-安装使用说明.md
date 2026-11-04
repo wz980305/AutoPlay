@@ -1,7 +1,7 @@
-# AutoPlay 1.3.0 安装 / 卸载 / 使用说明
+# AutoPlay 1.3.1 安装 / 卸载 / 使用说明
 
 > 适用：中兴 F50（MU300，已 Root + OpenWrt 25.12，内核 5.4）上的无线 CarPlay，画面投到特斯拉车机浏览器。
-> 1.0.0 是**首个在特斯拉车内实测通过的版本**（无线 CarPlay 画面、触摸、导航播报已验证）；1.0.1 是它的收尾；**1.1.0 把声音默认全部交给特斯拉蓝牙**（见第三节），并引入 DashPlay 10.26–11.01 的可靠性修复；**1.2.0 只改界面**：两张页面按特斯拉的窗口形状核对，下拉与确认框改在页内画（见第六节）；**1.3.0** 按上车一周后的清单收口：设置面板按 iOS「设置」的样子（每行图标、无小字），网页里的声音和「备用控制」删掉，盒子页不再报"上游在线"，并修浏览器拉回时偶尔弹键盘的问题（见第七节）。接收端的 Kotlin 自 1.1.0 起未经编译（1.3.0 又改了三个文件），第一次构建时留意 `receiver/docs/UNVERIFIED-KOTLIN.md`。
+> 1.0.0 是**首个在特斯拉车内实测通过的版本**（无线 CarPlay 画面、触摸、导航播报已验证）；1.0.1 是它的收尾；**1.1.0 把声音默认全部交给特斯拉蓝牙**（见第三节），并引入 DashPlay 10.26–11.01 的可靠性修复；**1.2.0 只改界面**：两张页面按特斯拉的窗口形状核对，下拉与确认框改在页内画（见第六节）；**1.3.0** 按上车一周后的清单收口：设置面板按 iOS「设置」的样子（每行图标、无小字），网页里的声音和「备用控制」删掉，盒子页不再报"上游在线"，并修浏览器拉回时偶尔弹键盘的问题（见第七节）；**1.3.1** 接上在线升级：项目有了自己的发布密钥，每个版本是 GitHub 上一个签过名的 Release，装好 1.3.1 以后在设置页点一下就能升级（见第八节）。接收端的 Kotlin 自 1.1.0 起未在本地编译过，1.3.1 起由 GitHub Actions 编译；自己编译时留意 `receiver/docs/UNVERIFIED-KOTLIN.md`。
 
 ---
 
@@ -11,8 +11,11 @@
 - F50 已按 [mu300-linux](https://github.com/dikeckaan/mu300-linux) 的文档刷成它的 OpenWrt 镜像（我们实测的那台原厂固件是 B13；刷机步骤本说明不写），后台 `http://192.168.77.1`（root 登录）。
 - 盒子需能联网（插 SIM），装依赖要拉 OpenWrt 源。
 
-### 2. 编译安装包（本机）
-需要 JDK 21 工具链 + Docker（SDK 镜像 `openwrt/sdk:x86-64-25.12.5`）：
+### 2. 拿到安装包
+
+**直接下载（推荐）**：GitHub 仓库 `wz980305/AutoPlay` 的 Releases → `v1.3.1`，下载 `autoplay-1.3.1-r1.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk` 和与盒子架构对应的 `autoplay-jre-*_<架构>.apk`（F50 一般是 `aarch64_generic`；`ssh root@<盒子> cat /etc/apk/arch` 可查）。`SHA256SUMS` 里有每个文件的哈希。
+
+**自己编译**：需要 JDK 21 工具链 + Docker（SDK 镜像 `openwrt/sdk:x86-64-25.12.5`），或者一条命令 `sh box/scripts/release.sh 1.3.1`（同 GitHub Actions 里跑的那条，产物在 `out/release-1.3.1/`）。分步：
 
 ```sh
 # 都在仓库根目录执行
@@ -21,12 +24,12 @@
 # 编译投屏页
 (cd receiver/web && npm ci && npm run build)
 # 打程序包
-AUTOPLAY_VERSION=1.3.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
+AUTOPLAY_VERSION=1.3.1 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 # 用 Docker SDK 打 apk
 sh openwrt/scripts/build-packages.sh out/ autoplay-bundle.tar
 ```
 
-产物在 `out/`：`autoplay-1.3.0-r1.apk`、`autoplay-jre-*_<架构>.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk`。
+产物在 `out/`：`autoplay-1.3.1-r1.apk`、`autoplay-jre-*_<架构>.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk`。
 
 ### 3. 装到 F50（手动路线）
 ```sh
@@ -116,7 +119,7 @@ apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
 - 盒子需长期有 SIM（证书续期 + 特斯拉联网检测）。
 - **1.2.0 上车看一眼界面**：设置 → 夜间模式弹出的是页内选项表（大字、可点）而不是浏览器的小下拉；盒子页点一部手机 → 「删除此 iPhone…」出现确认屏而不是浏览器弹窗。若选项表没有出现，把车机浏览器版本记到 `docs/TESLA.md` 并反馈。
 - **1.3.0 上车看一眼**：从别的应用切回浏览器十次左右，屏幕键盘不再出现；设置面板三页每行都有图标、没有小字。
-- **在线升级目前不可用**：`update.py` 校验发布签名，而项目还没有自己的发布密钥和软件源（仓库里的公钥仍是上游 DashPlay 的），设置页「程序更新」会报找不到或拒绝。升级请按第一节手动 `apk add` 新包（配对、证书、认证身份都在 `/opt/autoplay/` 下保留）；勿手动覆盖 `/opt/autoplay/{state,identity}`。
+- **在线升级（1.3.1 起）**：已经装着 1.3.0 或更早版本的盒子，先按第一节手动装一次 1.3.1（可以直接用 GitHub Release v1.3.1 上的 apk，不必自己编译）；之后设置页或 LuCI「程序更新」会在新版本发布后一天内提示，点「立即升级」即可，CarPlay 断开约 1 分钟，起不来会自动退回（`docs/RELEASE.md`）。勿手动覆盖 `/opt/autoplay/{state,identity}`。
 
 ## 六、1.2.0 的界面变化（`docs/UI-1.2.0.md`）
 
@@ -131,3 +134,10 @@ apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
 - 浏览器被拉回时偶尔弹出的屏幕键盘：画面不再持有浏览器焦点，页面重新可见时清掉焦点；键盘即使出现也不改变页面尺寸。
 - 盒子设置页：不再显示"上游在线"的横幅，只有上游不可用时才提示。
 - 操作和地址都没有变化；不需要重新配对或重新申请证书。升级时旧配置里的 `audio_route_navigation` 键会被自动删掉。
+
+## 八、在线升级（1.3.1 起，`docs/RELEASE.md`）
+
+- **第一次**：装着 1.3.0 或更早版本的盒子，按第一节手动装一次 1.3.1（直接用 Release 上的 apk 即可）。旧版本的包里是上游 DashPlay 的公钥，认不出我们签的发布；1.3.1 带着项目自己的公钥。
+- **之后**：盒子开机 2 分钟后检查一次，之后每 24 小时一次；有新版本时，设置页 `http://100.96.0.1:18080/`「程序更新」和 LuCI「程序更新」会显示版本号和这一版改了什么。点「立即升级」→ 确认：CarPlay 断开约 1 分钟，盒子先备份配对、证书和设置，先下载当前版本作退路，新版本起不来就自动装回。CarPlay 正在用时不会升级。
+- 连不上 GitHub 时自动换镜像（默认 `ghfast.top`，LuCI「程序更新」可改；`none` 表示只用 GitHub）。所有文件都核对签名和哈希，镜像改不了内容。
+- 不想让盒子检查：LuCI「程序更新」关掉「检查更新」。

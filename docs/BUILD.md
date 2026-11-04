@@ -61,7 +61,7 @@ mkdir -p node_modules && ln -sfn /opt/npm-tools/node_modules/typescript node_mod
 OpenWrt 包解开到 `/opt/autoplay` 的内容是 `autoplay-bundle-<版本>.tar`，由 `box/scripts/build-bundle.sh` 从本仓库打出（先完成第 1、2 节）：
 
 ```sh
-AUTOPLAY_VERSION=1.3.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar      # RECEIVER=<路径> 指定接收端构建目录，默认 ../receiver
+AUTOPLAY_VERSION=1.3.1 sh box/scripts/build-bundle.sh autoplay-bundle.tar      # RECEIVER=<路径> 指定接收端构建目录，默认 ../receiver
 ```
 
 需要主机上有：接收端的 `installDist` 产物和 `web/dist/`、`javac` 21、pip、curl、unzip。它从经过审核的源码目录枚举顶层 Python 模块（不再依赖 `.git`，新增模块不会遗漏），另下载两份固定哈希的依赖：dbus-next 0.2.3（蓝牙桥）和 acme.sh 3.1.6 连同 DuckDNS、DNSPod 两个 DNS 钩子（证书）；`scan-sensitive.py` 的检查会拒绝打进个人文件。
@@ -76,7 +76,7 @@ sh openwrt/scripts/build-packages.sh out/ autoplay-bundle.tar   # 用第 3 节�
 sh openwrt/scripts/bump-autoplay.sh <版本> autoplay-bundle-<版本>.tar   # 发布后更新 Makefile 的版本与校验值
 ```
 
-**现状：** `openwrt/autoplay/Makefile` 的 `PKG_SOURCE_URL` 指向尚未存在的发布页，`PKG_HASH:=skip`；`update.py` 的更新源和清单 URL 是 `openwrt-autoplay` 占位符（`AUTOPLAY_UPDATE_OWNER/REPO/FEED_REPO`、`AUTOPLAY_UPDATE_FEED`）。发布第一个版本前要填上。镜像默认 `openwrt/sdk:x86-64-25.12.5`（`OPENWRT_SDK` 可改）。
+**发布：** 1.3.1 起整条链（接收端、网页、程序包、OpenWrt 包、更新清单、签名、GitHub Release）由 `box/scripts/release.sh` 完成，推送 `v*` 标签时 `.github/workflows/release.yml` 在 GitHub Actions 上跑它（`docs/RELEASE.md`）。`openwrt/autoplay/Makefile` 的 `PKG_SOURCE_URL` 指向 `wz980305/AutoPlay` 的 Release，`PKG_HASH:=skip`（打包时总是用刚构建的本地程序包，`build-packages.sh` 第二个参数）；`update.py` 的更新源是同一个仓库（`AUTOPLAY_UPDATE_OWNER/REPO/FEED_REPO`、`AUTOPLAY_UPDATE_FEED` 可改）。SDK 镜像默认 `openwrt/sdk:x86-64-25.12.5`（`OPENWRT_SDK` 可改）。
 
 装到盒子上：
 
@@ -85,7 +85,7 @@ scp out/*.apk root@100.96.0.1:/tmp/
 ssh root@100.96.0.1 'cd /tmp && apk add --allow-untrusted autoplay-jre-*_$(cat /etc/apk/arch).apk autoplay-[0-9]*.apk luci-app-autoplay-*.apk luci-i18n-autoplay-zh-cn-*.apk'
 ```
 
-包没有签名（WP9 的待办），所以要 `--allow-untrusted`。F50 的蓝牙用的是 `python3 /opt/autoplay/board_zte_f50.py --setup` 装进 `/opt/autoplay-bluez` 的私有 BlueZ，不是 `apk add bluez-daemon`（系统包会带入不匹配的 6.12 内核模块）。刷机、root 只看 mu300-linux 的文档（ADR-11）；上游 DashPlay 的 B16 装机脚本已于 2026-11-03 从仓库删除。随包的 `update-key.pem` 是上游的公钥，在项目有自己的发布密钥和软件源之前在线升级不可用。
+包没有签名（WP9 的待办），所以要 `--allow-untrusted`。F50 的蓝牙用的是 `python3 /opt/autoplay/board_zte_f50.py --setup` 装进 `/opt/autoplay-bluez` 的私有 BlueZ，不是 `apk add bluez-daemon`（系统包会带入不匹配的 6.12 内核模块）。刷机、root 只看 mu300-linux 的文档（ADR-11）；上游 DashPlay 的 B16 装机脚本已于 2026-11-03 从仓库删除。随包的 `update-key.pem` 是项目自己的发布公钥（1.3.1 起；指纹 `2d53ecc5bdb9c382`），之后的版本可以在线升级（`docs/RELEASE.md`）。
 
 ## 5. 工具（`tools/`）
 

@@ -10,7 +10,7 @@
 
 > **这不是 Apple 认证产品。** 运行需要你自己提供配件认证身份，见 [box/README.md](../box/README.md#认证身份)。
 
-前提是 F50 已按 [mu300-linux](https://github.com/dikeckaan/mu300-linux) 的文档刷成 OpenWrt（我们实测的那台原厂固件是 B13；刷机步骤本仓库不写）。装包走下面的手动路线，完整过程见 [安装使用说明](../交付资料/AutoPlay-1.3.0-安装使用说明.md)。
+前提是 F50 已按 [mu300-linux](https://github.com/dikeckaan/mu300-linux) 的文档刷成 OpenWrt（我们实测的那台原厂固件是 B13；刷机步骤本仓库不写）。装包走下面的手动路线，完整过程见 [安装使用说明](../交付资料/AutoPlay-1.3.1-安装使用说明.md)。
 
 ## 安装（手动）
 
@@ -46,7 +46,7 @@ F50 用厂商 5.4 内核，不能装系统的 `bluez-daemon`（它会带入 6.12
 
 ## 升级
 
-**在线升级目前不可用**：`update.py` 校验发布包的签名，而项目还没有自己的发布密钥和软件源（随包的公钥是上游 DashPlay 的），所以「立即升级」会报找不到或拒绝；请用下面的手动方式。设计上，后台「服务 → AutoPlay → 程序更新」或设置页的「程序更新」：每天检查一次，有新版本只提示；点「立即升级」后从 GitHub（连不上时换镜像）下载签名核对过的正式版，CarPlay 使用中不升级，升级前备份配对、证书和设置，计划里出现内核、内核模块或系统蓝牙就停，新版本起不来（接收程序没在约 4 分钟内应答、或蓝牙没上电）就装回原来的版本。升级过程写在 `state/update-journal.json`，中途断电下次开机接着收尾或回退。
+**在线升级**（1.3.1 起，`docs/RELEASE.md`）：每个版本是 `github.com/wz980305/AutoPlay` 上一个签过名的 Release。已经装着 1.3.0 或更早版本的盒子先用下面的手动方式装一次 1.3.1（它带着项目自己的公钥，旧包里的是上游 DashPlay 的），之后后台「服务 → AutoPlay → 程序更新」或设置页的「程序更新」：每天检查一次，有新版本只提示；点「立即升级」后从 GitHub（连不上时换镜像）下载签名核对过的正式版，CarPlay 使用中不升级，升级前备份配对、证书和设置，计划里出现内核、内核模块或系统蓝牙就停，新版本起不来（接收程序没在约 4 分钟内应答、或蓝牙没上电）就装回原来的版本。升级过程写在 `state/update-journal.json`，中途断电下次开机接着收尾或回退。
 
 手动：`apk update && apk add --upgrade --simulate --allow-untrusted /tmp/autoplay-upgrade/*.apk` 看计划，确认只有用户态包后去掉 `--simulate`。不要卸载重装、不要 sysupgrade、不要覆盖 `/opt/autoplay/{state,identity}`。
 

@@ -16,7 +16,7 @@
 
 ## 怎么装
 
-四个 apk 包（`autoplay`、`autoplay-jre`、`luci-app-autoplay` 和它的中文翻译）由仓库的 `openwrt/` 定义，用 OpenWrt 的 Docker SDK 打出来，推到盒子上 `apk add`，再跑一次 `python3 /opt/autoplay/board_zte_f50.py --setup` 让 F50 的蓝牙用上私有的 BlueZ（不要 `apk add bluez-daemon`），放好认证文件，重启服务。完整命令在 [安装使用说明](../交付资料/AutoPlay-1.3.0-安装使用说明.md) 和 [`openwrt/README.md`](../openwrt/README.md)。
+四个 apk 包（`autoplay`、`autoplay-jre`、`luci-app-autoplay` 和它的中文翻译）由仓库的 `openwrt/` 定义，用 OpenWrt 的 Docker SDK 打出来，推到盒子上 `apk add`，再跑一次 `python3 /opt/autoplay/board_zte_f50.py --setup` 让 F50 的蓝牙用上私有的 BlueZ（不要 `apk add bluez-daemon`），放好认证文件，重启服务。完整命令在 [安装使用说明](../交付资料/AutoPlay-1.3.1-安装使用说明.md) 和 [`openwrt/README.md`](../openwrt/README.md)。
 
 安装脚本（uci-defaults `90-autoplay-tesla`）会把 LAN 从 `192.168.77.1` 改成 **`100.96.0.1/24`**——特斯拉的浏览器打不开私网地址，100.64/10 这段可以——并把 5 GHz 无线设为中国区 CN / 信道 149：实车只在 149–165 上搜得到热点，而 mu300-linux 镜像的国家码 TR 没有这些信道。你在 LuCI 里改到 153–165 的信道会保留；SSID 和密码不动。
 
@@ -30,7 +30,7 @@
 
 `/etc/config/autoplay` 一共十一项：开关、网页端口、空闲释放秒数、DNS 服务商、DuckDNS 名字和 token、自有域名和 DNSPod 的 ID 与 token、是否检查更新、更新镜像。声音没有选项：所有声音都走特斯拉蓝牙（1.1.0–1.2.0 的 `audio_route_navigation` 键升级时会被删掉，`docs/AUDIO.md`）。网络仍由 OpenWrt 管。
 
-每个状态都带一个原因词（蓝牙为什么没起来、证书还剩几天、程序为什么在重启），见 [docs/STATUS-MODEL.md](docs/STATUS-MODEL.md)。程序更新一页目前不能真的在线升级：`update.py` 校验发布签名，而项目还没有自己的发布密钥和软件源；升级按安装说明手动装新包，配对、证书、身份文件都保留在 `/opt/autoplay/` 下。
+每个状态都带一个原因词（蓝牙为什么没起来、证书还剩几天、程序为什么在重启），见 [docs/STATUS-MODEL.md](docs/STATUS-MODEL.md)。程序更新：从 1.3.1 起每个版本都是签过名的 GitHub Release，`update.py` 每天检查一次、车主点一下就升级，升级前备份并下载退路，起不来自动退回（[docs/RELEASE.md](../docs/RELEASE.md)）；更早版本的盒子手动装一次 1.3.1 后接上这条链。配对、证书、身份文件都保留在 `/opt/autoplay/` 下。
 
 ## 认证身份
 
@@ -48,7 +48,7 @@ iPhone 只连接出示有效配件证书、并能用对应私钥签名的接收�
 程序包 `autoplay-bundle-<版本>.tar` 是 OpenWrt 包解开到 `/opt/autoplay` 的内容：先构建 `receiver/`（`./gradlew :server:installDist`，网页 `npm run build`），再在仓库根目录
 
 ```sh
-AUTOPLAY_VERSION=1.3.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
+AUTOPLAY_VERSION=1.3.1 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 ```
 
 它只打包 git 已提交的文件，另下载两份固定哈希的依赖：dbus-next 0.2.3（蓝牙桥接）和 acme.sh 3.1.6 连同 DuckDNS 与 DNSPod 两个 DNS 钩子（证书）。
@@ -57,7 +57,7 @@ AUTOPLAY_VERSION=1.3.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 
 ```sh
 cd box
-python3 -m unittest discover -s tests/onecloud      # 237 个
+python3 -m unittest discover -s tests/onecloud      # 238 个
 python3 -m unittest discover -s tests/bluetooth     # test_bluez / test_recovery 需要 dbus-next
 ```
 

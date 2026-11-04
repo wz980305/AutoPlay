@@ -4,7 +4,7 @@
 
 <p align="center"><img src="docs/images/tesla-model3-carplay-2026-11-02.jpg" width="640" alt="Model 3 车机浏览器里的 CarPlay 主屏"> <img src="docs/images/f50-in-hand-2026-11-02.jpg" width="240" alt="手里的中兴 F50，车机上是 CarPlay"></p>
 
-[English](README.en.md) · 当前版本 **1.3.0**（2026-11-05）· [变更记录](CHANGELOG.md) · [安装使用说明](交付资料/AutoPlay-1.3.0-安装使用说明.md)
+[English](README.en.md) · 当前版本 **1.3.1**（2026-11-05）· [变更记录](CHANGELOG.md) · [安装使用说明](交付资料/AutoPlay-1.3.1-安装使用说明.md)
 
 ## 为什么是这条路
 
@@ -46,7 +46,7 @@ AutoPlay 想做的是把这台"别处"缩到最小。CarPlay 的本质是 iPhone
 
 ## 安装与日常使用
 
-完整步骤在[安装使用说明](交付资料/AutoPlay-1.3.0-安装使用说明.md)，这里只说轮廓。在电脑上编译接收端（JDK 21 + Gradle）和投屏页（Node），用 OpenWrt 的 Docker SDK 打出四个 apk：`autoplay`（程序本体，装到 `/opt/autoplay`）、`autoplay-jre`（jlink 裁剪的 Temurin 21）、`luci-app-autoplay` 和它的中文翻译。把它们推到盒子上 `apk add`，跑一次 `board_zte_f50.py --setup` 让 F50 的蓝牙用上私有的 BlueZ（不要 `apk add bluez-daemon`，它会带进不匹配的内核模块），放好身份文件，重启服务。安装脚本会把局域网改到 100.96.0.1、把 5 GHz 设成 CN / 149，并保留你在 LuCI 里改过的 149–165 内的信道。
+完整步骤在[安装使用说明](交付资料/AutoPlay-1.3.1-安装使用说明.md)，这里只说轮廓。在电脑上编译接收端（JDK 21 + Gradle）和投屏页（Node），用 OpenWrt 的 Docker SDK 打出四个 apk：`autoplay`（程序本体，装到 `/opt/autoplay`）、`autoplay-jre`（jlink 裁剪的 Temurin 21）、`luci-app-autoplay` 和它的中文翻译。把它们推到盒子上 `apk add`，跑一次 `board_zte_f50.py --setup` 让 F50 的蓝牙用上私有的 BlueZ（不要 `apk add bluez-daemon`，它会带进不匹配的内核模块），放好身份文件，重启服务。安装脚本会把局域网改到 100.96.0.1、把 5 GHz 设成 CN / 149，并保留你在 LuCI 里改过的 149–165 内的信道。
 
 之后有三个地方可以看和改：
 
@@ -54,7 +54,7 @@ AutoPlay 想做的是把这台"别处"缩到最小。CarPlay 的本质是 iPhone
 - `http://100.96.0.1:18080/` 是**盒子设置页**，面向车主：一眼看到热点、盒子、iPhone 三者的连接状态，添加或删除 iPhone（配对码在这里核对），看证书有效期，下载诊断记录，恢复出厂设置。没有 JavaScript 也能用。
 - `http://100.96.0.1/` 是 **LuCI 后台**，"服务 → AutoPlay"下有四页：网络、iPhone、自己的网址（DuckDNS / DNSPod 凭证）、程序更新。
 
-程序更新这一页目前还不能真的在线升级：`update.py` 会校验发布包的签名，而项目还没有自己的发布密钥和软件源，升级请按说明手动装新的 apk，配对、证书和身份文件都保留在 `/opt/autoplay/` 下。
+从 1.3.1 起每个版本都是 GitHub 上一个带签名的 Release（`docs/RELEASE.md`）：盒子每天看一次有没有新版本，有就在设置页和 LuCI 提示，车主点「立即升级」，升级前先备份配对、证书和设置并下载好退路，新版本起不来就自动退回。已经装着更早版本的盒子要手动装一次 1.3.1（它带着项目自己的公钥），之后就不用再碰电脑；配对、证书、身份文件都保留在 `/opt/autoplay/` 下。
 
 ## 仓库里有什么
 
@@ -64,7 +64,7 @@ AutoPlay 想做的是把这台"别处"缩到最小。CarPlay 的本质是 iPhone
 
 `openwrt/` 是上面三个 apk 的包定义和 LuCI 插件，来自 openwrt-dashplay。`tools/` 是本项目新增的：`probe/` 一个在车机里打开就能把浏览器能力测一遍的 HTML，`f50/` 的配置加固和测量脚本，`car/` 的触摸延迟测法。`docs/` 是架构、决策记录、构建、测试、特斯拉专项、声音、安全和两轮界面迭代的说明。
 
-怎么编译看 `docs/BUILD.md`，怎么跑测试看 `docs/TEST.md`（盒子侧 237 个单元测试、投屏页四个检查脚本、安装脚本和工具各自的测试，都在台式机上就能跑）。
+怎么编译看 `docs/BUILD.md`，怎么跑测试看 `docs/TEST.md`（盒子侧 238 个单元测试、投屏页四个检查脚本、安装脚本和工具各自的测试，都在台式机上就能跑）。
 
 ## 来历、致谢与许可
 

@@ -30,11 +30,13 @@ import tempfile
 import time
 import urllib.request
 
-# The fork's release location (github.com/wz980305/AutoPlay; no signed release exists yet, docs/ROADMAP.md). The DashPlay feeds carry packages
-# with the old names, which this box no longer installs).
+# The release location (docs/RELEASE.md): one GitHub Release per version in github.com/wz980305/AutoPlay carries the
+# signed manifest, the program bundle, the OpenWrt packages and their signed SHA256SUMS (DashPlay kept the packages in a
+# second repository, openwrt-dashplay; AUTOPLAY_UPDATE_FEED_REPO still allows that layout). The DashPlay feeds carry
+# packages with the old names, which this box no longer installs.
 OWNER = os.environ.get("AUTOPLAY_UPDATE_OWNER", "wz980305")
 REPO = os.environ.get("AUTOPLAY_UPDATE_REPO", "AutoPlay")
-FEED_REPO = os.environ.get("AUTOPLAY_UPDATE_FEED_REPO", "openwrt-autoplay")
+FEED_REPO = os.environ.get("AUTOPLAY_UPDATE_FEED_REPO", REPO)
 # Where the latest manifest and the installed version's OpenWrt packages (to go back to) come from. The environment
 # may point both at a test server (scripts/openwrt/lab-test.sh); the signature check is the same.
 LATEST = os.environ.get("AUTOPLAY_UPDATE_LATEST", f"https://github.com/{OWNER}/{REPO}/releases/latest/download/")

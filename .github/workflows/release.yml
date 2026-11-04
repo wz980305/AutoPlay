@@ -1,0 +1,85 @@
+# AutoPlay: tests, the full build and, for a version tag, the signed GitHub Release (docs/RELEASE.md).
+#
+# push to main / pull request / manual run: the test suites, then every release artifact is built with
+#   box/scripts/release.sh (receiver, viewer, bundle, OpenWrt packages, manifest) and kept as a workflow artifact
+#   for 14 days. Nothing is signed or published.
+# push of a tag vX.Y.Z: the same, then release.sh --publish signs the manifest and SHA256SUMS with the Ed25519
+#   release key in the AUTOPLAY_RELEASE_KEY secret (its public half ships in the autoplay package) and creates
+#   the Release "vX.Y.Z" with every file. Boxes see it at the next daily check.
+name: release
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: npm, cache-dependency-path: receiver/web/package-lock.json }
+      - name: box, OpenWrt install script and F50 tool tests
+        run: |
+          (cd box && python3 -m unittest discover -s tests/onecloud)
+          python3 -m unittest discover -s openwrt/tests
+          python3 -m unittest discover -s tools/f50
+          sh -n openwrt/autoplay/files/autoplay.init && sh -n openwrt/autoplay/files/90-autoplay-tesla
+          sh -n box/scripts/build-bundle.sh && sh -n box/scripts/release.sh && sh -n openwrt/scripts/build-packages.sh
+      - name: viewer checks and type check
+        working-directory: receiver/web
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+          npx tsc --noEmit -p tsconfig.offline.json
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # the Release (tags only; a branch run never publishes)
+    env:
+      VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: npm, cache-dependency-path: receiver/web/package-lock.json }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: version under build
+        id: version
+        run: |
+          if [ -n "$VERSION" ]; then v=${VERSION#v}; else v=$(sed -n 's/^PKG_VERSION:=//p' openwrt/autoplay/Makefile); fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "building AutoPlay $v (${GITHUB_REF})"
+      - name: build everything (not published)
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: sh box/scripts/release.sh "${{ steps.version.outputs.version }}" out/release
+      - name: build, sign and publish the Release
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUTOPLAY_RELEASE_KEY: ${{ secrets.AUTOPLAY_RELEASE_KEY }}
+        run: |
+          [ -n "$AUTOPLAY_RELEASE_KEY" ] || { echo "the AUTOPLAY_RELEASE_KEY secret is not set: docs/RELEASE.md" >&2; exit 1; }
+          umask 077
+          printf '%s\n' "$AUTOPLAY_RELEASE_KEY" > "$RUNNER_TEMP/release.key"
+          AUTOPLAY_RELEASE_KEY_FILE="$RUNNER_TEMP/release.key" sh box/scripts/release.sh "${{ steps.version.outputs.version }}" out/release --publish
+          rm -f "$RUNNER_TEMP/release.key"
+      - name: keep the build output
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: autoplay-${{ steps.version.outputs.version }}
+          path: |
+            out/release/autoplay/
+            out/release/openwrt/
+            out/release/notes.md
+          if-no-files-found: ignore
+          retention-days: 14

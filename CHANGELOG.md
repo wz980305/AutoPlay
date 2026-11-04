@@ -2,6 +2,19 @@
 
 格式参考 Keep a Changelog；版本号从 0.1.0 起，1.0 之前不承诺兼容性。
 
+## [1.3.1] — 2026-11-05 — 在线升级接通：自己的发布密钥、单仓库 Release、GitHub Actions 发布
+
+功能和界面与 1.3.0 相同。这一版是第一个带安装包和签名的正式发布：装着 1.3.0 或更早版本的盒子手动装一次 1.3.1，之后的版本在设置页点一下就能升级（`docs/RELEASE.md`）。
+
+- **发布密钥**：项目自己的 Ed25519 密钥对，公钥替换了上游 DashPlay 的 `box/scripts/onecloud/update-key.pem`（指纹 `2d53ecc5bdb9c382`）；私钥不进仓库，存在 GitHub Actions secret `AUTOPLAY_RELEASE_KEY` 和车主的密码管理器里。
+- **单仓库**：更新清单、程序包、OpenWrt 包、`SHA256SUMS` 都挂在 `wz980305/AutoPlay` 的同一个 Release 上（DashPlay 用两个仓库）。`update.py` 的 `FEED_REPO` 默认等于 `REPO`；`make-update-manifest.py` 默认 owner `wz980305`、包地址指向同一个 Release，`--feed-repo` 保留两仓库布局的可能。
+- **`box/scripts/release.sh`**：一条命令完成版本号一致性检查（五处 + CHANGELOG 小节）→ 接收端 `./gradlew build :server:installDist` → 网页 `npm ci && npm run build` → 程序包 → Docker SDK 打 apk → 更新清单（说明取 CHANGELOG 对应小节）→ 清单与哈希核对；`--publish` 再用私钥签清单和 `SHA256SUMS`、用仓库里的公钥反验、`gh release create`。
+- **`.github/workflows/release.yml`**：每次推送和 PR 跑盒子、OpenWrt、F50 工具的测试和投屏页检查，再用 `release.sh` 完整构建（产物保留 14 天，不签名不发布）；推送 `v*` 标签时签名并发布 Release。接收端从此在 GitHub 的 JDK 21 上编译——1.1.0 以来没编译过的 Kotlin 改动第一次在这里接受编译器检查。
+- `receiver/gradlew` 在 git 里标为可执行。
+- 排练：本地用一把临时密钥走完"生成清单 → 核对 → 签名 → 盒子 `update.py check` 从本地 HTTP 服务器取清单、验签、比较版本"的全程，换成盒子的公钥时正确拒绝；Mac 上的私钥与仓库公钥配对已核对。
+- 文档：新增 `docs/RELEASE.md`；README（中英）、`box/README*`、`openwrt/README*`、`docs/BUILD.md`、`docs/ROADMAP.md`、`docs/SECURITY.md`（信任根一条）、安装说明（改名 `AutoPlay-1.3.1-安装使用说明.md`，加"直接下载 Release"和第八节在线升级）不再说"在线升级不可用"。
+- 版本：接收端、网页包、OpenWrt 包 1.3.1；LuCI 依赖 `autoplay (>=1.3.1)`。
+
 ## [1.3.0] — 2026-11-05 — 设置面板按 iOS「设置」收口；网页不再有声音；修屏幕键盘
 
 车主上车一周后的清单（`docs/UI-1.3.0.md`）。接收端的 Kotlin 又改了三个文件，仍未编译（`receiver/docs/UNVERIFIED-KOTLIN.md`）。
@@ -10,7 +23,7 @@
 - **只剩"全部走特斯拉蓝牙"（ADR-16，`docs/AUDIO.md`）**：车主在车上确认默认模式可用后，删除 1.1.0 的备选 `carplay` 及其全部代码——网页 `audio.ts`、`audio-timing.ts`、`check-audio.mjs`、解锁条、音量滑杆、「声音」分组、duck、`?promptgain=`、`CAR_MUSIC`/`PAGE_PLAYS_MUSIC`/`PROMPT_BOOST`、`boot.ts playportPageAudio`、调试浮层的声音行、`stats` 的音频字段、浏览器检测的 Web Audio / AudioDecoder 两项；盒子 uci `audio_route_navigation`（升级时由 `90-autoplay-tesla` 与守护进程删掉旧键）、`supervisor_openwrt.audio_route_of()`、`run-receiver --audio-route-navigation`、`receiver-access.json` 的 `audioRouteNavigation`/`carMusic`/`tesla`、盒子页「声音」格、LuCI 下拉与译文、恢复出厂的键表；接收端 `ServerConfig.audioRouteNavigation`/`audioOverBluetooth`，`disableAudioOutput` 固定为 `true`。`run-receiver.py` 仍给 JVM 传 `--car-voice --audio-route-navigation bluetooth`，让 1.3.0 之前编译的接收端也全走蓝牙；新接收端接受并忽略。**代价**：某辆车经蓝牙听不到播报时没有开关可切，只能回 `v1.2.0`。
 - **设置面板（投屏页）**：每一行和左侧三个分类都有 iOS 式彩色圆角图标，选中的分类蓝色填充；行内不再有任何小字——删掉「当前请求：夜间」、页脚「本页语言与音量保存在此浏览器…」、「定时：18:30–06:30 使用夜间外观」（时间段进了选项名）、「改变 iPhone 输出的 CarPlay 文字与图标大小…」、永久的「1920 × 998 / 30 fps / H.265」状态行（只在应用过程中说话）、「高分辨率、编码与调试」、「分辨率随窗口自动调整…」、无边框模式 / 视频编码 / 四个开关的说明、「将离开当前画面…」；删掉整个「备用控制」（主屏幕 / 返回 / 刷新画面及 `knob` 发送代码）。标签不折行、当前值过长时截断；左栏 12rem → 11rem。「画质设置」改称「画质」；「连接与兼容性」的当前画面行加上编码。
 - **盒子设置页**：不再显示「上游在线；特斯拉自带音乐、地图可以上网。」和开机头几秒的"检测中"，只有上游不可用才有横幅；「声音」分组随音频路径删除。
-- 版本：接收端、网页包、OpenWrt 包 1.3.0；LuCI 依赖 `autoplay (>=1.3.0)`；OpenWrt 包与 `update.py` 的发布地址指向 `github.com/wz980305/AutoPlay`（尚无签名发布）。测试：盒子侧 237（−1，声音格的测试换成"无声音分组、无在线横幅"），网页四个检查脚本（−`check-audio`），类型检查、esbuild 构建、`ui-shots` 四形状截图通过。安装说明改名 `AutoPlay-1.3.0-安装使用说明.md`。
+- 版本：接收端、网页包、OpenWrt 包 1.3.0；LuCI 依赖 `autoplay (>=1.3.0)`；OpenWrt 包与 `update.py` 的发布地址指向 `github.com/wz980305/AutoPlay`（尚无签名发布）。测试：盒子侧 238（删一个音频路由测试、声音格的测试换成"无声音分组、无在线横幅"、加一个"仍给旧接收端传蓝牙参数"的测试），网页四个检查脚本（−`check-audio`），类型检查、esbuild 构建、`ui-shots` 四形状截图通过。安装说明改名 `AutoPlay-1.3.0-安装使用说明.md`。
 
 ### 2026-11-03 — 发布到 GitHub 前的文档核对与隐私清理（随 1.3.0 发布）
 

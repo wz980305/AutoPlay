@@ -41,6 +41,7 @@
 4. **换一个又长又新的 WPA2 密码**（安装脚本生成随机密码并只显示一次）；SC2355 只支持 WPA2-PSK，没有 WPA3 可选。
 5. ~~本地 CA~~ 已按 D7 去掉（0.1.0），只留 Let's Encrypt（DuckDNS 或 DNSPod 路线）和 JVM 自签名兜底。新增的风险点是 DNSPod 的账号级 Token：更稳的做法是改用 acme.sh 的 `dns_tencent` 钩子配腾讯云 CAM 子账号的最小权限凭证（ADR-12 待办）。
 6. **私有 BlueZ 冻结**在安装时的版本，收不到安全更新；升级时要从软件源重建。apk 也没有签名（WP9）。
+6a. **在线升级的信任根是一把 Ed25519 发布私钥**（1.3.1，`docs/RELEASE.md`）：盒子只装清单签名能被随包公钥（`update-key.pem`，指纹 `2d53ecc5bdb9c382`）验证、且每个文件哈希都对得上的发布。私钥只在 GitHub Actions secret `AUTOPLAY_RELEASE_KEY` 和车主的密码管理器里；能改这个 secret 的人（仓库管理员）就能给所有盒子推包，所以 GitHub 账号要开两步验证。私钥泄露或丢失时换钥：新公钥进仓库、发一个新版本、每台盒子手动装一次。升级本身要设置页上的一次点击和确认，不会自动安装；但设置页无认证（第 1 条），连上热点的人也能点。
 7. **恢复出厂设置**：设置页已有（0.1.0，`factory_reset.py`，两道输入确认，可选连身份文件一起删）；卸载包不会删 `/opt/autoplay/{state,identity}`。与写入者的竞态仍未处理（`docs/AUDIT-0.1.1.md` §五）。
 8. **iAP2 调试日志默认关**：上游 10.25 仍默认记录，里面有来电号码和联系人（dashplay-tesla 分析 §三第 9 项）。
 9. **远程维护通道**（如果做服务器端续期）：强制密钥登录或改用 WireGuard，不走"反向 SSH 直通 root"（dashplay-tesla 分析 §五第 2 条）。

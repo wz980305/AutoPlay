@@ -13,13 +13,13 @@ python3 -m unittest discover -s openwrt/tests      # 安装脚本 90-autoplay-te
 # 1.1.0–1.3.0 的 Kotlin 改动未在编写环境编译：./gradlew build 是上车前的第一步（receiver/docs/UNVERIFIED-KOTLIN.md）
 
 # 盒子侧：设置页、状态模型、守护（supervision）、升级日志与回滚、证书退避、时钟下限、出厂重置、平台、诊断、装机脚本
-cd box && python3 -m unittest discover -s tests/onecloud        # 237 个（1.3.0：声音格的测试换成"无声音分组、无在线横幅"），通过
+cd box && python3 -m unittest discover -s tests/onecloud        # 238 个（1.3.0：声音格的测试换成"无声音分组、无在线横幅"，加一个启动参数的测试），通过
 
 # 蓝牙桥：test_reason、test_relay 等 7 个可直接跑；test_bluez、test_recovery 需要 dbus-daemon 和 dbus-next 0.2.3
 cd box && python3 -m unittest discover -s tests/bluetooth       # 没有 dbus-next 时那两个模块报 import 错误，是环境问题
 ```
 
-测试身份全是合成数据。裁剪前后的基线在 `box/docs/TEST-BASELINE.md`（375 → 225 是删掉的 Debian/N1/有线/STA 测试减去新模块的测试；1.2.0 为 263，删除上游刷机脚本及其 4 个测试文件后为 238，1.3.0 为 237）。
+测试身份全是合成数据。裁剪前后的基线在 `box/docs/TEST-BASELINE.md`（375 → 225 是删掉的 Debian/N1/有线/STA 测试减去新模块的测试；1.2.0 为 263，删除上游刷机脚本及其 4 个测试文件后为 238，1.3.0 起仍为 238）。
 
 ### 投屏页（无浏览器）
 

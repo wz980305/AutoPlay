@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""The update manifest of a release (docs/在线升级方案-20261019.md), written by scripts/prepare-release.sh:
+"""The update manifest of a release (docs/RELEASE.md), written by scripts/release.sh and the release workflow:
 
-    python3 scripts/make-update-manifest.py VERSION CHANGES.md artifacts/release-VERSION [--owner yizhixiaoheigou] [--offline]
-    python3 scripts/make-update-manifest.py --check MANIFEST SHA256SUMS BUNDLE.sha256 VERSION   # verify-release.sh
+    python3 scripts/make-update-manifest.py VERSION CHANGES.md RELEASE_DIR [--owner wz980305] [--offline]
+    python3 scripts/make-update-manifest.py --check MANIFEST SHA256SUMS BUNDLE.sha256 VERSION
 
-Writes artifacts/release-VERSION/autoplay/autoplay-update.json: the version, the "what changed" lines, whether a
-box may take it online (--offline when the release changes the system and needs a reinstall), and for each file
-a box downloads its name, size and SHA-256: the OpenWrt packages (JRE per architecture) and the program bundle
-the packages were built from. publish-release.sh signs it (autoplay-update.json.sig).
+Writes RELEASE_DIR/autoplay/autoplay-update.json: the version, the "what changed" lines, whether a box may take it
+online (--offline when the release changes the system and needs a reinstall), and for each file a box downloads its
+name, size and SHA-256: the OpenWrt packages in RELEASE_DIR/openwrt (JRE per architecture) and the program bundle in
+RELEASE_DIR/autoplay the packages were built from. Every file sits in the same GitHub Release of the AutoPlay
+repository (one repository since 1.3.1; --feed-repo keeps DashPlay's two-repository layout possible). release.sh
+signs the manifest afterwards (autoplay-update.json.sig).
 """
 import argparse
 import hashlib
@@ -30,7 +32,7 @@ def one(directory, pattern):
     return found[0]
 
 
-def manifest(version, notes, release, owner, online):
+def manifest(version, notes, release, owner, online, repo="AutoPlay", feed_repo=None):
     openwrt, autoplay = Path(release) / "openwrt", Path(release) / "autoplay"
     packages = {name: entry(one(openwrt, rf"{re.escape(name)}-[0-9][^_]*\.apk"))
                 for name in ("autoplay", "luci-app-autoplay", "luci-i18n-autoplay-zh-cn")}
@@ -48,9 +50,9 @@ def manifest(version, notes, release, owner, online):
     bundle = one(autoplay, rf"autoplay-bundle-{re.escape(version)}\.tar")
     return {
         "format": 1, "version": version, "notes": notes, "online": online,
-        "openwrt": {"base": f"https://github.com/{owner}/openwrt-autoplay/releases/download/v{version}/",
+        "openwrt": {"base": f"https://github.com/{owner}/{feed_repo or repo}/releases/download/v{version}/",
                     "packages": packages, "jre": jre},
-        "bundle": {"base": f"https://github.com/{owner}/AutoPlay/releases/download/v{version}/", **entry(bundle)},
+        "bundle": {"base": f"https://github.com/{owner}/{repo}/releases/download/v{version}/", **entry(bundle)},
     }
 
 
@@ -77,10 +79,14 @@ def main():
     parser.add_argument("version")
     parser.add_argument("changes", type=Path)
     parser.add_argument("release", type=Path)
-    parser.add_argument("--owner", default=os.environ.get("AUTOPLAY_UPDATE_OWNER", "yizhixiaoheigou"))
+    parser.add_argument("--owner", default=os.environ.get("AUTOPLAY_UPDATE_OWNER", "wz980305"))
+    parser.add_argument("--repo", default=os.environ.get("AUTOPLAY_UPDATE_REPO", "AutoPlay"))
+    parser.add_argument("--feed-repo", default=os.environ.get("AUTOPLAY_UPDATE_FEED_REPO"),
+                        help="repository whose releases carry the OpenWrt packages (default: the same one)")
     parser.add_argument("--offline", action="store_true", help="the release changes the system: images only")
     args = parser.parse_args()
-    value = manifest(args.version, args.changes.read_text().strip(), args.release, args.owner, not args.offline)
+    value = manifest(args.version, args.changes.read_text().strip(), args.release, args.owner, not args.offline,
+                     args.repo, args.feed_repo)
     out = args.release / "autoplay" / "autoplay-update.json"
     out.write_text(json.dumps(value, ensure_ascii=False, indent=1, sort_keys=True) + "\n")
     print(f"{out}: {args.version}, online={value['online']}, JRE for {', '.join(value['openwrt']['jre']['files'])}")

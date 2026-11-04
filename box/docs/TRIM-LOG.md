@@ -1,6 +1,6 @@
 # Trim log: DashPlay box → AutoPlay box (ZTE F50, Tesla only)
 
-> 历史记录（2026-10-26 的裁剪）。此后变化：uci 键 7 → 12（1.0.0 加 DNSPod 四键，1.1.0 加 `audio_route_navigation`）→ 11（1.3.0 删掉 `audio_route_navigation`，声音只剩蓝牙一种）；`tests/onecloud` 225 → 263 → 238 → 237；LuCI 四个标签页的名字是「网络 / iPhone / 自己的网址 / 程序更新」；§"保留"里的 `f50-install.py` 及其全部助手、`build-playport.sh`、`fetch-java.py`、`skills/autoplay-install/` 按 ADR-11 于 2026-11-03 删除（从未使用）；`scan-sensitive.py` 保留。
+> 历史记录（2026-10-26 的裁剪）。此后变化：uci 键 7 → 12（1.0.0 加 DNSPod 四键，1.1.0 加 `audio_route_navigation`）→ 11（1.3.0 删掉 `audio_route_navigation`，声音只剩蓝牙一种）；`tests/onecloud` 225 → 263 → 238；LuCI 四个标签页的名字是「网络 / iPhone / 自己的网址 / 程序更新」；§"保留"里的 `f50-install.py` 及其全部助手、`build-playport.sh`、`fetch-java.py`、`skills/autoplay-install/` 按 ADR-11 于 2026-11-03 删除（从未使用）；`scan-sensitive.py` 保留。
 
 What the `box-trim` branch removed, moved and added relative to the imported
 tree (commit `c138aae`, DashPlay `e3beae4` + openwrt-dashplay `5f17702`), in

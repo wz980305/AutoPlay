@@ -532,12 +532,16 @@ class ManifestTests(unittest.TestCase):
                     info.size = len(data)
                     tar.addfile(info, io.BytesIO(data))
             value = maker.manifest('2026.10.20', '- 新功能', release, 'owner', True)
+            two = maker.manifest('2026.10.20', '- 新功能', release, 'owner', True, feed_repo='openwrt-autoplay')
             size = (release / 'autoplay/autoplay-bundle-2026.10.20.tar').stat().st_size
         self.assertEqual((value['format'], value['version'], value['online'], value['notes']), (1, '2026.10.20', True, '- 新功能'))
         self.assertEqual(value['openwrt']['packages']['autoplay']['sha256'], sha(b'autoplay-2026.10.20-r1.apk'))
         self.assertEqual(value['openwrt']['jre']['version'], '21.0.12.1-r1')
         self.assertEqual(sorted(value['openwrt']['jre']['files']), ['aarch64_generic', 'x86_64'])
-        self.assertEqual(value['openwrt']['base'], 'https://github.com/owner/openwrt-autoplay/releases/download/v2026.10.20/')
+        self.assertEqual(value['openwrt']['base'], 'https://github.com/owner/AutoPlay/releases/download/v2026.10.20/',
+                         'one repository: the packages sit in the same release as the manifest (1.3.1)')
+        self.assertEqual(value['bundle']['base'], value['openwrt']['base'])
+        self.assertEqual(two['openwrt']['base'], 'https://github.com/owner/openwrt-autoplay/releases/download/v2026.10.20/')
         self.assertEqual(value['bundle']['file'], 'autoplay-bundle-2026.10.20.tar')
         self.assertEqual(value['bundle']['size'], size)
 

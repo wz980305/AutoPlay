@@ -48,7 +48,8 @@
 ### 上车前
 
 - [ ] **编译接收端**：`cd receiver && ./gradlew build`，按 `UNVERIFIED-KOTLIN.md` 逐文件看；打 1.3.0 的包装到 F50。
-- [ ] 项目自己的发布密钥与软件源：`update.py` 的 `update-key.pem` 还是上游的键，在线升级因此不可用；`OWNER` 和 `autoplay/Makefile` 的 `PKG_SOURCE_URL` 已指向 `wz980305/AutoPlay`，但还没有带程序包的发布，`PKG_HASH:=skip`（WP9 的一部分）。
+- [x] 项目自己的发布密钥与软件源（1.3.1）：Ed25519 发布密钥，公钥在 `update-key.pem`；单仓库 Release；`release.sh` + GitHub Actions 工作流（`docs/RELEASE.md`）。
+- [ ] apk 包本身的签名（现在靠清单哈希 + 清单签名，安装仍要 `--allow-untrusted`；WP9 剩下的一项）。
 
 ### 车上要测的
 
