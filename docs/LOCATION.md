@@ -29,7 +29,7 @@
 
 ### 3. 没有人默认打开它
 
-查到的特斯拉投屏方案（Carlinkit T2C、TslaMirror、TeslAA 等）都只用手机定位；能转发浏览器定位的只有 Tesla Android 和 WheelPlay，**都默认关闭**（Tesla Android 因崩溃从 2024.24.1 起关闭）。DiPlay 的特斯拉浏览器模式干脆不做定位，比亚迪车机模式「向 iPhone 报告位置」默认关。
+查到的特斯拉投屏方案（Carlinkit T2C、TslaMirror、TeslAA 等）都只用手机定位；能转发浏览器定位的只有 Tesla Android 和 WheelPlay，**都默认关闭**（Tesla Android 因崩溃从 2024.24.1 起关闭）。TesAir 的特斯拉浏览器模式把定位写死为关；DiPlay 在比亚迪车机上的「向 iPhone 报告位置」也默认关。
 
 ### 4. 查不到的两件事，以及代码怎样让它们答错时也无害
 
