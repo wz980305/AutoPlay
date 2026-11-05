@@ -104,6 +104,14 @@ def redact(line, token, password):
     return line.replace(password, "[REDACTED]") if password else line
 
 
+
+def kept_location(saved: dict) -> dict:
+    """The viewer page's car-location switch and datum (1.4.0, docs/LOCATION.md), which only the receiver writes:
+    config.json is rebuilt at every start, and without this a reboot switched the feature off again."""
+    datum = saved.get("carLocationDatum")
+    return {"carLocation": saved.get("carLocation") is True,
+            "carLocationDatum": datum if datum in ("wgs84", "gcj02") else "wgs84"}
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
@@ -155,6 +163,7 @@ def main():
         "wireless": not args.no_wireless, "wifiSsid": ssid, "wifiPassphrase": password,
         "wifiChannel": args.channel, "wifiSecurity": args.security,
         "bluetoothDeviceAddress": None, "mdns": "jmdns",
+        **kept_location(saved),
     }
     durable_write(config_path, json.dumps(config, indent=2) + "\n")
     assert json.loads(config_path.read_text()) == config

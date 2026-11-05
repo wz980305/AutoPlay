@@ -11,6 +11,7 @@ import { isNight, parseNightMode } from './night';
 import { reachable, TESLA_HOPS } from './tesla-fullscreen';
 import { hudLines } from './debug-hud';
 import { compatDisplayOn } from './compat-display';
+import { LocationFeed, askLocation, compassText, gcjToWgs, inChina, type Fix } from './location';
 import { attachPickers, refreshPickers } from './picker';
 import type { ServerMessage, ClientMessage } from './protocol';
 
@@ -47,7 +48,9 @@ let lastAutoTarget = '', autoTimer = 0, displayBusy = false;
 let urgentChange = '';
 /** This page asked for a renegotiation: keep the layout of the picture on screen until the new one comes. */
 let expectRestart = false, expectTimer = 0;
-interface Display { width: number; height: number; fps: number; uiScale: number; hevc: boolean; areas?: Area[]; area?: number; pending?: boolean; }
+interface Display { width: number; height: number; fps: number; uiScale: number; hevc: boolean; areas?: Area[]; area?: number; pending?: boolean;
+  /** The car-location switch and the datum of the browser's coordinates (1.4.0; absent from an older box). */
+  carLocation?: boolean; carLocationDatum?: string; }
 let display: Display | null = null;
 /** Performance mode: upsize each window to the sharpest size (long side at least 1280), then shrink it into the
  *  window. Off (the Tesla default, 2026-10-26: the F50 and the iPhone run cooler, and a Tesla's panel is dense enough
@@ -338,7 +341,7 @@ async function loadDisplay() {
   setDisplayStatus('loading');
   const loaded = await fetchDisplay();
   if (!loaded) { setDisplayStatus('loadFail'); return; }
-  display = loaded; showDisplay(); fit(); scheduleAuto();
+  display = loaded; showDisplay(); showLocation(loaded); fit(); scheduleAuto();
 }
 function setDisplayStatus(key: Key) {
   const status = el('display-status');
@@ -387,7 +390,7 @@ async function adapt() {
   if (busy()) return;
   // From the box's own, not what this page last saw: fps and size set by another page are kept, not sent back.
   const current = await fetchDisplay();
-  if (current && !expectRestart && !holding) { display = current; showDisplay(); }
+  if (current && !expectRestart && !holding) { display = current; showDisplay(); showLocation(current); }
   if (busy() || !display) return;
   const urgent = urgentChange; urgentChange = '';
   const target=autoTarget();
@@ -518,7 +521,7 @@ window.setInterval(()=>{
   send({type:'stats',stats:{fps:reportFrames/seconds,decodeMs:video.decodeLatencyMs,queue:video.decodeQueueSize,
     kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,borderless:teslaBorderless()?1:0,
     width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),
-    ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,desync:video.desynchronized,build:BUILD,webView,teslaMode:TESLA?1:0,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...stalls,...lag.take(performance.now())}});
+    ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,desync:video.desynchronized,build:BUILD,webView,teslaMode:TESLA?1:0,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...stalls,...lag.take(performance.now()),...locationFeed.take()}});
   judgeDecoder(video.decodeLatencyMs, reportFrames/seconds);
   if (active) judgeFrameRate(stalls.caughtUp);
   reportFrames=0;reportBytes=0;reportStart=now;touchSum=0;touchCount=0;
@@ -531,12 +534,60 @@ hud.hidden = !hudSwitch.checked;
 const compatSwitch = el<HTMLInputElement>('compat-display-on');
 compatSwitch.checked = compatDisplay;
 compatSwitch.onchange = () => { saveFlag('f50-compat-display', compatSwitch.checked ? '1' : '0'); location.reload(); };
+// Car location (1.4.0, docs/LOCATION.md): the switch and datum live on the box (the iPhone learns of the location
+// source when it identifies the accessory); the browser's permission is this page's. Off until switched on here.
+const locationSwitch = el<HTMLInputElement>('car-location-on'), datumSelect = el<HTMLSelectElement>('car-location-datum');
+const datumRow = el<HTMLButtonElement>('car-location-datum-row');
+let lastFix: Fix | null = null, hudFixes = 0, locationBusy = false;
+const locationFeed = new LocationFeed(fix => {
+  lastFix = fix; hudFixes++; showDatumChoices();
+  send({ type: 'location', location: fix });
+}, navigator.geolocation, () => !document.hidden, () => toast(t('locationDenied')));
+/** The datum row shows inside mainland China only (or once GCJ-02 is chosen). Each choice carries the position it
+ *  would give the iPhone, written as the iPhone's Compass app writes it: the one that matches Compass is right. */
+function showDatumChoices() {
+  const china = lastFix !== null && inChina(lastFix.lat, lastFix.lon);
+  datumRow.hidden = !locationSwitch.checked || !(china || datumSelect.value === 'gcj02');
+  if (!lastFix) return;
+  const zh = language === 'zh', [gLat, gLon] = gcjToWgs(lastFix.lat, lastFix.lon);
+  datumSelect.options[0].dataset.detail = compassText(lastFix.lat, lastFix.lon, zh);
+  datumSelect.options[1].dataset.detail = compassText(gLat, gLon, zh);
+}
+function applyLocation(on: boolean, datum: string) {
+  locationSwitch.checked = on; datumSelect.value = datum === 'gcj02' ? 'gcj02' : 'wgs84';
+  locationFeed.setEnabled(on); showDatumChoices(); refreshPickers();
+}
+function showLocation(from: Display) { if (!locationBusy) applyLocation(from.carLocation === true, from.carLocationDatum ?? 'wgs84'); }
+/** On asks the browser first (its prompt, the first time); a refusal leaves the switch off. On reconnects CarPlay
+ *  once, for the iPhone to learn of the new location source; off and a new datum take effect at once. */
+async function setLocation(on: boolean, datum: string) {
+  if (!token || locationBusy) return;
+  const was = { on: locationFeed.enabled, datum: datumSelect.value };
+  locationBusy = true; locationSwitch.disabled = true;
+  try {
+    if (on && !was.on) {
+      const permission = await askLocation(navigator.geolocation);
+      if (permission !== 'granted') { applyLocation(false, was.datum); toast(t(permission === 'denied' ? 'locationDenied' : 'locationUnavailable')); return; }
+    }
+    const r = await fetch(`/api/location?token=${encodeURIComponent(token)}`, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ enabled: on, datum }) });
+    const body = await r.json() as { ok?: boolean; restarting?: boolean };
+    if (!r.ok || !body.ok) throw new Error();
+    applyLocation(on, datum);
+    if (body.restarting) toast(t('locationReconnecting'));
+  } catch { applyLocation(was.on, was.datum); toast(t('locationFail')); }
+  finally { locationBusy = false; locationSwitch.disabled = false; }
+}
+locationSwitch.onchange = () => { void setLocation(locationSwitch.checked, datumSelect.value); };
+datumSelect.onchange = () => { void setLocation(true, datumSelect.value); };
 function updateHud() {
   const now = performance.now(), seconds = Math.max(0.25, (now - hudStart) / 1000);
   if (!hud.hidden) hud.textContent = hudLines({ width: painted ? canvas.width : 0, height: canvas.height, fps: hudFrames / seconds,
     hevc: display ? display.hevc : null, videoKbps: hudBytes * 8 / 1000 / seconds, decodeMs: video.decodeLatencyMs,
-    queue: video.decodeQueueSize, rttMs: lag.last }, language === 'zh').join('\n');
-  hudFrames = 0; hudBytes = 0; hudStart = now;
+    queue: video.decodeQueueSize, rttMs: lag.last,
+    ...(locationFeed.enabled ? { location: { perSecond: hudFixes / seconds, kmh: lastFix?.speed === undefined ? null : lastFix.speed * 3.6 } } : {}) },
+    language === 'zh').join('\n');
+  hudFrames = 0; hudBytes = 0; hudStart = now; hudFixes = 0;
 }
 window.setInterval(updateHud, 1000);
 render();fit();if(token) connection.connect();

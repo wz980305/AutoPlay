@@ -2,6 +2,11 @@
 
 > Superseded for compilation by 0.1.1 (2026-10-31): both modules now build and local tests pass on JDK 21. Hardware-dependent checks below remain open. See `../../docs/AUDIT-0.1.1.md`. This document preserves the original 0.1.0 audit history.
 
+> **Superseded (1.3.1, 2026-11-05):** every change listed below was compiled and its tests passed in the first GitHub
+> Actions run of the release workflow (`./gradlew build`), which v1.3.1 and v1.3.2 were built and published from; every
+> push has been compiled there since (1.4.0's location code included). This file is kept as the record of what was
+> written without a compiler and why.
+
 > **Status (2026-11-05):** compiled and tested through 1.0.0. Uncompiled since: the 1.0.1 version string in `Main.kt`; the
 > four 1.1.0 files in the table below plus `Main.kt`'s "1.1.0" string; the 1.2.0 "1.2.0" string in `Main.kt`; the three
 > 1.3.0 files below. Nothing else in `receiver/` changed after 1.0.0. First step on a machine with JDK 21 and a Gradle

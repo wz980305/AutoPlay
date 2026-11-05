@@ -69,6 +69,16 @@ class AccessFileTests(unittest.TestCase):
         self.assertIn("oom_score_adj", source)
         self.assertIn("--prime-cds", source)
 
+    def test_the_car_location_switch_survives_the_rebuilt_config(self):
+        # 1.4.0: config.json is rebuilt at every start from uci and the saved display; the page's car-location switch
+        # and datum, which only the receiver writes, are carried over, and anything unexpected falls back to off/WGS-84.
+        self.assertEqual(run_receiver.kept_location({}), {"carLocation": False, "carLocationDatum": "wgs84"})
+        self.assertEqual(run_receiver.kept_location({"carLocation": True, "carLocationDatum": "gcj02"}),
+                         {"carLocation": True, "carLocationDatum": "gcj02"})
+        self.assertEqual(run_receiver.kept_location({"carLocation": "yes", "carLocationDatum": "bd09"}),
+                         {"carLocation": False, "carLocationDatum": "wgs84"})
+        self.assertIn("**kept_location(saved),", HERE.read_text())
+
     def test_the_jvm_still_gets_the_bluetooth_flags_for_older_receivers(self):
         # 1.3.0: the receiver always offers no audio, but a receiver built before 1.3.0 defaults to page audio (and
         # 1.0.0's to calls on the page), which the 1.3.0 page cannot play: in Tesla mode the launcher keeps passing

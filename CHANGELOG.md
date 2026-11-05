@@ -2,6 +2,17 @@
 
 格式参考 Keep a Changelog；版本号从 0.1.0 起，1.0 之前不承诺兼容性。
 
+## [1.4.0] — 2026-11-05 — 车辆定位交给 iPhone（可选，默认关闭）
+
+做法由调研定下，而不是实车试错（`docs/LOCATION.md` §一，ADR-18）：iPhone 自己定位差时会改用车机的位置，坏的、晚的、冻住的也照用；特斯拉浏览器给的是车的位置、带速度航向，但精度可能是占位值 9999.99、时间戳可能是不走的常数；已有方案没有一个默认打开它。
+
+- **投屏页**「常用 → 导航 → 使用车辆定位」（默认关）：打开时才请求浏览器授权，拒绝则开关回到关；页面可见时每秒 `getCurrentPosition` 一次（Tesla Android 在特斯拉上用了三年的做法），经已有的 WSS 送到盒子。中国大陆境内多一个「坐标系」（WGS-84 / GCJ-02），两项下面各写出换算后交给 iPhone 的位置，写法同 iPhone「指南针」，停车对照一次即可。调试浮层多一行「车辆定位 n/s · 车速」；`stats` 多 `locSent`/`locFailed`/`locAcc`/`locDenied`。
+- **接收端** `CarLocation`：位置变了才算新点（浏览器重复给的、冻住的都不算），NMEA 时间用盒子收到的时刻，精度 9999 以上当未报、真实精度差于 100 m 的丢掉，跳出"70 m/s × 间隔 + 100 m"的点扣住到下一个点确认，2.5 s 没有新点就什么都不发（iPhone 用回自己的定位）；GCJ-02 按公式换回 WGS-84（与特斯拉自己给深圳一辆车的 GCJ-02 相差约 1 m）。位置只在 Wi-Fi 的 iAP2 隧道上声明（蓝牙引导链路不声明，DiPlay PR #157），开关打开时 CarPlay 重连一次；关掉立即停发。开关和坐标系存在 `config.json`（`carLocation`、`carLocationDatum`），`GET /api/display` 带出，`POST /api/location` 修改。每分钟一行 `car location: … new= repeated= jumped= dropped= sent= …`，不记坐标。
+- **协议**：新的 `Iap2LocationReporter`（形状取自 DiPlay）每 250 ms 向位置来源要一次、每个点只发一次，替换上游循环"每收到一个 iPhone 消息就重发最后一个位置"的写法；NMEA 时间带百分之一秒，海拔、航向未知时留空（不再写 0.0 / 0.00）。不发 `$PASCD`。
+- **盒子**：`run-receiver.py` 每次启动都重建 `config.json`，现在把 `carLocation`、`carLocationDatum` 带过去（否则重启一次开关就回到关）；恢复出厂删掉整个 `state/`，开关随之回到关。
+- 测试：接收端 `CarLocationTest`（16 个）、`Iap2LocationReporterTest`（7 个），在 GitHub Actions 上编译并通过；盒子侧 239（+1）；投屏页 `check-location.mjs`（特斯拉浏览器的占位精度与常数时间戳、GCJ-02 与特斯拉的对照、指南针写法、一次只读一个、隐藏时不读）。
+- 版本：接收端、网页包、OpenWrt 包 1.4.0；LuCI 依赖 `autoplay (>=1.4.0)`；安装说明改名 `AutoPlay-1.4.0-安装使用说明.md`，加第九节。
+
 ## [1.3.2] — 2026-11-05 — 设置面板左栏只留文字、删掉 2560 开关；发布流程修正
 
 第一个经在线升级送到盒子的版本（装着 1.3.1 的盒子会在一天内看到它）。

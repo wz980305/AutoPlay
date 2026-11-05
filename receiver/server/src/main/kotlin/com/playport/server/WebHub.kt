@@ -60,7 +60,13 @@ data class ClientMessage(
     val stats: Map<String, Double>? = null,
     /** "ack": the page answering the box's "mark" of the same number at once (see LagGate). */
     val mark: Long? = null,
+    /** "location": a fix from the car browser (CarLocation), sent only while the page's switch is on. */
+    val location: LocationMessage? = null,
 )
+
+/** POST /api/location: the switch, and optionally the datum of the browser's coordinates ("wgs84", "gcj02"). */
+@Serializable
+data class LocationSwitch(val enabled: Boolean, val datum: String? = null)
 
 @Serializable
 data class DisplayRequest(
@@ -163,6 +169,13 @@ class WebHub(
 
     /** Applies a display change; returns null on success or an error message. */
     @Volatile var onApplyDisplay: ((DisplayRequest) -> DisplayOutcome)? = null
+
+    /** A fix from a page ("location"); CarLocation decides what to do with it. */
+    @Volatile var onLocation: ((LocationMessage) -> Unit)? = null
+    /** The page's car-location switch and datum; returns whether CarPlay is reconnecting to declare it. */
+    @Volatile var onSetLocation: ((Boolean, String?) -> Boolean)? = null
+    /** The switch and the datum id, for GET /api/display. */
+    @Volatile var carLocationState: () -> Pair<Boolean, String> = { false to "wgs84" }
 
     @Volatile private var sessionActive = false
 
@@ -342,6 +355,38 @@ class WebHub(
                 call.respondText(if (outcome.deferred) """{"ok":true,"deferred":true}""" else """{"ok":true}""",
                     io.ktor.http.ContentType.Application.Json)
             }
+            post("/api/location") {
+                if (call.request.queryParameters["token"] != config.accessToken || !call.fromOwnPage()) {
+                    call.respondText(
+                        """{"error":"invalid token"}""",
+                        io.ktor.http.ContentType.Application.Json,
+                        io.ktor.http.HttpStatusCode.Forbidden,
+                    )
+                    return@post
+                }
+                val request = try {
+                    json.decodeFromString(LocationSwitch.serializer(), call.receiveText())
+                } catch (_: Exception) {
+                    call.respondText(
+                        """{"error":"malformed request"}""",
+                        io.ktor.http.ContentType.Application.Json,
+                        io.ktor.http.HttpStatusCode.BadRequest,
+                    )
+                    return@post
+                }
+                val setter = onSetLocation
+                if (setter == null) {
+                    call.respondText(
+                        """{"error":"location unavailable"}""",
+                        io.ktor.http.ContentType.Application.Json,
+                        io.ktor.http.HttpStatusCode.ServiceUnavailable,
+                    )
+                    return@post
+                }
+                val restarting = setter(request.enabled, request.datum)
+                call.respondText("""{"ok":true,"enabled":${request.enabled},"restarting":$restarting}""",
+                    io.ktor.http.ContentType.Application.Json)
+            }
             webSocket("/ws") {
                 val token = call.request.queryParameters["token"]
                 if (token != config.accessToken || !call.fromOwnPage()) {
@@ -455,6 +500,8 @@ class WebHub(
                                 client.bytesSent.get(), message.stats.orEmpty()))
                         } else if (message.type == "ping") {
                             client.offer(Frame.Text("""{"type":"pong"}"""))
+                        } else if (message.type == "location") {
+                            message.location?.let { onLocation?.invoke(it) }
                         } else {
                             if (message.type == "touch") client.touchDown = message.contacts.any { it.down }
                             inputHandler?.invoke(message)
@@ -524,6 +571,10 @@ class WebHub(
         // A change waiting for the session to end (DisplayState.pending): shown as "next connection" in the settings.
         put("pending", kotlinx.serialization.json.JsonPrimitive(display.pending != null))
         put("orientation", kotlinx.serialization.json.JsonPrimitive(display.orientation))
+        // The page's car-location switch (CarLocation): the page sends fixes only while it is on.
+        val (locationOn, locationDatum) = carLocationState()
+        put("carLocation", kotlinx.serialization.json.JsonPrimitive(locationOn))
+        put("carLocationDatum", kotlinx.serialization.json.JsonPrimitive(locationDatum))
         put(
             "presets",
             kotlinx.serialization.json.buildJsonArray {

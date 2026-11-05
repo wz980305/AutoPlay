@@ -4,7 +4,7 @@
 
 <p align="center"><img src="docs/images/tesla-model3-carplay-2026-11-02.jpg" width="640" alt="CarPlay home screen inside the Model 3's browser"> <img src="docs/images/f50-in-hand-2026-11-02.jpg" width="240" alt="The ZTE F50 in hand, CarPlay on the car screen"></p>
 
-[中文](README.md) · current release **1.3.2** (2026-11-05) · [changelog](CHANGELOG.md) · [install and usage guide (Chinese)](交付资料/AutoPlay-1.3.2-安装使用说明.md)
+[中文](README.md) · current release **1.4.0** (2026-11-05) · [changelog](CHANGELOG.md) · [install and usage guide (Chinese)](交付资料/AutoPlay-1.4.0-安装使用说明.md)
 
 ## Why this route
 
@@ -32,7 +32,9 @@ The fuller architecture is in `docs/ARCHITECTURE.md`, every "why" in `docs/DECIS
 
 **1.1.0** moved all sound to the Tesla's Bluetooth by default and brought in the reliability fixes upstream DashPlay made in the car in late October and early November: unblocking rfkill when the F50's Bluetooth controller comes up, a generation guard in the pairing agent, a full idle grace for every new connection, automatic removal of a corrupt AppCDS archive, and waiting for the network before asking for a certificate. **1.2.0** changed no behaviour, only the interface: both pages were checked screen by screen at the car browser's real window shapes (773×601 windowed, 1256×706 borderless, in CSS pixels), the viewer's five dropdowns became a large in-page option sheet, the box's settings page moved to the same type and touch scale, the pairing code and its buttons sit above the fold, and removing a phone or installing an update no longer depends on the browser's `confirm()` box (`docs/UI-1.2.0.md`). **1.3.0** works through the owner's list after a week in the car: the settings panel is brought in line with iOS Settings (a coloured icon, a label and the current value on every row, no small print), the page's sound and the fallback controls are gone, the box page no longer announces "upstream online", and the on-screen keyboard that sometimes appeared when the browser was brought back is addressed by never letting the canvas hold focus (`docs/UI-1.3.0.md`).
 
-Two things are not done. The 1.1.0 to 1.3.0 changes to the receiver's Kotlin were written without a Gradle network and **have not been compiled** (`receiver/docs/UNVERIFIED-KOTLIN.md` lists every one; `cd receiver && ./gradlew build` is the first step on a connected machine; until then the box runs an earlier receiver build, which its launch flags keep on Bluetooth-only audio), and the keyboard fix could not be reproduced on a bench, so it has to be confirmed in the car. Other known, untouched items are listed at the end of each release in `CHANGELOG.md`. There is no long-term soak data yet.
+Since **1.3.1** every release is compiled and tested by GitHub Actions, signed and published, and the box updates itself from its settings page (`docs/RELEASE.md`). **1.4.0** can hand the Tesla's position to the iPhone for CarPlay navigation (off by default); the design comes from research rather than trial in the car: the iPhone uses bad car positions as readily as good ones, so only fresh, continuous fixes are sent and otherwise nothing (`docs/LOCATION.md`).
+
+Still to confirm in the car: the keyboard fix (its trigger could not be reproduced on a bench), and for car location on a China-market car the datum of the browser's coordinates (one look at the iPhone's Compass while parked) and how often the browser reports a new position while driving. Other known, untouched items are listed at the end of each release in `CHANGELOG.md`. There is no long-term soak data yet.
 
 ## What you need
 
@@ -46,7 +48,7 @@ Two things are not done. The 1.1.0 to 1.3.0 changes to the receiver's Kotlin wer
 
 ## Installing and using it
 
-The full procedure is in the [install guide](交付资料/AutoPlay-1.3.2-安装使用说明.md) (Chinese); here is the outline. On a computer, build the receiver (JDK 21 + Gradle) and the viewer page (Node), then use the OpenWrt Docker SDK to produce four apk packages: `autoplay` (the program, installed under `/opt/autoplay`), `autoplay-jre` (a jlink-trimmed Temurin 21), `luci-app-autoplay` and its Chinese translation. Copy them to the box, `apk add` them, run `board_zte_f50.py --setup` once so the F50's Bluetooth uses the private BlueZ (do not `apk add bluez-daemon`; it pulls in mismatched kernel modules), place the identity files, restart the service. The install script moves the LAN to 100.96.0.1, sets the 5 GHz radio to CN / 149, and keeps any channel in 149–165 you chose in LuCI.
+The full procedure is in the [install guide](交付资料/AutoPlay-1.4.0-安装使用说明.md) (Chinese); here is the outline. On a computer, build the receiver (JDK 21 + Gradle) and the viewer page (Node), then use the OpenWrt Docker SDK to produce four apk packages: `autoplay` (the program, installed under `/opt/autoplay`), `autoplay-jre` (a jlink-trimmed Temurin 21), `luci-app-autoplay` and its Chinese translation. Copy them to the box, `apk add` them, run `board_zte_f50.py --setup` once so the F50's Bluetooth uses the private BlueZ (do not `apk add bluez-daemon`; it pulls in mismatched kernel modules), place the identity files, restart the service. The install script moves the LAN to 100.96.0.1, sets the 5 GHz radio to CN / 149, and keeps any channel in 149–165 you chose in LuCI.
 
 After that there are three places to look and change things:
 

@@ -34,8 +34,8 @@
 在自己电脑上做同样的事（需要 JDK 21、Node、Docker、`gh`）：
 
 ```sh
-sh box/scripts/release.sh 1.3.2                      # 只构建到 out/release-1.3.2，不发布
-AUTOPLAY_RELEASE_KEY_FILE=~/autoplay-release.key sh box/scripts/release.sh 1.3.2 --publish
+sh box/scripts/release.sh 1.4.0                      # 只构建到 out/release-1.4.0，不发布
+AUTOPLAY_RELEASE_KEY_FILE=~/autoplay-release.key sh box/scripts/release.sh 1.4.0 --publish
 ```
 
 ## 四、盒子那边发生什么

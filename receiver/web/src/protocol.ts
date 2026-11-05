@@ -1,3 +1,4 @@
+import type { Fix } from './location';
 /** Binary wire framing shared with the server (`Wire.kt`). */
 
 export const WireType = {
@@ -90,7 +91,8 @@ export type ClientMessage =
   | { type: 'keyframe' }
   | { type: 'stats'; stats: Record<string, number> }
   | { type: 'ping' }
-  | { type: 'ack'; mark: number };
+  | { type: 'ack'; mark: number }
+  | { type: 'location'; location: Fix };
 
 export interface ServerMessage {
   /** "mark": answered at once with an "ack", so the box knows how far behind this page is (LagGate). */

@@ -61,6 +61,8 @@ iPhone 编码 H.264 ─TCP─▶ JVM airplay-screen 线程：读 128B 头 + 包�
 触摸：pointer 事件 → 按画面归一化坐标 → WSS 文本 JSON → JVM → HID 报文 → ChaCha 加密 → iPhone 事件连接
 音频：接收端不声明任何音频格式（1.3.0 起固定，ADR-16），iPhone 不建立音频流，音乐、导航播报、通话、Siri
    全部直接走特斯拉蓝牙，WSS 上没有音频，页面没有 Web Audio（1.1.0–1.2.0 的 carplay 备选模式已删除）
+车辆定位（1.4.0，可选，默认关，docs/LOCATION.md）：navigator.geolocation 每秒一次 → WSS 文本 JSON → CarLocation
+   （判新鲜、去跳点、可选 GCJ-02→WGS-84）→ Iap2LocationReporter → Wi-Fi iAP2 隧道 0xFFFB $GPGGA/$GPRMC → iPhone
 ```
 
 F50 不解码、不转码，只解密、重封装、再加密。每帧在 JVM 里约 8 次内存拷贝、2 次加解密（硬件审查 H4）；所有网络中断落在 CPU0（H3）。这两条决定了 `tools/f50/harden.sh` 里 RPS、CPU0 空闲状态和 A76 限频的取舍。
@@ -127,13 +129,14 @@ F50 不解码、不转码，只解密、重封装、再加密。每帧在 JVM �
 
 常量（不是配置）：LAN 100.96.0.1/24（uci-defaults `90-autoplay-tesla` 安装时写一次）、设置页 18080、联网检测常驻应答、音乐/导航播报/通话/Siri 全部走车载蓝牙（1.3.0 起没有开关）、第一个 5 GHz 热点交给 iPhone、名字 = 自己的域名（DuckDNS 或 DNSPod）或 `autoplay.lan`。
 
-## 6. 这份架构里还没有验证的假设（截至 1.3.0）
+## 6. 这份架构里还没有验证的假设（截至 1.4.0）
 
 已验证（2026-11-02，1.0.0）：WebCodecs → canvas 的画面、触摸回传、蓝牙 iAP2 引导、Let's Encrypt 证书在特斯拉浏览器里无警告、热点只在 149–165 信道可见。仍未验证：
 
 - 特斯拉**行驶中** canvas 不受 `<video>` 限制的波及（停车状态已看到画面；多个项目报告行车可用，无官方说明）。
 - 特斯拉浏览器的真实 Chromium 版本、UA、DPR、两种窗口形状的精确尺寸（探测页还没在车上跑，`docs/TESLA.md` §7）。
 - 画布不再持有焦点之后，浏览器被拉回时车机键盘是否还会出现（1.3.0，台架上无法复现）。
+- 车辆定位（1.4.0）：国行特斯拉浏览器坐标的坐标系（WGS-84 还是 GCJ-02，查不到，设置里停车对照一次指南针选定）；行驶中浏览器多久给一个新位置、导航时会不会冻住（冻住时盒子停发，iPhone 用自己的）。
 - HTTP 页面下主线程 `MediaStreamTrackProcessor` 是否可用（决定 C′ 档是否值得做，进而决定证书方案能否省掉）。
 - 方向盘按键是否交给网页（车载蓝牙模式下不需要）。
 - CPU0 深度睡眠、RPS、限频对延迟和温度的实际影响——全部是别的板子或推算的数字。

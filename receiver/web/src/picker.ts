@@ -35,6 +35,13 @@ function open(p: Picker): void {
     row.setAttribute('aria-selected', String(option.selected));
     row.innerHTML = `<span class="main"><b></b></span>${CHECK}`;
     row.querySelector('b')!.textContent = option.textContent;
+    // A second, grey line under an option (data-detail): the car's position under each datum, for example.
+    const text = option.dataset?.detail;
+    if (text) {
+      const detail = document.createElement('span');
+      detail.textContent = text;
+      row.querySelector('.main')!.append(detail);
+    }
     row.onclick = () => {
       if (p.select.value !== option.value) {
         p.select.value = option.value;

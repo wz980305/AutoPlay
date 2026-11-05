@@ -38,6 +38,10 @@ data class ServerConfig(
     val mdns: String = "jmdns",
     val insecureHttp: Boolean = false,
     val accessToken: String = generateToken(),
+    /** Pass the car browser's position to the iPhone (CarLocation, docs/LOCATION.md); switched in the page, kept in config.json. */
+    val carLocation: Boolean = false,
+    /** What the browser's coordinates are in: "wgs84" (default) or "gcj02" (CarLocation.Datum). */
+    val carLocationDatum: String = "wgs84",
 ) {
     val mfiDirectory: Path get() = identityDir.resolve("offline-mfi")
 

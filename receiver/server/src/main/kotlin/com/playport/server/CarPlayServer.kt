@@ -88,6 +88,8 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         config.displayArea,
     )
     val hub = WebHub(config, display)
+    /** The car browser's position for the iPhone (docs/LOCATION.md); the switch is the page's, kept in config.json. */
+    val carLocation = CarLocation(config.carLocation, CarLocation.Datum.of(config.carLocationDatum), log = { log.info(it) })
     val bridge = WebBridge(hub)
     val media = CarPlayMediaEngine(bridge, audioCaptureDirectory = null)
 
@@ -147,6 +149,33 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                 restartWireless(confirmedPresent = true)
             }
         }, "wireless-quick-retry").apply { isDaemon = true; start() }
+    }
+
+    private fun persisted(): PersistentConfig =
+        PersistentConfig.of(config, display, carLocation.enabled, carLocation.datum.id)
+
+    /**
+     * The page's "car location" switch. On: the iPhone learns that this accessory gives location only when it
+     * identifies the accessory, so a running CarPlay session reconnects (as for a new display, ~5 s). Off: nothing more
+     * is sent from now on; the declaration goes with the next connection, without cutting this one. Returns whether
+     * CarPlay is reconnecting.
+     */
+    fun setCarLocation(enabled: Boolean, datum: CarLocation.Datum? = null): Boolean {
+        val changed = enabled != carLocation.enabled
+        datum?.let { carLocation.datum = it }
+        carLocation.setSwitch(enabled)
+        configStore?.save(persisted())
+        log.info("car location switched {}{} datum={}", if (enabled) "on" else "off", if (changed) "" else " (unchanged)",
+            carLocation.datum.id)
+        if (!enabled || !changed || activeSession == null) return false
+        synchronized(this) {
+            if (activeSession == null) return false
+            closingForDisplay.set(true)
+            activeSession?.close()
+            armQuickRetry()
+            restartWireless(confirmedPresent = true)
+        }
+        return true
     }
 
     private fun armQuickRetry() {
@@ -254,7 +283,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             sessionEnded = !forDisplay
             // Ended by itself (the phone left, the car slept): the next session can take up a change that waited.
             if (!forDisplay && display.applyPending()) {
-                configStore?.save(PersistentConfig.of(config, display))
+                configStore?.save(persisted())
                 log.info("display changed to {}x{} @{}fps codec={} for the next session (it waited for this one to end)",
                     display.width, display.height, display.fps, if (display.hevc) "h265" else "h264")
             }
@@ -316,6 +345,9 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
     fun start() {
         hub.inputHandler = ::routeInput
         hub.onApplyDisplay = ::applyDisplay
+        hub.onLocation = { carLocation.update(it) }
+        hub.onSetLocation = { enabled, datum -> setCarLocation(enabled, datum?.let { CarLocation.Datum.of(it) }) }
+        hub.carLocationState = { carLocation.enabled to carLocation.datum.id }
         hub.onViewerJoined = { streamType ->
             if (bridge.hasRecoveryHandler) {
                 log.info("requesting keyframe for stream {}", streamType)
@@ -513,7 +545,11 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         identification: Iap2IdentificationConfig,
         endpoint: Iap2WirelessCarPlayEndpoint,
     ): Boolean {
-        log.info("wireless iAP2 tunnel accepted")
+        // Location is declared on this long-lived link only, never on the short Bluetooth one: iOS can bind it to
+        // the endpoint that declared it and refuse it on Wi-Fi once RFCOMM closes (DiPlay PR #157).
+        val withLocation = carLocation.enabled
+        val tunnelIdentification = identification.copy(locationInformationEnabled = withLocation)
+        log.info("wireless iAP2 tunnel accepted carLocation={}", withLocation)
         val channel = try {
             Iap2Session.openTunnel(stream, traceContext = "wireless-tunnel", onTrace = { log.debug(it) })
         } catch (error: Exception) {
@@ -530,9 +566,10 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                         session = channel,
                         mfi = Iap2MfiAuthenticationClient(mfi),
                     ).run(
-                        identification = identification,
+                        identification = tunnelIdentification,
                         endpoint = endpoint,
                         timeoutMillis = Iap2WirelessControlClient.NO_TIMEOUT_MILLIS,
+                        locationProvider = carLocation.takeIf { withLocation },
                         onReady = { log.info("wireless iAP2 tunnel ready; CarPlay is live") },
                         onProgress = { log.debug("iAP tunnel $it") },
                     )
@@ -676,7 +713,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         if (areas.isNotEmpty() && session != null && display.sameStream(width, height, fps, uiScale, hevc, areas)) {
             if (request.area == display.area) return DisplayOutcome()
             display.useArea(request.area)
-            configStore?.save(PersistentConfig.of(config, display).copy(display = display.forNextStart()))
+            configStore?.save(persisted().copy(display = display.forNextStart()))
             val sent = session.showViewArea(request.area)
             log.info("view area {} ({}x{}) of {}x{} sent={} ({})", request.area, areas[request.area].width,
                 areas[request.area].height, width, height, sent, reason)
@@ -687,19 +724,19 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             // next connection; restarting the invitation cut the reconnection in progress (two restarts within 5 s for
             // the same display, F50 2026-10-19).
             if (request.area != display.area) display.useArea(request.area)
-            configStore?.save(PersistentConfig.of(config, display))
+            configStore?.save(persisted())
             log.info("display {}x{} area {} kept for the next session ({})", width, height, request.area, reason)
             return DisplayOutcome()
         }
         if (request.defer && session != null) {
             display.defer(request.copy(areas = areas))
-            configStore?.save(PersistentConfig.of(config, display).copy(display = display.forNextStart()))
+            configStore?.save(persisted().copy(display = display.forNextStart()))
             log.info("display {}x{} @{}fps codec={} waits for the session to end ({})", width, height, fps,
                 if (hevc) "h265" else "h264", reason)
             return DisplayOutcome(deferred = true)
         }
         display.update(width, height, fps, uiScale, hevc, areas, request.area)
-        configStore?.save(PersistentConfig.of(config, display))
+        configStore?.save(persisted())
         log.info(
             "display changed to {}x{} @{}fps uiScale={} codec={} ({}) areas={} ({}); restarting CarPlay",
             width, height, fps, display.uiScale, if (display.hevc) "h265" else "h264", display.orientation,

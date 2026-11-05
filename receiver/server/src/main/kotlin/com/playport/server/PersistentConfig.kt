@@ -35,6 +35,9 @@ data class PersistentConfig(
     val wifiSecurity: String = "wpa2",
     val bluetoothDeviceAddress: String? = null,
     val mdns: String = "jmdns",
+    /** The page's "car location" switch and the datum of the browser's coordinates (CarLocation). */
+    val carLocation: Boolean = false,
+    val carLocationDatum: String = "wgs84",
 ) {
     /** Server defaults from this file (CLI flags are applied on top and override). */
     fun toServerDefaults(identityDir: Path, stateDir: Path): ServerConfig = ServerConfig(
@@ -62,12 +65,19 @@ data class PersistentConfig(
         },
         bluetoothDeviceAddress = bluetoothDeviceAddress,
         mdns = mdns,
+        carLocation = carLocation,
+        carLocationDatum = carLocationDatum,
         identityDir = identityDir,
         stateDir = stateDir,
     )
 
     companion object {
-        fun of(config: ServerConfig, display: DisplayState): PersistentConfig = PersistentConfig(
+        fun of(
+            config: ServerConfig,
+            display: DisplayState,
+            carLocation: Boolean = config.carLocation,
+            carLocationDatum: String = config.carLocationDatum,
+        ): PersistentConfig = PersistentConfig(
             deviceName = config.deviceName,
             model = config.model,
             manufacturer = config.manufacturer,
@@ -94,6 +104,8 @@ data class PersistentConfig(
             },
             bluetoothDeviceAddress = config.bluetoothDeviceAddress,
             mdns = config.mdns,
+            carLocation = carLocation,
+            carLocationDatum = carLocationDatum,
         )
     }
 }
