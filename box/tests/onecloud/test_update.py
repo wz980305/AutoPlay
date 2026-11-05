@@ -401,6 +401,171 @@ class SignedReleaseTests(unittest.TestCase):
 
 
 
+class GitHub:
+    """github.com and its REST API on one loopback server. Release files live at <owner>/<repo>/<tag>/<name>.
+    /web/<owner>/<repo>/releases/... is github.com (its download links answer `web_status` when set, 502 as on the
+    owner's network); /api/repos/... the API, whose asset download redirects to /cdn/ as GitHub's does."""
+
+    def __init__(self, root, latest):
+        self.root, self.latest, self.web_status, self.api_status, self.seen = Path(root), latest, None, None, []
+        github = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *_):
+                pass
+
+            def send(self, code, data, kind='application/octet-stream'):
+                self.send_response(code)
+                self.send_header('Content-Type', kind)
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def do_GET(self):
+                github.seen.append((self.path, self.headers.get('Accept')))
+                parts = self.path.strip('/').split('/')
+                if parts[0] == 'web':                     # web/<o>/<r>/releases/(latest/download|download/<t>)/<n>
+                    if github.web_status:
+                        return self.send_error(github.web_status)
+                    owner, repo, tag, name = parts[1], parts[2], (github.latest if parts[4] == 'latest' else parts[5]), parts[-1]
+                    target = github.root / owner / repo / tag / name
+                    return self.send(200, target.read_bytes()) if target.is_file() else self.send_error(404)
+                if parts[0] == 'api':
+                    if github.api_status:
+                        return self.send(github.api_status, b'{"message": "API rate limit exceeded"}', 'application/json')
+                    if parts[4:6] == ['releases', 'assets']:   # api/repos/<o>/<r>/releases/assets/<t>~<n>
+                        if self.headers.get('Accept') != 'application/octet-stream':
+                            return self.send(200, b'{"asset": "metadata"}', 'application/json')
+                        self.send_response(302)
+                        self.send_header('Location', f'http://127.0.0.1:{github.port}/cdn/{parts[2]}/{parts[3]}/' + parts[-1].replace('~', '/'))
+                        self.send_header('Content-Length', '0')
+                        return self.end_headers()
+                    owner, repo = parts[2], parts[3]
+                    tag = github.latest if parts[-1] == 'latest' else parts[-1]
+                    folder = github.root / owner / repo / tag
+                    if not folder.is_dir():
+                        return self.send(404, b'{"message": "Not Found"}', 'application/json')
+                    base = f'http://127.0.0.1:{github.port}/api/repos/{owner}/{repo}/releases/assets/'
+                    assets = [{'name': f.name, 'url': base + f'{tag}~{f.name}', 'browser_download_url': 'unused'}
+                              for f in sorted(folder.iterdir())]
+                    return self.send(200, json.dumps({'tag_name': tag, 'assets': assets}).encode(), 'application/json')
+                if parts[0] == 'cdn':
+                    target = github.root.joinpath(*parts[1:])
+                    return self.send(200, target.read_bytes()) if target.is_file() else self.send_error(404)
+                self.send_error(404)
+
+        self.httpd = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        self.port = self.httpd.server_port
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+
+    def put(self, tag, name, data):
+        target = self.root / 'owner' / 'AutoPlay' / tag / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+
+    def lookups(self):
+        return [p for p, _ in self.seen if p.startswith('/api/') and '/assets/' not in p]
+
+    def close(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+
+
+class GitHubApiTests(unittest.TestCase):
+    """1.4.2: github.com release links answered 502 on the owner's network while the API's asset download worked."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name)
+        self.key, self.pub = self.dir / 'key.pem', self.dir / 'pub.pem'
+        subprocess.run([OPENSSL, 'genpkey', '-algorithm', 'ed25519', '-out', str(self.key)], check=True, capture_output=True)
+        subprocess.run([OPENSSL, 'pkey', '-in', str(self.key), '-pubout', '-out', str(self.pub)], check=True, capture_output=True)
+        self.github = GitHub(self.dir / 'www', latest='v1.4.2')
+        self.addCleanup(self.github.close)
+        web = f'http://127.0.0.1:{self.github.port}/web/'
+        for name, value in (('OPENSSL', OPENSSL), ('MIRRORS', ()), ('GITHUB', web),
+                            ('API', f'http://127.0.0.1:{self.github.port}/api/'),
+                            ('LATEST', web + 'owner/AutoPlay/releases/latest/download/'),
+                            ('PREVIOUS_FEED', web + 'owner/AutoPlay/releases/download/v{version}/')):
+            p = patch.object(update, name, value)
+            p.start()
+            self.addCleanup(p.stop)
+        update._releases.clear()
+        self.addCleanup(update._releases.clear)
+        self.root = self.dir / 'opt/autoplay'
+        (self.root / 'state').mkdir(parents=True)
+
+    def sign(self, data):
+        (self.dir / 'm').write_bytes(data)
+        subprocess.run([OPENSSL, 'pkeyutl', '-sign', '-inkey', str(self.key), '-rawin', '-in', str(self.dir / 'm'),
+                        '-out', str(self.dir / 's')], check=True, capture_output=True)
+        return (self.dir / 's').read_bytes()
+
+    def release(self, tag, files):
+        for name, data in files.items():
+            self.github.put(tag, name, data)
+            if name in ('autoplay-update.json', 'SHA256SUMS'):
+                self.github.put(tag, name + '.sig', self.sign(data))
+
+    def test_the_api_downloads_while_github_links_answer_502(self):
+        manifest = json.dumps({'format': 1, 'version': '1.4.2', 'online': True}).encode()
+        self.release('v1.4.2', {'autoplay-update.json': manifest})
+        self.github.web_status = 502
+        self.assertEqual(update.latest_manifest(self.root, True, self.pub)['version'], '1.4.2')
+        self.assertFalse([p for p, _ in self.github.seen if p.startswith('/web/')], 'github.com was not needed')
+        downloads = [accept for p, accept in self.github.seen if '/assets/' in p]
+        self.assertEqual(downloads, ['application/octet-stream'] * 2, 'manifest and signature as files, not metadata')
+        self.assertEqual(len(self.github.lookups()), 1, 'one release lookup for the manifest and its signature')
+
+    def test_the_way_back_and_the_new_packages_come_through_the_api_too(self):
+        packages = {f'{name}-1.4.1-r1.apk': b'old ' + name.encode() for name in update.OPENWRT_PACKAGES}
+        sums = ''.join(f'{sha(data)}  {name}\n' for name, data in packages.items()).encode()
+        self.release('v1.4.1', {**packages, 'SHA256SUMS': sums})
+        self.github.web_status = 502
+        files = update.previous_packages('1.4.1', (), self.dir / 'cache', key=self.pub)
+        self.assertEqual(sorted(f.name for f in files), sorted(packages))
+        target = self.dir / 'new.apk'
+        self.github.put('v1.4.2', 'autoplay-1.4.2-r1.apk', b'new package')
+        update.fetch(update.GITHUB + 'owner/AutoPlay/releases/download/v1.4.2/autoplay-1.4.2-r1.apk',
+                     target=target, sha256=sha(b'new package'), size=11)
+        self.assertEqual(target.read_bytes(), b'new package')
+
+    def test_a_refusing_api_falls_back_to_github_and_then_the_mirrors(self):
+        manifest = json.dumps({'format': 1, 'version': '1.4.2', 'online': True}).encode()
+        self.release('v1.4.2', {'autoplay-update.json': manifest})
+        self.github.api_status = 403   # 60 requests an hour per address, shared behind a carrier's NAT
+        self.assertEqual(update.latest_manifest(self.root, True, self.pub)['version'], '1.4.2')
+        self.assertTrue([p for p, _ in self.github.seen if p.startswith('/web/')])
+        self.github.web_status = 502
+        with self.assertRaisesRegex(update.UpdateError, '下载失败') as caught:
+            update.latest_manifest(self.root, True, self.pub)
+        self.assertIn('127.0.0.1', str(caught.exception))
+
+    def test_an_unpublished_version_is_still_not_found(self):
+        with self.assertRaises(update.NotFound):
+            update.fetch(update.GITHUB + 'owner/AutoPlay/releases/download/v9.9.9/SHA256SUMS')
+        self.release('v1.4.1', {'other': b'x'})
+        with self.assertRaises(update.NotFound):   # the release exists, the file does not
+            update.fetch(update.GITHUB + 'owner/AutoPlay/releases/download/v1.4.1/SHA256SUMS')
+
+    def test_a_lookup_is_not_reused_the_next_day(self):
+        self.release('v1.4.2', {'autoplay-update.json': b'one'})
+        now = [1000.0]
+        url = update.GITHUB + 'owner/AutoPlay/releases/latest/download/autoplay-update.json'
+        update.api_download(url, clock=lambda: now[0])
+        update.api_download(url, clock=lambda: now[0])
+        self.assertEqual(len(self.github.lookups()), 1)
+        now[0] += update.RELEASE_CACHE_FOR + 1
+        update.api_download(url, clock=lambda: now[0])
+        self.assertEqual(len(self.github.lookups()), 2)
+
+    def test_other_addresses_are_left_alone(self):
+        self.assertIsNone(update.api_download('https://ghfast.top/https://github.com/o/r/releases/latest/download/x'))
+        self.assertEqual([label for label, _, _ in update.sources('http://192.168.1.2:8000/x', ('https://m/',))],
+                         ['192.168.1.2:8000', 'm'])
+
+
 class ServiceUpTests(unittest.TestCase):
     HEALTHY = {"system": {"state": "ok"}, "bluetooth": {"state": "on"}}
 

@@ -1,7 +1,7 @@
-# AutoPlay 1.4.1 安装 / 卸载 / 使用说明
+# AutoPlay 1.4.2 安装 / 卸载 / 使用说明
 
 > 适用：中兴 F50（MU300，已 Root + OpenWrt 25.12，内核 5.4）上的无线 CarPlay，画面投到特斯拉车机浏览器。
-> 1.0.0 是**首个在特斯拉车内实测通过的版本**（无线 CarPlay 画面、触摸、导航播报已验证）；1.0.1 是它的收尾；**1.1.0 把声音默认全部交给特斯拉蓝牙**（见第三节），并引入 DashPlay 10.26–11.01 的可靠性修复；**1.2.0 只改界面**：两张页面按特斯拉的窗口形状核对，下拉与确认框改在页内画（见第六节）；**1.3.0** 按上车一周后的清单收口：设置面板按 iOS「设置」的样子（每行图标、无小字），网页里的声音和「备用控制」删掉，盒子页不再报"上游在线"，并修浏览器拉回时偶尔弹键盘的问题（见第七节）；**1.3.1** 接上在线升级：项目有了自己的发布密钥，每个版本是 GitHub 上一个签过名的 Release，装好 1.3.1 以后在设置页点一下就能升级（见第八节）。**1.3.2** 设置面板左侧分类去掉图标、删掉「允许 2560 分辨率」，盒子页「检查更新」下不再有「上次检查」一行。**1.4.0** 可以把车辆定位交给 iPhone 的 CarPlay 导航（默认关闭，见第九节）；「显示 → 画质」的「应用并重连」只在改了内容大小或帧率时才出现。**1.4.1** 无线 CarPlay 意外断开后盒子会主动请回那部 iPhone 一次、画面流卡住 10 秒内重连；盒子设置页按窗口形状重排，顶部只留需要处理的提示（见第十节）。接收端的 Kotlin 自 1.1.0 起未在本地编译过，1.3.1 起由 GitHub Actions 编译；自己编译时留意 `receiver/docs/UNVERIFIED-KOTLIN.md`。
+> 1.0.0 是**首个在特斯拉车内实测通过的版本**（无线 CarPlay 画面、触摸、导航播报已验证）；1.0.1 是它的收尾；**1.1.0 把声音默认全部交给特斯拉蓝牙**（见第三节），并引入 DashPlay 10.26–11.01 的可靠性修复；**1.2.0 只改界面**：两张页面按特斯拉的窗口形状核对，下拉与确认框改在页内画（见第六节）；**1.3.0** 按上车一周后的清单收口：设置面板按 iOS「设置」的样子（每行图标、无小字），网页里的声音和「备用控制」删掉，盒子页不再报"上游在线"，并修浏览器拉回时偶尔弹键盘的问题（见第七节）；**1.3.1** 接上在线升级：项目有了自己的发布密钥，每个版本是 GitHub 上一个签过名的 Release，装好 1.3.1 以后在设置页点一下就能升级（见第八节）。**1.3.2** 设置面板左侧分类去掉图标、删掉「允许 2560 分辨率」，盒子页「检查更新」下不再有「上次检查」一行。**1.4.0** 可以把车辆定位交给 iPhone 的 CarPlay 导航（默认关闭，见第九节）；「显示 → 画质」的「应用并重连」只在改了内容大小或帧率时才出现。**1.4.1** 无线 CarPlay 意外断开后盒子会主动请回那部 iPhone 一次、画面流卡住 10 秒内重连；盒子设置页按窗口形状重排，顶部只留需要处理的提示（见第十节）。**1.4.2** 在线升级先经 GitHub API 下载，github.com 的下载链接返回 502 时也能升级。接收端的 Kotlin 自 1.1.0 起未在本地编译过，1.3.1 起由 GitHub Actions 编译；自己编译时留意 `receiver/docs/UNVERIFIED-KOTLIN.md`。
 
 ---
 
@@ -13,9 +13,20 @@
 
 ### 2. 拿到安装包
 
-**直接下载（推荐）**：GitHub 仓库 `wz980305/AutoPlay` 的 Releases → 最新版本（现在是 `v1.4.1`），下载 `autoplay-1.4.1-r1.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk` 和与盒子架构对应的 `autoplay-jre-*_<架构>.apk`（F50 一般是 `aarch64_generic`；`ssh root@<盒子> cat /etc/apk/arch` 可查）。`SHA256SUMS` 里有每个文件的哈希。
+**直接下载（推荐）**：GitHub 仓库 `wz980305/AutoPlay` 的 Releases → 最新版本（现在是 `v1.4.2`），下载 `autoplay-1.4.2-r1.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk` 和与盒子架构对应的 `autoplay-jre-*_<架构>.apk`（F50 一般是 `aarch64_generic`；`ssh root@<盒子> cat /etc/apk/arch` 可查）。`SHA256SUMS` 里有每个文件的哈希。
 
-**自己编译**：需要 JDK 21 工具链 + Docker（SDK 镜像 `openwrt/sdk:x86-64-25.12.5`），或者一条命令 `sh box/scripts/release.sh 1.4.1`（同 GitHub Actions 里跑的那条，产物在 `out/release-1.4.1/`）。分步：
+浏览器下载返回 502 时，改走 GitHub API 的 asset 接口（在电脑的终端里，一个空文件夹中运行；只取 F50 用得到的包，最后一步核对哈希）：
+
+```sh
+TAG=v1.4.2
+curl -s https://api.github.com/repos/wz980305/AutoPlay/releases/tags/$TAG \
+  | python3 -c 'import json,sys; [print(a["url"], a["name"]) for a in json.load(sys.stdin)["assets"]]' \
+  | grep -E ' (autoplay-[0-9].*|luci-.*|autoplay-jre-.*_aarch64_generic\.apk|SHA256SUMS)$' \
+  | while read url name; do curl -fL -H 'Accept: application/octet-stream' -o "$name" "$url"; done
+grep -E 'autoplay-[0-9]|luci-|aarch64_generic' SHA256SUMS | shasum -a 256 -c -
+```
+
+**自己编译**：需要 JDK 21 工具链 + Docker（SDK 镜像 `openwrt/sdk:x86-64-25.12.5`），或者一条命令 `sh box/scripts/release.sh 1.4.2`（同 GitHub Actions 里跑的那条，产物在 `out/release-1.4.2/`）。分步：
 
 ```sh
 # 都在仓库根目录执行
@@ -24,12 +35,12 @@
 # 编译投屏页
 (cd receiver/web && npm ci && npm run build)
 # 打程序包
-AUTOPLAY_VERSION=1.4.1 sh box/scripts/build-bundle.sh autoplay-bundle.tar
+AUTOPLAY_VERSION=1.4.2 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 # 用 Docker SDK 打 apk
 sh openwrt/scripts/build-packages.sh out/ autoplay-bundle.tar
 ```
 
-产物在 `out/`：`autoplay-1.4.1-r1.apk`、`autoplay-jre-*_<架构>.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk`。
+产物在 `out/`：`autoplay-1.4.2-r1.apk`、`autoplay-jre-*_<架构>.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk`。
 
 ### 3. 装到 F50（手动路线）
 ```sh
@@ -139,7 +150,7 @@ apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
 
 - **第一次**：装着 1.3.0 或更早版本的盒子，按第一节手动装一次 1.3.1 或更新的版本（直接用 Release 上的 apk 即可）。旧版本的包里是上游 DashPlay 的公钥，认不出我们签的发布；1.3.1 带着项目自己的公钥。
 - **之后**：盒子开机 2 分钟后检查一次，之后每 24 小时一次；有新版本时，设置页 `http://100.96.0.1:18080/`「程序更新」和 LuCI「程序更新」会显示版本号和这一版改了什么。点「立即升级」→ 确认：CarPlay 断开约 1 分钟，盒子先备份配对、证书和设置，先下载当前版本作退路，新版本起不来就自动装回。CarPlay 正在用时不会升级。
-- 连不上 GitHub 时自动换镜像（默认 `ghfast.top`，LuCI「程序更新」可改；`none` 表示只用 GitHub）。所有文件都核对签名和哈希，镜像改不了内容。
+- 下载先走 GitHub API（1.4.2 起；github.com 的下载链接返回 502 时也能下），再走 github.com，都不行时自动换镜像（默认 `ghfast.top`，LuCI「程序更新」可改；`none` 表示只用 GitHub）。所有文件都核对签名和哈希，来源和镜像改不了内容。
 - 不想让盒子检查：LuCI「程序更新」关掉「检查更新」。
 
 ## 九、车辆定位（1.4.0 起，`docs/LOCATION.md`）

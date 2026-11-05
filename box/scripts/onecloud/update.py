@@ -28,6 +28,7 @@ import sys
 import tarfile
 import tempfile
 import time
+import urllib.parse
 import urllib.request
 
 # The release location (docs/RELEASE.md): one GitHub Release per version in github.com/wz980305/AutoPlay carries the
@@ -50,6 +51,15 @@ OPENSSL = os.environ.get("AUTOPLAY_OPENSSL", "openssl")   # OpenSSL 3 on the box
 # Tried after GitHub itself, as a URL prefix. The signature makes any mirror safe; uci autoplay.main.update_mirror
 # replaces this list, "none" for GitHub only.
 MIRRORS = ("https://ghfast.top/",)
+# A github.com release address is first fetched through GitHub's REST API (1.4.2): on the owner's network the
+# github.com release download links answered 502 for this very file while the API's asset download worked. The API
+# allows 60 unauthenticated requests an hour per address; when it refuses (403/429) the github.com link and the
+# mirrors follow as before. Where the bytes come from does not matter: the signature and the hashes decide.
+GITHUB = "https://github.com/"
+API = os.environ.get("AUTOPLAY_UPDATE_API", "https://api.github.com/")
+RELEASE_LINK = re.compile(r"([^/]+)/([^/]+)/releases/(?:latest/download|download/([^/]+))/([^/]+)")
+RELEASE_CACHE_FOR = 600   # s: one release lookup serves one check or install, never a later day's
+_releases = {}            # (owner, repo, tag or None) -> (looked up at, {asset name: API download URL})
 OPENWRT_PACKAGES = ("autoplay", "luci-app-autoplay", "luci-i18n-autoplay-zh-cn")
 # The DashPlay names of the packages this fork replaces: a box still running them is moved over by the first AutoPlay
 # update (they are removed first, their prerm keeps state/, the autoplay postinst migrates /opt/dashplay/state), and
@@ -103,13 +113,56 @@ def mirrors(root=None, openwrt=True):
     return tuple(value.split()) if value else MIRRORS
 
 
+class NoSuchAsset(OSError):
+    """The release has no file of that name: the API's way of saying 404."""
+    code = 404
+
+
+def api_download(url, clock=time.monotonic):
+    """The REST API address that downloads the release file at github.com address url, or None for an address that
+    is not a GitHub release download (a test server, a mirror). Looks the release up once per RELEASE_CACHE_FOR, so
+    a manifest and its signature come from the same release."""
+    if not url.startswith(GITHUB):
+        return None
+    match = RELEASE_LINK.fullmatch(url[len(GITHUB):])
+    if not match:
+        return None
+    owner, repo, tag, name = match.groups()
+    key = (owner, repo, tag and urllib.parse.unquote(tag))
+    found = _releases.get(key)
+    if not found or clock() - found[0] > RELEASE_CACHE_FOR:
+        path = f"repos/{owner}/{repo}/releases/" + (f"tags/{tag}" if tag else "latest")
+        request = urllib.request.Request(API + path, headers={
+            "User-Agent": "AutoPlay-update", "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28"})
+        with urllib.request.urlopen(request, timeout=30) as response:
+            release = json.loads(response.read(1 << 21))
+        if not isinstance(release, dict):
+            raise ValueError("unexpected release lookup answer")
+        found = (clock(), {asset["name"]: asset["url"] for asset in release.get("assets", [])
+                           if isinstance(asset, dict) and asset.get("name") and asset.get("url")})
+        _releases[key] = found
+    asset = found[1].get(urllib.parse.unquote(name))
+    if not asset:
+        raise NoSuchAsset(f"release has no {urllib.parse.unquote(name)}")
+    return asset
+
+
+def sources(url, prefixes=()):
+    """Where url is fetched from, in order: (label, address or None for "ask the API", extra headers)."""
+    first = [(urllib.parse.urlsplit(API).netloc, None, {"Accept": "application/octet-stream"})] \
+        if url.startswith(GITHUB) and RELEASE_LINK.fullmatch(url[len(GITHUB):]) else []
+    return first + [(candidate.split("/")[2], candidate, {}) for candidate in [url] + [p + url for p in prefixes]]
+
+
 def fetch(url, prefixes=(), limit=1 << 20, target=None, sha256=None, size=None):
-    """Bytes of url (or, with target, the file written there), from GitHub or else each mirror prefix. With sha256
-    and size the download must match them exactly."""
+    """Bytes of url (or, with target, the file written there), from GitHub's API, github.com, or else each mirror
+    prefix. With sha256 and size the download must match them exactly."""
     errors, codes = [], []
-    for candidate in [url] + [prefix + url for prefix in prefixes]:
+    for label, candidate, extra in sources(url, prefixes):
         try:
-            request = urllib.request.Request(candidate, headers={"User-Agent": "AutoPlay-update"})
+            candidate = candidate or api_download(url)
+            request = urllib.request.Request(candidate, headers={"User-Agent": "AutoPlay-update", **extra})
             with urllib.request.urlopen(request, timeout=30) as response:
                 digest, total = hashlib.sha256(), 0
                 out = open(target, "wb") if target else None
@@ -133,7 +186,7 @@ def fetch(url, prefixes=(), limit=1 << 20, target=None, sha256=None, size=None):
         except (OSError, UpdateError, ValueError, http.client.HTTPException) as error:
             if hasattr(error, "close"):   # an HTTPError holds its response open
                 error.close()
-            errors.append(f"{candidate.split('/')[2]}: {error}")
+            errors.append(f"{label}: {error}")
             codes.append(getattr(error, "code", None))
     if all(code == 404 for code in codes):
         raise NotFound("下载失败（" + "；".join(errors)[-300:] + "）")
