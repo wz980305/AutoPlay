@@ -110,6 +110,8 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
     private var bootDeadline = 0L
     @Volatile private var presenceLearned = false
     @Volatile private var lastPeer: String? = null
+    /** One invitation for the owner of a session that dropped by itself (1.4.1, WirelessSessionRecovery). */
+    private val sessionRecovery = WirelessSessionRecovery()
 
     /** duckAudio / unduckAudio commands seen, for the log. */
     private val ducks = java.util.concurrent.atomic.AtomicLong(0)
@@ -170,6 +172,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         if (!enabled || !changed || activeSession == null) return false
         synchronized(this) {
             if (activeSession == null) return false
+            sessionRecovery.cancel()
             closingForDisplay.set(true)
             activeSession?.close()
             armQuickRetry()
@@ -261,6 +264,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         override fun onSessionActive(session: AirPlaySession) {
             log.info("CarPlay session active peer={}", session.host)
             activeSession = session
+            if (presenceHelper != null) sessionRecovery.active(selectedPhone)
             bootInvite = false
             invitedPhone = null
             handoffAcceptedAt = Long.MIN_VALUE / 2
@@ -281,6 +285,9 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             // (fullscreen switch took 19 s instead of ~12 s, 2026-10-11).
             val forDisplay = closingForDisplay.getAndSet(false)
             sessionEnded = !forDisplay
+            // Dropped by itself, not closed by the box: its owner may be invited once (WirelessSessionRecovery). The
+            // box's own closes (idle release, display, location, shutdown) cancel the recovery before they close.
+            if (!forDisplay && !closed.get()) sessionRecovery.ended(System.nanoTime() / 1_000_000) else sessionRecovery.cancel()
             // Ended by itself (the phone left, the car slept): the next session can take up a change that waited.
             if (!forDisplay && display.applyPending()) {
                 configStore?.save(persisted())
@@ -614,6 +621,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                     }
                     when (idleTimer.action(now, hub.viewerCount > 0, activeSession)) {
                         IdleAction.RELEASE -> {
+                            sessionRecovery.cancel()
                             log.info("no viewer for {} s: CarPlay released until a page opens", releaseMs / 1000)
                             synchronized(this@CarPlayServer) {
                                 ++wirelessGeneration
@@ -657,6 +665,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                         continue
                     }
                     bootInvite = false
+                    if (recoverWirelessSession(now)) continue
                     invitedPhone?.takeIf { now - invitedAt >= DECLINE_AFTER_MS }?.let { phone ->
                         // An online phone that ignores invitations must not block the next person.
                         invitedPhone = null
@@ -743,6 +752,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             areas.joinToString(",") { "${it.width}x${it.height}" }.ifEmpty { "-" }, reason,
         )
         val wasActive = activeSession != null
+        sessionRecovery.cancel()
         closingForDisplay.set(wasActive)
         val keepLink = displayKeepLinkMs()
         if (wasActive && keepLink > 0 && wireless?.running == true) {
@@ -771,6 +781,28 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
 
     private fun displayKeepLinkMs(): Long =
         System.getenv("CARPLAY_DISPLAY_KEEP_LINK_MS")?.toLongOrNull()?.coerceIn(0, 20_000) ?: 0L
+
+    /**
+     * The one invitation for the owner of a session that dropped by itself (WirelessSessionRecovery), sent over
+     * Bluetooth without first seeing the phone on the Wi-Fi: after a drop the iPhone often stays off the box's Wi-Fi
+     * until CarPlay invites it. Only while that phone is still the selected one and still paired. It is not an
+     * invitation that can be "declined": a phone that has walked away must not then wait out a back-off when it comes
+     * back. Runs on the supervisor thread, outside the server lock (the helper may take seconds).
+     */
+    private fun recoverWirelessSession(now: Long): Boolean {
+        if (closed.get() || activeSession != null || presenceHelper == null) return false
+        val phone = sessionRecovery.candidate(now) ?: return false
+        if (selectedPhone != phone || !presence("allowed", phone)) {
+            sessionRecovery.cancel()
+            return false
+        }
+        if (closed.get() || activeSession != null || selectedPhone != phone) return false
+        if (!sessionRecovery.take(System.nanoTime() / 1_000_000, phone)) return false
+        log.info("wireless session dropped; inviting its iPhone once without waiting to see it on the Wi-Fi")
+        restartWireless(confirmedPresent = true)
+        invitedPhone = null
+        return true
+    }
 
     /** confirmedPresent: the caller has just seen the selected phone on the network (skips a ~2.4 s re-check). */
     @Synchronized
@@ -812,6 +844,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
+        sessionRecovery.cancel()
         // The session first: the phone learns at once that CarPlay is over (it stayed open through the 10 s mDNS
         // goodbye on every stop or restart, F50 2026-10-14).
         runCatching { activeSession?.close() }

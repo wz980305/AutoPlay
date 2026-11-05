@@ -303,6 +303,11 @@ def main():
             if phone in state['phones'] or phone == pending_phone(request_path, boot, now):
                 decline(state, phone, now)
                 ok = True
+        elif command == 'allowed':
+            # 1.4.1: may this phone still be invited without a Wi-Fi presence proof (the one recovery invitation
+            # after its live session dropped)? Only while it is still paired: unpairing on the box page ends that.
+            phone = sys.argv[2].upper() if len(sys.argv) > 2 else ''
+            ok = phone in paired_cached(state, now, lambda: asyncio.run(paired_phones()))
         else:
             data = json.loads(subprocess.check_output(['ip', '-j', '-4', 'addr', 'show', 'dev', interface], timeout=1))
             address = next((a for d in data for a in d['addr_info'] if a['scope'] == 'global'), None)

@@ -11,6 +11,7 @@ import { isNight, parseNightMode } from './night';
 import { reachable, TESLA_HOPS } from './tesla-fullscreen';
 import { hudLines } from './debug-hud';
 import { compatDisplayOn } from './compat-display';
+import { askBox, READ_MS, WRITE_MS } from './ask-box';
 import { LocationFeed, askLocation, compassText, gcjToWgs, inChina, type Fix } from './location';
 import { attachPickers, refreshPickers } from './picker';
 import type { ServerMessage, ClientMessage } from './protocol';
@@ -334,7 +335,7 @@ function toast(message: string) {
 }
 /** The box's display as it is now: another page may have changed it (it sent back that page's fps, 2026-10-16). */
 async function fetchDisplay(): Promise<Display | null> {
-  try { const r = await fetch('/api/display', { cache: 'no-store' }); return r.ok ? await r.json() as Display : null; }
+  try { const { ok, body } = await askBox<Display>('/api/display', { cache: 'no-store' }, READ_MS); return ok ? body : null; }
   catch { return null; }
 }
 async function loadDisplay() {
@@ -387,9 +388,10 @@ async function saveDisplay(target: Display, how: { defer?: boolean; reason: stri
   const restart = active && !how.defer && (!display || !sameStream(display, target));
   if (restart) { expectRestart = true; window.clearTimeout(expectTimer); expectTimer = window.setTimeout(() => { endExpectRestart(); fit(); }, DISPLAY_HOLD_MS); }
   try {
-    const r = await fetch(`/api/display?token=${encodeURIComponent(token)}`, { method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ ...target, defer: how.defer === true, reason: how.reason }) });
-    const body = await r.json() as {ok?:boolean; deferred?:boolean}; if (!r.ok || !body.ok) throw new Error();
+    const { ok, body } = await askBox<{ ok?: boolean; deferred?: boolean }>(`/api/display?token=${encodeURIComponent(token)}`,
+      { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ ...target, defer: how.defer === true, reason: how.reason }) },
+      WRITE_MS);
+    if (!ok || !body?.ok) throw new Error();
     if (body.deferred) { if (display) display.pending = true; setDisplayStatus('deferred'); return true; }
     display = { ...target, pending: false }; setDisplayStatus('applied'); return true;
   } catch { if (restart) { endExpectRestart(); fit(); } setDisplayStatus('applyFail'); return false; }
@@ -588,10 +590,9 @@ async function setLocation(on: boolean, datum: string) {
       const permission = await askLocation(navigator.geolocation);
       if (permission !== 'granted') { applyLocation(false, was.datum); toast(t(permission === 'denied' ? 'locationDenied' : 'locationUnavailable')); return; }
     }
-    const r = await fetch(`/api/location?token=${encodeURIComponent(token)}`, { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ enabled: on, datum }) });
-    const body = await r.json() as { ok?: boolean; restarting?: boolean };
-    if (!r.ok || !body.ok) throw new Error();
+    const { ok, body } = await askBox<{ ok?: boolean; restarting?: boolean }>(`/api/location?token=${encodeURIComponent(token)}`,
+      { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ enabled: on, datum }) }, WRITE_MS);
+    if (!ok || !body?.ok) throw new Error();
     applyLocation(on, datum);
     if (body.restarting) toast(t('locationReconnecting'));
   } catch { applyLocation(was.on, was.datum); toast(t('locationFail')); }

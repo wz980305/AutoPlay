@@ -99,8 +99,29 @@ listeners.get('pointermove')(pointer(9, 212.5, 250));
 flush();
 assert.equal(messages.at(-1).contacts[1].id, 1, 'Second finger retains its HID slot');
 assert.equal(messages.at(-1).contacts[0].down, false);
-// The page goes away or is frozen with a finger down: every contact is lifted at its last position, at once.
+// 1.4.1: a drag shorter than 1 % of the window, and one that returns to where it started, still sends its last
+// position as a move before the up (they read as taps on the phone before); a still finger sends none.
 listeners.get('pointerup')(pointer(9, 212.5, 250)); fireTimers(); flush(); messages.length = 0;
+listeners.get('pointerdown')(pointer(11, 212.5, 250)); flush();
+clock += 100;
+listeners.get('pointerup')(pointer(11, 213.5, 250));                 // 1 px of 225: under 0.5 %
+assert.deepEqual(messages.slice(-2).map(m => m.contacts[0]), [{ id: 0, x: 113.5 / 225, y: .5, down: true }, { id: 0, x: 113.5 / 225, y: .5, down: false }],
+  'a short drag sends its end as a move, then the up there');
+messages.length = 0;
+listeners.get('pointerdown')(pointer(12, 212.5, 250)); flush();
+listeners.get('pointermove')(pointer(12, 260, 250)); flush();
+clock += 100;
+listeners.get('pointerup')(pointer(12, 212.5, 250));                 // back to the start before lifting
+assert.deepEqual(messages.slice(-2).map(m => m.contacts[0].x), [.5, .5], 'a drag back to its start sends the return before the up');
+assert.equal(messages.at(-2).contacts[0].down, true);
+messages.length = 0;
+listeners.get('pointerdown')(pointer(13, 212.5, 250)); flush();
+clock += 100;
+listeners.get('pointerup')(pointer(13, 212.5, 250));
+assert.equal(messages.length, 2, 'a finger that did not move sends its down and its up only');
+assert.equal(messages[1].contacts[0].down, false);
+messages.length = 0;
+// The page goes away or is frozen with a finger down: every contact is lifted at its last position, at once.
 listeners.get('pointerdown')(pointer(10, 212.5, 250));
 controller.releaseAll();
 assert.deepEqual(messages.at(-1).contacts, [{ id: 0, x: .5, y: .5, down: false }], 'releaseAll lifts the finger where it was');
@@ -110,4 +131,21 @@ assert.equal(messages.at(-1).contacts[0].down, false, 'nothing more to lift send
 controller.reset();
 controller.detach();
 assert.equal(listeners.size, 0);
-console.log('Viewer input check passed: keyboard isolation, no focus on the surface, native controls, portrait/landscape coordinates, multi-touch, minimum press, and release.');
+console.log('Viewer input check passed: keyboard isolation, no focus on the surface, native controls, portrait/landscape coordinates, multi-touch, minimum press, final positions, and release.');
+
+// 1.4.1: requests to the box give up after their deadline instead of leaving the panel waiting.
+{
+  const askSource = readFileSync(new URL('./src/ask-box.ts', import.meta.url), 'utf8');
+  const askJs = ts.transpileModule(askSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
+  const { askBox } = await import(`data:text/javascript;base64,${Buffer.from(askJs).toString('base64')}`);
+  const hanging = (url, init) => new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))));
+  const started = Date.now();
+  await assert.rejects(askBox('/api/display', {}, 60, hanging), /aborted/, 'an unanswered request is aborted');
+  assert.ok(Date.now() - started < 1000, 'at its deadline');
+  const answered = await askBox('/api/display', {}, 60, async () => ({ ok: true, json: async () => ({ fps: 30 }) }));
+  assert.deepEqual(answered, { ok: true, body: { fps: 30 } });
+  const notJson = await askBox('/api/display', {}, 60, async () => ({ ok: false, json: async () => { throw new SyntaxError('html'); } }));
+  assert.deepEqual(notJson, { ok: false, body: null }, 'an answer that is not JSON is a failed answer, not an exception');
+  console.log('Box requests: answered, refused and unanswered requests all end within their deadline.');
+}
+

@@ -158,5 +158,20 @@ class BluezNotReadyTests(unittest.TestCase):
         self.assertEqual(networks['100.96.0.0/24'], {'ip': '100.96.0.234', 'mac': mac})
         self.assertEqual(networks['192.168.77.0/24']['ip'], '192.168.77.234', 'the old identity is kept for going back')
 
+    def test_allowed_means_still_paired_and_needs_no_network(self):
+        # 1.4.1: the one recovery invitation after a dropped session asks only whether the phone is still paired
+        # (unpairing on the box page ends it); it must answer even with no address on the hotspot interface.
+        import os, tempfile, types
+        phone = '02:00:00:00:00:C1'
+        for paired, expected in (({phone}, 0), (set(), 1)):
+            with self.subTest(paired=paired), tempfile.TemporaryDirectory() as directory:
+                state = Path(directory, 'phone-presence.json')
+                with patch.dict(os.environ, {'CARPLAY_PRESENCE_STATE': str(state), 'CARPLAY_PRESENCE_INTERFACE': 'br-lan'}), \
+                        patch.object(presence.sys, 'argv', ['x', 'allowed', phone.lower()]), \
+                        patch.object(presence.subprocess, 'check_output', side_effect=AssertionError('no network probe')), \
+                        patch.object(presence, 'paired_cached', return_value=paired), \
+                        patch.object(presence, 'get_platform', return_value=types.SimpleNamespace(boot_id=lambda: 'b')):
+                    self.assertEqual(presence.main(), expected)
+
 if __name__ == '__main__':
     unittest.main()

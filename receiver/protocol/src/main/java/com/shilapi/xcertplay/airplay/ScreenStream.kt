@@ -7,6 +7,7 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.SocketTimeoutException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
@@ -18,8 +19,18 @@ enum class VideoCodec { H264, H265 }
  * Each message is a 128-byte AirPlayScreenHeader followed by a body: a clear VideoConfig
  * (avcC/hvcC) or a ChaCha20-Poly1305 sealed VideoFrame. The key is the DataStream output key
  * and the per-frame nonce is an 8-byte little-endian counter.
+ *
+ * A quiet screen may wait as long as it likes before its next header, but once a message has begun it must be
+ * complete within [packetTimeoutNanos]: a Wi-Fi link that dies in the middle of a frame (the TCP connection
+ * half-open, no FIN, no RST) otherwise left the session "live" with a frozen picture until something else noticed.
+ * The timeout ends the stream as a failure, and the session ends and reconnects like any other lost link. After
+ * DashPlay 2026.11.04 (`playport-screen-read-deadline`, GPL-3.0).
  */
-class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String) -> Unit = {}) : Closeable {
+class ScreenStream(
+    private val key: ByteArray,
+    private val onDiagnostic: (String) -> Unit = {},
+    private val packetTimeoutNanos: Long = PACKET_TIMEOUT_NS,
+) : Closeable {
     interface Listener {
         fun onCodec(codec: VideoCodec) {}
         fun onConfig(codecData: ByteArray) {}
@@ -55,11 +66,17 @@ class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String
     private fun accept(bound: ServerSocket) {
         try {
             val accepted = bound.accept()
-            socket = accepted
-            run(accepted)
+            serve(accepted, listener)
         } catch (error: Exception) {
             if (!closed.get()) listener.onClosed(error)
         }
+    }
+
+    /** The receive loop on an accepted connection (tests drive it over loopback). */
+    internal fun serve(sock: Socket, listener: Listener) {
+        this.listener = listener
+        socket = sock
+        run(sock)
     }
 
     private fun run(sock: Socket) {
@@ -69,10 +86,10 @@ class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String
             val input = sock.getInputStream()
             while (!closed.get()) {
                 stats.reading()
-                val header = readFully(input, HEADER_LEN) ?: break
+                val header = readFully(sock, input, HEADER_LEN, idleAllowed = true) ?: break
                 val bodySize = readU32Le(header, 0)
                 if (bodySize > MAX_BODY) break
-                val body = readFully(input, bodySize) ?: break
+                val body = readFully(sock, input, bodySize) ?: break
                 stats.received(HEADER_LEN + bodySize)
                 onMessage(header, body)
                 stats.processed()
@@ -114,17 +131,41 @@ class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String
         }
     }
 
-    private fun readFully(input: InputStream, length: Int): ByteArray? {
+    /**
+     * Reads [length] bytes. Before the first byte of a header ([idleAllowed]) it waits without limit; from then on,
+     * and for a body from the start, the whole read must finish within [packetTimeoutNanos]. The socket timeout is
+     * only the poll interval (at most 1 s), so close() and the deadline are both noticed promptly.
+     */
+    private fun readFully(sock: Socket, input: InputStream, length: Int, idleAllowed: Boolean = false): ByteArray? {
         if (length < 0) return null
         val output = ByteArray(length)
         var offset = 0
+        var deadline = if (idleAllowed) 0L else System.nanoTime() + packetTimeoutNanos
         while (offset < length) {
-            val read = input.read(output, offset, length - offset)
+            if (closed.get()) return null
+            if (deadline != 0L) {
+                val remaining = deadline - System.nanoTime()
+                if (remaining <= 0) throw incomplete(idleAllowed, offset, length)
+                sock.soTimeout = ((remaining + 999_999) / 1_000_000).coerceIn(1, 1000).toInt()
+            } else {
+                sock.soTimeout = 1000
+            }
+            val read = try {
+                input.read(output, offset, length - offset)
+            } catch (_: SocketTimeoutException) {
+                continue
+            }
             if (read < 0) return null
+            if (read > 0 && deadline == 0L) deadline = System.nanoTime() + packetTimeoutNanos
             offset += read
         }
         return output
     }
+
+    private fun incomplete(header: Boolean, received: Int, expected: Int) = SocketTimeoutException(
+        "video ${if (header) "header" else "body"} incomplete after " +
+            "${packetTimeoutNanos / 1_000_000} ms: received=$received expected=$expected",
+    )
 
     private companion object {
         const val TAG = "xcertplay-usb"
@@ -133,6 +174,8 @@ class ScreenStream(private val key: ByteArray, private val onDiagnostic: (String
         const val OP_VIDEO_FRAME = 0
         const val OP_VIDEO_CONFIG = 1
         const val MAX_BODY = 8 * 1024 * 1024
+        /** A started message must be complete within this (10 s; a 1080p key frame takes well under 1 s on Wi-Fi). */
+        const val PACKET_TIMEOUT_NS = 10_000_000_000L
     }
 }
 

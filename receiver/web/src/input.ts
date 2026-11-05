@@ -12,8 +12,9 @@ interface ActivePointer {
   x: number;
   y: number;
   down: boolean;
-  startX: number;
-  startY: number;
+  /** The position last sent for this finger (1.4.1): the final one goes out before the up whenever it differs. */
+  sentX: number;
+  sentY: number;
   downAt: number;
   liftTimer: number;
 }
@@ -76,7 +77,7 @@ export class InputController {
     this.surface.setPointerCapture(event.pointerId);
     const x = this.normalizeX(event.clientX), y = this.normalizeY(event.clientY);
     const now = performance.now();
-    this.pointers.set(event.pointerId, { slot: this.nextSlot(), x, y, down: true, startX: x, startY: y, downAt: now, liftTimer: 0 });
+    this.pointers.set(event.pointerId, { slot: this.nextSlot(), x, y, down: true, sentX: x, sentY: y, downAt: now, liftTimer: 0 });
     this.flush();
     this.lastDownAt = now;
   };
@@ -98,9 +99,12 @@ export class InputController {
     if (event.type === 'pointerup') {
       pointer.x = this.normalizeX(event.clientX);
       pointer.y = this.normalizeY(event.clientY);
-      // A swipe that moved sends its final point as a move before the up: the animation-frame flush can be
-      // starved while the page decodes, and an up alone at the end reads as a tap on the phone (2026-10-23).
-      if (Math.abs(pointer.x - pointer.startX) > 0.01 || Math.abs(pointer.y - pointer.startY) > 0.01) this.flush();
+      // The final point goes out as a move before the up whenever it was not sent yet: the animation-frame flush
+      // can be starved while the page decodes, and an up alone at the end reads as a tap on the phone (2026-10-23).
+      // Since 1.4.1 that holds for every drag, not only those past 1 % of the window: a short drag, or one that came
+      // back to where it started, was cut to a tap. Whether it was a tap or a swipe is the phone's call (DashPlay
+      // 2026.11.04, playport-touch-final-position).
+      if (pointer.x !== pointer.sentX || pointer.y !== pointer.sentY) this.flush();
       // The minimum press: a finger up within MIN_PRESS_MS of its down stays down until then (a cancel lifts at once).
       const held = performance.now() - pointer.downAt;
       if (held < MIN_PRESS_MS) { pointer.liftTimer = window.setTimeout(() => this.lift(event.pointerId), MIN_PRESS_MS - held); return; }
@@ -208,6 +212,8 @@ export class InputController {
         contacts.push({ id: contacts.length, x: 0, y: 0, down: false });
       }
       contacts[pointer.slot] = { id: pointer.slot, x: pointer.x, y: pointer.y, down: pointer.down };
+      pointer.sentX = pointer.x;
+      pointer.sentY = pointer.y;
     }
     this.send({ type: 'touch', contacts });
   }
