@@ -21,7 +21,7 @@ const messages = {
   borderlessOn: ['已开启无边框', 'Borderless mode on'], borderlessOnHint: ['使用浏览器返回按钮退出。', 'Use the browser back button to exit.'],
   checkingNetwork: ['正在检查网络', 'Checking network'], checkingNetworkHint: ['跳转需要车机能够访问互联网。', 'The car needs internet access for the redirect.'],
   teslaFullscreenOffline: ['暂时无法连接视频网站，不能开启无边框模式。请检查车机网络，当前画面仍可使用。', 'Cannot reach the video site to start borderless mode. Check the car’s internet connection. The current picture still works.'],
-  apply: ['应用并重连', 'Apply and reconnect'],
+  apply: ['应用并重连', 'Apply and reconnect'], applyNow: ['应用', 'Apply'],
   advanced: ['画质与兼容', 'Quality and compatibility'],
   nightMode: ['夜间模式', 'Night mode'], nightSchedule: ['定时 18:30–06:30', '18:30–06:30'], nightSystem: ['跟随系统', 'System'], nightDay: ['始终白天', 'Always day'], nightNight: ['始终夜间', 'Always night'],
   latency: ['解码延迟', 'Decode delay'],

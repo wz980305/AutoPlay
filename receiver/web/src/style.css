@@ -161,11 +161,14 @@ button.text { border-radius:var(--radius); background:var(--cell); color:var(--l
 .settings-body { min-width:0; overflow:auto; overscroll-behavior:contain; padding:0 .2rem max(var(--space-4),env(safe-area-inset-bottom)); scrollbar-gutter:stable; }
 .settings-page > .group-title:first-child { margin-top:.25rem; }
 .spaced { margin-top:var(--space-3); }
-.picture-form { padding-bottom:var(--space-3); }
-.picture-form .btn { width:calc(100% - 2 * var(--space-3)); margin:var(--space-3) var(--space-3) 0; }
+/* Rows inside the picture form's fieldset are separated like any other rows of a group. */
+.group fieldset > :not([hidden]) ~ :not([hidden]) { border-top:.5px solid var(--sep); }
+/* Apply (1.4.0): an iOS action row, tint text across the row, that is there only while a picked value differs from
+   what CarPlay uses (main.ts syncApply); it slides in with the change instead of a filled button standing there. */
+.cell.action { justify-content:center; color:var(--tint); font-weight:500; animation:rise .2s ease-out; }
+.cell.action:disabled { color:var(--secondary); }
 #display-status { overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
-#display-status:not(:empty) { padding-top:var(--space-3); border-top:1px solid var(--sep); }
-#display-status:empty { display:none; }   /* no hairline under the button while nothing is happening (1.3.0) */
+#display-status:empty { display:none; }   /* the group's footer speaks only while something is happening (1.3.0) */
 
 /* Option sheet (picker.ts): the options as the page's own rows, centred over the dimmed settings page, sized to the
    list (at most the window less a margin; a longer list scrolls inside), Cancel under them. */

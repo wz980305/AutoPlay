@@ -87,6 +87,7 @@ function render() {
   el('overlay').hidden = painted || holding;
   el('app').dataset.live = String(painted || holding);
   el('capabilities').textContent = !isSecureContext ? t('insecure') : typeof VideoDecoder === 'undefined' ? t('unsupported') : t('compatible');
+  syncApply();
 }
 function fit() {
   // While CarPlay renegotiates, the last picture stays laid out as it was (the new areas belong to the next stream).
@@ -343,9 +344,15 @@ async function loadDisplay() {
   if (!loaded) { setDisplayStatus('loadFail'); return; }
   display = loaded; showDisplay(); showLocation(loaded); fit(); scheduleAuto();
 }
+let statusTimer = 0;
 function setDisplayStatus(key: Key) {
   const status = el('display-status');
+  window.clearTimeout(statusTimer);
   status.dataset.i18n = key; status.textContent = t(key);
+  // "Saved, reconnecting" has said its piece once CarPlay is back (about 5 s): the footer goes quiet again, as in iOS.
+  if (key === 'applied') statusTimer = window.setTimeout(() => {
+    if (status.dataset.i18n === 'applied') { delete status.dataset.i18n; status.textContent = ''; }
+  }, 6000);
 }
 /** The rows show the box's values; the status line under the button speaks only while something is happening (or a
  *  change waits for the next session). The resolution, codec and frame rate in use are on the debug overlay and under
@@ -356,7 +363,19 @@ function showDisplay() {
   refreshPickers();
   if (display.pending) setDisplayStatus('nextSession');
   else { delete el('display-status').dataset.i18n; el('display-status').textContent = ''; }
+  syncApply();
 }
+/** The apply row (1.4.0) is there only while the picked content size or frame rate differs from the box's, as an iOS
+ *  "Set" appears with a change: "Apply and reconnect" while CarPlay runs, "Apply" when there is nothing to cut. */
+function syncApply() {
+  const row = el<HTMLButtonElement>('apply'), text = el('apply-text');
+  const changed = display !== null && (Number(el<HTMLSelectElement>('fps').value) !== display.fps
+    || Number(el<HTMLSelectElement>('ui-scale').value) !== display.uiScale);
+  row.hidden = !changed;   // while a save is out the row stays, disabled (saveDisplay), until the box answers
+  const key: Key = active ? 'apply' : 'applyNow';
+  text.dataset.i18n = key; text.textContent = t(key);
+}
+for (const id of ['fps', 'ui-scale']) el<HTMLSelectElement>(id).addEventListener('change', syncApply);
 function endExpectRestart() { expectRestart = false; window.clearTimeout(expectTimer); }
 /** defer: a sharper picture or another codec for shapes the phone already has; the box keeps it for the next session. */
 async function saveDisplay(target: Display, how: { defer?: boolean; reason: string }): Promise<boolean> {
