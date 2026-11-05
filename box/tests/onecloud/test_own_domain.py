@@ -233,7 +233,7 @@ class MaintainerTests(unittest.TestCase):
         self.assertEqual(status["phase"], "retry")
         self.assertEqual(status["reason"], "acme", "obtain() starts a fresh log and the fake acme.sh wrote nothing to it")
         self.assertNotIn(TOKEN, json.dumps(status))
-        self.assertIn("acme.sh 申请没有成功", own_domain.message(self.state, self.name))
+        self.assertIn("申请没有成功", own_domain.message(self.state, self.name))
         log.write_text("curl: (6) Could not resolve host; error code: 6\n")   # what this run's log would say
         self.assertEqual(own_domain.failure_reason(TimeoutError("x")), "timeout")
         self.assertEqual(own_domain.failure_reason(ValueError("x")), "certificate")
@@ -360,7 +360,7 @@ class SettingsPageTests(unittest.TestCase):
                 page.apply("/ddns", {"action": "save", "domain": "x", "token": TOKEN, "nonce": page.pairing.nonce})
             html = page.render("")
             self.assertIn("mycar.duckdns.org", html)
-            self.assertIn("等待申请正式证书", html)
+            self.assertIn("等待申请证书", html)
             self.assertNotIn("name=token", html)
             self.assertNotIn("自己的域名", SettingsPage(state, lambda: dict(status, own_name=None), lambda _: None,
                                                 lambda: []).render(""))

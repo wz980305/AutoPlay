@@ -153,7 +153,7 @@ error: Bluetooth not starting, the identity missing, a certificate that cannot
 be renewed, an expired page. Everything else is said where it happened:
 
 - what a button did goes in the footer of its own group (`?m=…&at=phones` or
-  `&at=update`): "已邀请这部 iPhone 接入…" under the iPhones, a refused
+  `&at=update`): "已邀请，1 分钟内有效…" under the iPhones, a refused
   upgrade under 程序更新;
 - a check for updates runs in place: the update group shows a spinner row
   "正在检查更新…" and the page reloads every 2 s until the result row replaces it

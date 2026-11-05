@@ -28,7 +28,7 @@
 - **常用**：外观（夜间模式、语言）。
 - **显示**：画质（CarPlay 内容大小、帧率、「应用并重连」）；无边框模式；画质与兼容（视频编码、性能模式、允许 2560 分辨率、兼容显示、显示调试信息）。
 
-> 后续（1.3.1 之后）：左侧分类去掉图标；「允许 2560 分辨率」删除（在特斯拉上只多 2 px，见 CHANGELOG）；盒子页「检查更新」下的「上次检查」一行删除。1.4.0：「应用并重连」从常驻的实心按钮改为只在改了值时出现的 iOS 式操作行，状态句移到卡片下方；「常用」多了「导航」分组（车辆定位，`docs/LOCATION.md`）。1.4.1：盒子设置页顶部只留需要处理的状态和错误（`box/docs/STATUS-MODEL.md`），检查更新就地显示，行加彩色图标，按 773×601 / 1256×706 / 1256×560 / 1920×1200 / 390×844 / 360×740 核对；`box/tools/render_settings_states.py` 多了 `checking`、`invited` 两个状态。
+> 后续（1.3.1 之后）：左侧分类去掉图标；「允许 2560 分辨率」删除（在特斯拉上只多 2 px，见 CHANGELOG）；盒子页「检查更新」下的「上次检查」一行删除。1.4.0：「应用并重连」从常驻的实心按钮改为只在改了值时出现的 iOS 式操作行，状态句移到卡片下方；「常用」多了「导航」分组（车辆定位，`docs/LOCATION.md`）。1.4.1：盒子设置页顶部只留需要处理的状态和错误（`box/docs/STATUS-MODEL.md`），检查更新就地显示，行加彩色图标，按 773×601 / 1256×706 / 1256×560 / 1920×1200 / 390×844 / 360×740 核对；`box/tools/render_settings_states.py` 多了 `checking`、`invited` 两个状态。说明文字改写为一句话（第 3 步的"上游不可用"横幅现在写作"盒子没有网络"）。
 - **连接**：打开盒子网页；连接与兼容性（解码能力、当前画面 `宽 × 高 / fps / 编码 / 解码延迟`、浏览器兼容性检测）。
 
 去掉的字串：`sound`、`volume`、`volumeHint`、`soundTitle`、`soundOnCar`、`soundOnCarHint`、`privacy`、`playing`、`paused`、`musicDropped`、`voiceSiri`、`voiceCall`、`voicePrompt`、`nightNow`、`nightOn`、`nightOff`、`browserDark`、`browserLight`、`nightScheduleHint`、`savedHere`、`uiHint`、`advancedHint`、`autoHint`、`boxLinkHintLive`、`fallback`、`fallbackHint`、`home`、`back`、`refresh`、`codecHint`、`performanceModeHint`、`allow2560Hint`、`compatDisplayHint`、`debugHudHint`、`management`、`display`。改了的：`unsupported`（不再提音频）、`noStream`（"尚无画面"）、`frameSettings`（「画质」）、`nightSchedule`（「定时 18:30–06:30」/ "18:30–06:30"）、`ui` 的英文（"Content size"："CarPlay content size" 在 773 px 窗口里把当前值挤成了省略号）、`nextSession` 成句。`fullscreenRowHint` 等三句只剩等待画面在用。

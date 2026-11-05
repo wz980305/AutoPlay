@@ -220,18 +220,18 @@ def failure_reason(error, log=None):
 def reason_text(reason):
     """The settings page's words for failure_reason() and the readiness codes."""
     if reason == "route":
-        return "盒子还没有默认路由（SIM 卡还没连上网络）"
+        return "SIM 卡还没连上网络"
     if reason == "dns":
-        return "域名解析失败（DNS 服务商或 Let's Encrypt 解析不到）"
+        return "域名解析不到"
     if reason == "timeout":
-        return "acme.sh 超时"
+        return "申请超时"
     if reason and reason.startswith("curl") and reason[4:].isdigit():
         return f"连接失败（curl 错误 {reason[4:]}）"
     if reason == "network":
         return "网络中断"
     if reason == "certificate":
         return "证书内容不对"
-    return "acme.sh 申请没有成功"
+    return "申请没有成功"
 
 
 def curl_shim(home):
@@ -462,22 +462,23 @@ def message(state, name):
         status = {}
     until = end_date(state) if certificate_for(state, name) else None
     if until:
-        text = f"正式证书有效期至 {until}。"
+        text = f"证书有效期至 {until}"
         if not serving(state):
-            text += "新证书在下次开机时启用。"
+            text += "，新证书下次开机时启用"
     else:
         phase, reason = status.get("phase"), status.get("reason")
-        text = {"issuing": "正在申请正式证书，通常几分钟；完成后下次开机启用。",
-                "renewing": "正在续签正式证书；完成后下次开机启用。",
-                "waiting": f"等待申请正式证书：{reason_text(reason)}，盒子每 15 秒再看一次。",
-                "retry": f"正式证书暂未申请到：{reason_text(reason)}。请确认盒子能上网、域名和 DNS 服务商的凭证正确；"
-                         "盒子每小时重试。",
-                }.get(phase, "等待申请正式证书：盒子联网后自动开始。")
+        text = {"issuing": "正在申请证书，通常几分钟，下次开机启用",
+                "renewing": "正在续签证书，下次开机启用",
+                "waiting": f"等待申请证书：{reason_text(reason)}",
+                "retry": f"证书暂未申请到：{reason_text(reason)}。请检查网络和 DNS 凭证，盒子每小时重试",
+                }.get(phase, "等待申请证书：盒子联网后自动开始")
+    # One line under the name, iOS-style without a closing full stop (1.4.1); extra facts join it as sentences.
+    parts = [text]
     if status.get("record") == "blocked":
-        text += status.get("warning", "已保留原域名记录。")
+        parts.append(status.get("warning", "已保留原域名记录").rstrip("。"))
     if status.get("record") == "failed":
-        text += f"更新 {name} 的解析失败，盒子会继续重试。"
-    return text
+        parts.append(f"{name} 的解析更新失败，盒子会继续重试")
+    return "。".join(parts)
 
 
 def not_after(state):

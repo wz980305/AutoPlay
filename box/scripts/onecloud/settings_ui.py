@@ -228,7 +228,7 @@ def phone_rows(devices, active, last, nonce, idle):
                    f'<span>蓝牙 …{escape(phone[-5:])}</span></span><span class=value>{state}</span><span class=chev></span></summary>')
         actions = ""
         if phone == active:
-            actions = '<div class=cell><span class=main><span>正在使用 CarPlay。对方断开 Wi-Fi 后，才能接入其他 iPhone 或删除它。</span></span></div>'
+            actions = '<div class=cell><span class=main><span>正在使用。它断开后，才能接入别的 iPhone 或删除它。</span></span></div>'
         else:
             form = f'<form method=post action=/pair>{hidden(nonce, phone=phone)}'
             if idle:
@@ -254,8 +254,8 @@ def pairing_panel(pair, nonce, address=""):
                 f'<form method=post action=/pair>{hidden(nonce, request_id=pair.get("request_id", ""))}<div class=pair>'
                 '<button class="btn plain" name=action value=no>不一致</button>'
                 '<button class=btn name=action value=yes>一致</button></div></form>'
-                f'<p class=foot style="text-align:center">「{escape(pair.get("name", ""))}」的蓝牙页面会弹出同样的数字。'
-                '两边一致时，手机上点「配对」，这里点「一致」。</p>', True)
+                f'<p class=foot style="text-align:center">和「{escape(pair.get("name", ""))}」上的数字一致时，'
+                '在 iPhone 上点「配对」，这里点「一致」。</p>', True)
     if phase == "waiting":
         found = "".join(
             f'<form method=post action=/pair>{hidden(nonce, phone=f["address"])}'
@@ -266,13 +266,13 @@ def pairing_panel(pair, nonce, address=""):
         found = found or '<div class=cell><span class=main><span>正在寻找附近的 iPhone…</span></span></div>'
         error = banner(pair["error"], "bad") if pair.get("error") else ""
         # The list to tap first, the three steps under it: in the Tesla's windowed browser the list sat below the fold.
-        return (f'{error}{group("附近的 iPhone：点它的名字", found)}{cancel}'
+        return (f'{error}{group("附近的 iPhone", found)}{cancel}'
                 '<p class=group-title>怎么做</p><ol class=steps>'
-                '<li>在要添加的 iPhone 上打开「设置 → 蓝牙」，<b>一直停在这一页</b>，配对请求只会在那里弹出。</li>'
-                '<li>在这一页点它的名字。</li><li>手机弹出配对请求后，核对两边的六位数字。</li></ol>', True)
+                '<li>在 iPhone 上打开「设置 → 蓝牙」，<b>停在这一页</b>。</li>'
+                '<li>在上面的列表里点它的名字。</li><li>核对两边的六位数字。</li></ol>', True)
     if phase == "pairing":
         return (group("添加 iPhone", f'<div class=cell><span class=main><b>正在连接「{escape(pair.get("name", ""))}」</b>'
-                      '<span>请看 iPhone 蓝牙页面上的配对请求。</span></span></div>') + cancel, True)
+                      '<span>请留意 iPhone 上的配对请求。</span></span></div>') + cancel, True)
     if phase in ("starting", "finishing"):
         return group("添加 iPhone", '<div class=cell><span class=main><span>请稍候…</span></span></div>'), True
     return None, False
@@ -285,4 +285,4 @@ def other_screen(address):
         return ""
     return (f'<p class=group-title>在车机或另一台设备上操作</p><div class=group><p class=code style="font-size:1.6rem;letter-spacing:0;overflow-wrap:anywhere">'
             f'{url(address)}</p><p class=foot style="margin:0 var(--pad-x) 1rem;text-align:center">'
-            '添加 iPhone 时，那部 iPhone 要一直停在「设置 → 蓝牙」，所以请在车机浏览器或另一台手机输入上面的地址，在那里完成这一步。</p></div>')
+            '添加时 iPhone 要停在「设置 → 蓝牙」，所以请在车机或另一台设备上打开这个地址。</p></div>')

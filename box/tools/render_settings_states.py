@@ -53,7 +53,7 @@ def make(fields, devices=None, presence=None, pair=None, cert=None, query="", up
     if update_check is not None:
         check.write_text(json.dumps(update_check))
     try:
-        with patch.object(own_domain, "message", lambda s, n: "正式证书有效期至 2027-01-28。"):
+        with patch.object(own_domain, "message", lambda s, n: "证书有效期至 2027-01-28"):
             return page.render(query)
     finally:
         if update_check is not None:
@@ -89,7 +89,7 @@ states = {
 ONE = {"02:00:00:00:00:01": "小王的 iPhone"}
 states["checking"] = make({}, devices=ONE, presence={"active": "02:00:00:00:00:01"}, cert=LIVE, checking=True)
 states["invited"] = make({}, devices=PHONES, presence={"last_phone": "02:00:00:00:00:02"}, cert=LIVE,
-                         query="m=" + "已邀请这部 iPhone 接入，约 1 分钟内有效。请保持它的蓝牙打开。" + "&at=phones",
+                         query="m=" + "已邀请，1 分钟内有效。请保持 iPhone 的蓝牙打开。" + "&at=phones",
                          update_check={"available": False, "online": True, "latest": "1.4.1", "current": "1.4.1",
                                        "checked_at": 1_793_500_000})
 states["live-open"] = unfold(make({}, devices=PHONES, presence={"active": "02:00:00:00:00:01", "last_phone": "02:00:00:00:00:02"},

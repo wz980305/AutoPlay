@@ -35,18 +35,20 @@ CHECK_LOG_EVERY = 60   # s: one diag line per car connectivity check and reply, 
 # check against DNS rebinding; the Tesla check names are answered before this and never reach the page).
 LOCAL_HOSTS = {state_files.LOCAL_NAME, "dashplay.lan", state_files.MDNS_NAME, "localhost"}
 BLUETOOTH_TEXT = {   # reason codes of the bluetooth domain (status_model) -> what the owner reads (S2)
+    # Plain words since 1.4.1; the chip, rfkill and paths are in the diagnostics record. bluez-missing keeps its
+    # command: only whoever installed the box sees it, and it is the fix.
     "helper-starting": "蓝牙正在启动",
-    "powering": "蓝牙适配器正在上电",
-    "adapter-not-powered": "蓝牙适配器没有上电，盒子会一直重试",
-    "controller-init-failed": "蓝牙芯片初始化失败（Marlin3 固件没有接受配置）",
+    "powering": "蓝牙正在上电",
+    "adapter-not-powered": "蓝牙没有上电",
+    "controller-init-failed": "蓝牙芯片初始化失败",
     "controller-timeout": "蓝牙芯片没有响应",
-    "bluez-missing": "盒子上缺少蓝牙程序（安装没有完成：在盒子上运行 python3 /opt/autoplay/board_zte_f50.py --setup）",
-    "rfkill": "蓝牙开关（rfkill）不对：找不到、或解除软阻塞失败",
-    "rfkill-hard": "蓝牙被硬件开关关闭（rfkill hard），软件无法打开",
-    "hci-busy": "另一个程序占着蓝牙控制器",
-    "hci-lost": "蓝牙控制器消失了（Wi-Fi 芯片复位），正在重新启动",
-    "storage-conflict": "/var/lib/bluetooth 被别的程序占用",
-    "daemon-exit": "蓝牙后台程序退出了，正在重启",
+    "bluez-missing": "安装没有完成，在盒子上运行 python3 /opt/autoplay/board_zte_f50.py --setup",
+    "rfkill": "蓝牙被系统关闭，打不开",
+    "rfkill-hard": "蓝牙被硬件开关关闭",
+    "hci-busy": "蓝牙被另一个程序占用",
+    "hci-lost": "蓝牙芯片复位了，正在重新启动",
+    "storage-conflict": "蓝牙的数据被另一个程序占用",
+    "daemon-exit": "蓝牙程序退出了，正在重启",
 }
 
 
@@ -248,7 +250,7 @@ class SettingsPage:
                 return ""   # the phone leaves the list; the confirmation screen said what that means
             if action == "use":
                 self.pairing.use(form.get("phone", ""))
-                return {"m": "已邀请这部 iPhone 接入，约 1 分钟内有效。请保持它的蓝牙打开。", "at": "phones"}
+                return {"m": "已邀请，1 分钟内有效。请保持 iPhone 的蓝牙打开。", "at": "phones"}
             if action in ("yes", "no"):
                 self.pairing.confirm(form.get("request_id", ""), action == "yes")
                 return "" if action == "yes" else {"m": "已拒绝这次配对。", "at": "phones"}
@@ -284,8 +286,8 @@ class SettingsPage:
             pass
         removed = factory_reset.wipe(self.root, identity=identity, uci=self.uci)
         threading.Timer(1.0, self.on_change, args=("factory reset",)).start()
-        return ("已重置：删除了配对、证书和设置" + ("，以及认证文件" if identity else "")
-                + f"（{len(removed)} 项）。盒子约 1 分钟后以出厂状态重新启动，请重新添加 iPhone。")
+        return ("已重置" + ("，认证文件也已删除" if identity else "")
+                + f"（{len(removed)} 项）。盒子约 1 分钟后重新启动，之后请重新添加 iPhone。")
 
     # Blocks ----------------------------------------------------------------------------------
 
@@ -317,11 +319,11 @@ class SettingsPage:
         if update.running(self.state.parent):
             return (f'<div class=cell aria-busy=true><span class=spin></span><span class=main><b>正在升级</b>'
                     f'<span>{escape(progress.get("message", ""))}</span></span></div>',
-                    "约 2–5 分钟，期间 CarPlay 会断开，页面会自己刷新。")
+                    "约 2–5 分钟，期间 CarPlay 断开；页面会自己刷新。")
         version = update.bundled_version(self.state.parent)
         cells = (f'<div class=cell>{ui.tile("gray", "box")}<span class=main><b>本机程序</b></span>'
                  f'<span class=value>{escape(version)}</span></div>' if version else "")
-        foot = escape(note) if note else "每天自动检查一次，只提示，不自动安装。"
+        foot = escape(note) if note else "每天自动检查一次，不会自动安装。"
         check = (f'<form method=post action=/update>{ui.hidden(nonce)}<button class="cell action" name=action '
                  'value=check>检查更新</button></form>')
         if self.check_running():
@@ -351,7 +353,7 @@ class SettingsPage:
                 cells += (f'<form method=post action=/update>{ui.hidden(nonce)}<button class="cell action" name=action '
                           'value=install>立即升级</button></form>')
             else:
-                foot = f'{escape(found.get("reason") or "这一版改了系统")}，不能在线升级：请按该版本的发布说明升级。'
+                foot = f'{escape(found.get("reason") or "这一版改了系统")}，需要按发布说明手动升级。'
         elif found.get("latest"):
             cells += (f'<div class=cell>{ui.tile("green", "check")}<span class=main><b>已是最新</b></span>'
                       f'<span class=value>{escape(found["latest"])}</span></div>')
@@ -411,16 +413,16 @@ class SettingsPage:
         # One line under the list, the most pressing first. These were banners inside the group (1.4.1).
         if bluetooth.get("state") not in (None, "on", "unknown"):
             # Bluetooth is not up: say so instead of inventing a cable (the alert at the top says why).
-            foot = "蓝牙还没就绪，暂时不能添加或邀请 iPhone；就绪后会自动继续。"
+            foot = "蓝牙就绪后才能添加或接入 iPhone。"
         elif connecting:
-            foot = "配对完成，正在引导 iPhone 连接 Wi-Fi 并打开 CarPlay。"
+            foot = "配对完成，iPhone 正在连上 Wi-Fi 并打开 CarPlay。"
         elif note:
             foot = note
         elif devices:
             # Pairing is done on another screen (the head unit): the iPhone stays on its Bluetooth page (S5).
-            foot = "添加 iPhone 时，请在车机或另一台设备上打开本页。"
+            foot = "添加 iPhone 时，请在车机或另一台设备上操作。"
         else:
-            foot = "第一次使用需要用蓝牙配对一次，之后 iPhone 连上这个 Wi-Fi 就能接入。"
+            foot = "配对一次后，iPhone 连上这个 Wi-Fi 就会自动接入。"
         return ui.group("iPhone", rows + add, escape(foot)), connecting, devices
 
     def entries_block(self, status, refresh):
@@ -428,7 +430,7 @@ class SettingsPage:
                           for u in status.get("entries", []) if u.startswith("https"))
         if not entries or refresh:
             return ""
-        foot = f"车机连上「{escape(status.get('ssid', ''))}」后，在浏览器打开以上地址。"
+        foot = f"车机连上「{escape(status.get('ssid', ''))}」后，在浏览器打开上面的地址。"
         return ui.group("CarPlay 画面", entries, foot)
 
     def network_block(self):
@@ -451,36 +453,37 @@ class SettingsPage:
         if bluetooth.get("state") in ("failed", "starting") and bluetooth.get("reason") not in (None, "helper-starting", "powering"):
             # S2: the real reason at the top of the chain, never a cable story.
             reason = BLUETOOTH_TEXT.get(bluetooth["reason"], bluetooth["reason"])
-            html += ui.banner(f"蓝牙没有启动：{reason}（重启盒子 / 查看诊断）", "bad")
+            html += ui.banner(f"蓝牙没有启动：{reason}。可以重启盒子；仍不行请下载诊断记录。", "bad")
         elif bluetooth.get("state") == "failed":
-            html += ui.banner("蓝牙没有启动，盒子会一直重试（重启盒子 / 查看诊断）", "bad")
+            html += ui.banner("蓝牙没有启动，盒子在不断重试。可以重启盒子；仍不行请下载诊断记录。", "bad")
         phone = status.get("phone") or {}
         if phone.get("state") == "pairing-lost":
-            html += ui.banner("iPhone 连续两次拒绝了蓝牙连接：它忘记了这台盒子。请删除此 iPhone 后重新添加。", "bad")
+            html += ui.banner("有一部 iPhone 忘记了这台盒子（连续两次拒绝连接），请删除此 iPhone 后重新添加。", "bad")
         certificate = status.get("certificate") or {}
         if certificate.get("state") in ("expiring_soon", "expired", "failed"):
             until = certificate.get("not_after")
-            text = {"expiring_soon": f"正式证书将于 {until} 到期",
-                    "expired": f"正式证书已于 {until} 过期，特斯拉会看到证书警告",
-                    "failed": "正式证书还没申请到"}[certificate["state"]]
+            text = {"expiring_soon": f"证书 {until} 到期",
+                    "expired": f"证书已于 {until} 过期，车机浏览器会提示不安全",
+                    "failed": "证书还没申请到"}[certificate["state"]]
             uplink = (status.get("uplink") or {}).get("state")
-            advice = "盒子现在没网无法续签：插上能上网的 SIM 卡开机一次。" if uplink == "offline" else "盒子联网后会自动续签。"
+            advice = "盒子没网，无法续签：插上能上网的 SIM 卡开机一次。" if uplink == "offline" else "盒子联网后会自动续签。"
             html += ui.banner(text + "。" + advice, "wait")
         identity = status.get("identity")
         if identity is False or (isinstance(identity, dict) and identity.get("state") == "missing"):
             host = urllib.parse.urlsplit(self.home()).hostname or ""
             # No credentials here: the F50's root password is the installer's, never 1234 (S3).
-            html += ui.banner(f"还缺 CarPlay 认证文件。把「AI 安装说明」交给你的 AI 助手，并告诉它盒子地址 {host}"
-                              "（按安装时记录的登录方式）。文件放好后盒子会自动开始工作，添加 iPhone 可以先做。", "wait")
+            html += ui.banner(f"还缺 CarPlay 认证文件：把「AI 安装说明」、盒子地址 {host} 和安装时记下的登录方式交给你的"
+                              " AI 助手。放好后自动开始工作；添加 iPhone 可以先做。", "wait")
         if status.get("warning"):
             html += ui.banner(status["warning"], "bad")
         # Only an upstream that is down is news (1.3.0): "online" said nothing a driver could act on, and the
         # first seconds of probing are no problem either.
+        # The page's own words since 1.4.1 ("上游" was ours, not the owner's); tesla_internet stays in the diagnostics.
         if status.get("tesla_upstream") == "offline":
-            html += ui.banner(status.get("tesla_internet") or "上游不可用（没有 4G 信号）；局域网 CarPlay 正常。", "wait")
+            html += ui.banner("盒子没有网络（没有 4G 信号）：CarPlay 照常，车机自带的音乐、地图不能上网。", "wait")
         error = status.get("tesla_error", "")
         if error:
-            html += ui.banner("特斯拉模式局域网设置失败：" + error + "；CarPlay 不受影响。", "bad")
+            html += ui.banner("车机网络设置失败：" + error + "。CarPlay 不受影响。", "bad")
         return html
 
     # Page ------------------------------------------------------------------------------------
@@ -500,14 +503,14 @@ class SettingsPage:
                     f'<form method=post action=/pair>{ui.hidden(nonce, phone=phone, confirmed="1")}<div class=pair>'
                     '<a class="btn plain" href="/">取消</a>'
                     '<button class="btn destructive" name=action value=remove>删除</button></div></form>'
-                    '<p class=foot>删除后，这部 iPhone 要再用需要重新添加；它自己「设置 → 通用 → CarPlay」里的这辆车也可以忘记。</p>')
+                    '<p class=foot>删除后要再用，需要重新添加。</p>')
         if kind == "install":
             found = update.read(self.state / "update-check.json")
             if not found.get("available") or not found.get("online"):
                 return None
             return (f'<p class=group-title>现在升级到 {escape(found.get("latest", ""))}？</p>'
                     '<div class=group><div class=cell><span class=main><b>约 2–5 分钟，期间 CarPlay 会断开</b>'
-                    '<span>升级前会备份配对、证书和设置；新版本起不来会自动退回。页面会自己刷新。</span></span></div></div>'
+                    '<span>会先备份配对和设置；新版本起不来会自动退回。</span></span></div></div>'
                     f'<form method=post action=/update>{ui.hidden(nonce, confirmed="1")}<div class=pair>'
                     '<a class="btn plain" href="/">取消</a>'
                     '<button class=btn name=action value=install>立即升级</button></div></form>')
@@ -571,6 +574,6 @@ class SettingsPage:
                            '<input type=text name=confirm autocomplete=off autocapitalize=off style="text-align:right" required></label>'
                            f'<label class=cell><span class=main><b>同时删除 CarPlay 认证文件</b><span>只有在转让或出售盒子时才需要；输入「{factory_reset.IDENTITY_CONFIRMATION}」</span></span>'
                            '<input type=text name=identity autocomplete=off autocapitalize=off style="text-align:right"></label>',
-                           "认证文件删除后，重装时要重新提供；不删的话，重置后盒子仍能工作，只需重新添加 iPhone。")
+                           "不删认证文件的话，重置后只需重新添加 iPhone。")
                 + '<button class="btn destructive">恢复出厂设置</button></form>')
         return ui.page("恢复出厂设置", body)

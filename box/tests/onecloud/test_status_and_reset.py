@@ -112,20 +112,20 @@ class PageBannerTests(unittest.TestCase):
         self.status.set("bluetooth", "failed", "controller-init-failed", retry_in=60)
         html = self.page.render("")
         self.assertIn("蓝牙没有启动：蓝牙芯片初始化失败", html)
-        self.assertIn("重启盒子 / 查看诊断", html)
+        self.assertIn("可以重启盒子；仍不行请下载诊断记录", html)
         self.assertNotIn("数据线", html)
-        self.assertIn("蓝牙还没就绪", html)
+        self.assertIn("蓝牙就绪后才能添加", html)
         self.status.set("bluetooth", "on")
         html = self.page.render("")
         self.assertNotIn("蓝牙没有启动", html)
-        self.assertNotIn("蓝牙还没就绪", html)
+        self.assertNotIn("蓝牙就绪后才能添加", html)
 
     def test_certificate_bars(self):
         self.status.update(own_name="mycar.duckdns.org")
         self.status.set("certificate", "expiring_soon", None, not_after="2026-11-20")
         self.status.set("uplink", "offline")
         html = self.page.render("")
-        self.assertIn("正式证书将于 2026-11-20 到期", html)
+        self.assertIn("证书 2026-11-20 到期", html)
         self.assertIn("插上能上网的 SIM 卡", html)
         self.status.set("certificate", "expired", None, not_after="2026-10-01")
         self.status.set("uplink", "online")
@@ -143,7 +143,7 @@ class PageBannerTests(unittest.TestCase):
         for text in ("导航播报", "声音", "上游在线", "可以上网"):
             self.assertNotIn(text, html)
         self.status.update(tesla_upstream="offline", tesla_internet="上游不可用（没有 4G 信号）；局域网 CarPlay 正常；特斯拉自带音乐、地图不能上网。")
-        self.assertIn("上游不可用", self.page.render(""))
+        self.assertIn("盒子没有网络（没有 4G 信号）", self.page.render(""))
         self.status.update(tesla_upstream="unknown", tesla_internet="上游状态检测中；局域网 CarPlay 正常。")
         self.assertNotIn("检测中", self.page.render(""))
 
