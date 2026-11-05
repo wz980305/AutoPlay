@@ -146,6 +146,24 @@ the checks are answered as long as the AP is up.
 - The file is tmpfs and written on change only (`state.save_json(sync=False)`),
   so polling it costs nothing on the SD card.
 
+## What earns a bar at the top of the settings page (1.4.1)
+
+A bar above the connection chain is for a state the owner has to act on, or an
+error: Bluetooth not starting, the identity missing, a certificate that cannot
+be renewed, an expired page. Everything else is said where it happened:
+
+- what a button did goes in the footer of its own group (`?m=…&at=phones` or
+  `&at=update`): "已邀请这部 iPhone 接入…" under the iPhones, a refused
+  upgrade under 程序更新;
+- a check for updates runs in place: the update group shows a spinner row
+  "正在检查更新…" and the page reloads every 2 s until the result row replaces it
+  (until 1.4.0 a bar said "正在检查更新，几秒后刷新页面就能看到结果", and the owner
+  had to reload by hand);
+- an action that leads to its own screen (pairing, removal, upgrade) says
+  nothing at all: the screen is the answer.
+
+An error from any action (`错误：…`) still goes to the top, red.
+
 ## Receiver-side tasks noted here
 
 - **`/time` hint for the clock floor (6g).** `clock_floor.py` never lets the

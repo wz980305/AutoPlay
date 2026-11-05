@@ -7,6 +7,7 @@ clamp(20px, 2.78vmin, 24px), labels 1.2rem, hints 1rem, targets >= 3.2rem; phone
 element of its own is the connection chain (Wi-Fi - box - iPhone) at the top. Self-contained: no web fonts or
 external files (the car may be offline).
 """
+import re
 from html import escape
 
 STYLE = """
@@ -34,10 +35,15 @@ h1{font-size:1.6rem;line-height:1.2;font-weight:700;letter-spacing:normal;margin
 .cell{display:flex;align-items:center;gap:.8rem;min-height:var(--hit);padding:.7rem var(--pad-x);position:relative;width:100%;
 background:none;border:0;color:inherit;font:inherit;font-size:1.2rem;line-height:1.3;text-align:left;text-decoration:none}
 .cell+.cell,.cell+details,details+.cell,details+details,form+form>.cell,.cell+form>.cell,form+.cell{border-top:1px solid var(--sep)}
-.group>form+form,.group>form+details,.group>details+form{border-top:1px solid var(--sep)}
+/* form+form draws its line on the cell inside: a line on the form as well doubled it (1.4.1, the two update buttons). */
+.group>form+details,.group>details+form{border-top:1px solid var(--sep)}
 .cell .main{flex:1;min-width:0}
-.cell .main b{font-weight:500;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Labels wrap instead of losing their end (1.4.1): at phone width the Wi-Fi row and the addresses were cut short with
+   an ellipsis; an address has to be read whole. The value beside a label is what gives way. */
+.cell .main b{font-weight:500;display:block;overflow-wrap:anywhere}
 .cell .main span{display:block;color:var(--secondary);font-size:1rem;line-height:1.45;margin-top:.2rem;white-space:normal}
+.cell .main span.clamp{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.cell .main a.more{display:inline-block;padding:.2rem 0;font-size:1rem}
 .cell .value{color:var(--secondary);font-size:1.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
 .cell.on .value{color:var(--green)}
 button.cell,a.cell,label.cell,summary.cell{cursor:pointer}
@@ -60,8 +66,22 @@ color:#fff;font:inherit;font-size:1.2rem;font-weight:600;line-height:1.3;text-al
 .btn.destructive{background:var(--red)}
 .btn+form .btn,form+form .btn.plain{margin-top:.6rem}
 :focus-visible{outline:3px solid var(--tint);outline-offset:2px}
-.banner{border-radius:var(--radius);padding:.8rem var(--pad-x);margin:.6rem 0 0;background:var(--cell);font-size:1.1rem;line-height:1.4}
-.banner.ok{box-shadow:inset .25rem 0 var(--green)} .banner.bad{box-shadow:inset .25rem 0 var(--red)} .banner.wait{box-shadow:inset .25rem 0 var(--orange)}
+/* Alerts (1.4.1): only states the owner can act on, as an inset card with a round symbol like an iOS alert row;
+   what an action did is said where it happened (the group's footer), not here. */
+.banner{display:flex;align-items:flex-start;gap:.8rem;border-radius:var(--radius);padding:.8rem var(--pad-x);margin:.6rem 0 0;
+background:var(--cell);font-size:1.1rem;line-height:1.4}
+.banner::before{content:"!";flex:none;width:1.5rem;height:1.5rem;margin-top:.05rem;border-radius:50%;display:grid;place-items:center;
+background:var(--orange);color:#fff;font-size:1rem;font-weight:700;line-height:1}
+.banner.bad::before{background:var(--red)} .banner.ok::before{content:"✓";background:var(--green)}
+/* Row icons as in iOS Settings and the CarPlay page's settings panel (receiver/web/src/style.css). */
+.tile{width:1.6rem;height:1.6rem;flex:none;border-radius:.4rem;display:grid;place-items:center;color:#fff;background:#8E8E93}
+.tile svg{width:1.05rem;height:1.05rem}
+.tile.blue{background:var(--tint)} .tile.green{background:var(--green)} .tile.orange{background:var(--orange)}
+.tile.red{background:var(--red)} .tile.gray{background:#8E8E93} .tile.indigo{background:#5E5CE6}
+.spin{width:1.2rem;height:1.2rem;flex:none;border-radius:50%;border:.16rem solid var(--secondary);border-right-color:transparent;
+animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.cell[aria-busy=true] .main b{color:var(--secondary)}
 .chain{display:flex;align-items:flex-start;background:var(--cell);border-radius:var(--radius);padding:1rem .6rem .8rem;margin:.8rem 0 0}
 .node{flex:0 0 30%;min-width:0;text-align:center}
 .node .glyph{width:3.2rem;height:3.2rem;margin:0 auto .4rem;border-radius:50%;display:grid;place-items:center;background:var(--fill);color:var(--secondary)}
@@ -75,17 +95,22 @@ color:#fff;font:inherit;font-size:1.2rem;font-weight:600;line-height:1.3;text-al
 .link.on{background:var(--green)}
 .link.wait{background:repeating-linear-gradient(90deg,var(--orange) 0 .4rem,transparent .4rem .8rem);background-size:.8rem .2rem;animation:flow .9s linear infinite}
 @keyframes flow{to{background-position:.8rem 0}}
-@media (prefers-reduced-motion:reduce){.link.wait{animation:none}.btn{transition:none}}
+@media (prefers-reduced-motion:reduce){.link.wait,.spin{animation:none}.btn{transition:none}}
 section+ol.steps{margin-top:.6rem}
 ol.steps{margin:0;padding:.8rem var(--pad-x) .8rem 2.4rem;background:var(--cell);border-radius:var(--radius);font-size:1.1rem} ol.steps li{margin:.3rem 0}
 .code{font:600 3.2rem/1.1 -apple-system,"SF Pro Display",system-ui,sans-serif;letter-spacing:.15em;text-align:center;
-font-variant-numeric:tabular-nums;padding:.8rem 0 .6rem;margin:0}
+font-variant-numeric:tabular-nums;padding:.8rem var(--pad-x) .6rem;margin:0}
 .pair{display:grid;grid-template-columns:1fr 1fr;gap:.6rem} .pair .btn{margin-top:.8rem;display:flex;align-items:center;justify-content:center}
 .back{display:inline-flex;align-items:center;color:var(--tint);text-decoration:none;margin:.3rem 0 0;padding:.5rem .2rem;font-size:1.1rem;min-height:var(--hit)}
 .back:active{opacity:.5}
 .cell a{color:var(--tint);text-decoration:none}
+/* Phone sizes for the chain and values come last: placed with the 17 px root above, the rules they override (same
+   specificity, later in the sheet) won, so a six-character box state wrapped its last character (1.4.1). */
+@media (max-width:480px){.cell .value{max-width:40%} .node .glyph{width:2.6rem;height:2.6rem} .node .glyph svg{width:1.5rem;height:1.5rem}
+.node .name{font-size:1rem} .node .state{font-size:.85rem;line-height:1.35} .link{margin-top:1.2rem}}
 /* Two columns only where both fit at this type size: the Tesla's borderless window (1256 CSS px) and wider. */
-@media (min-width:1100px){main.wide{max-width:84rem;display:grid;grid-template-columns:1fr 1fr;column-gap:1.6rem;align-items:start}
+/* Capped at 64rem (1536 px at 1920 wide) so the rows stay rows on a desktop monitor instead of two runways. */
+@media (min-width:1100px){main.wide{max-width:64rem;display:grid;grid-template-columns:1fr 1fr;column-gap:1.6rem;align-items:start}
 main.wide>.span{grid-column:1/-1}}
 """
 
@@ -110,8 +135,23 @@ UNFOLD = ('<script>document.addEventListener("toggle",function(e){var d=e.target
           'd.scrollIntoView({block:r.height>innerHeight?"start":"end",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"})},true)</script>')
 
 
+# "Wi-Fi" broke at its hyphen ("Wi-" / "Fi") in narrow windows (1.4.1): in the page's text, never in attribute values
+# (form fields keep what they hold), it gets a non-breaking hyphen.
+_TEXT = re.compile(r">([^<]+)<")
+
+
+def keep_words(html):
+    return _TEXT.sub(lambda m: ">" + m.group(1).replace("Wi-Fi", "Wi\u2011Fi") + "<", html)
+
+
+def url(address):
+    """An address breaks before its port, not mid-number, when it has to wrap."""
+    return re.sub(r"(:\d+/?)$", r"<wbr>\1", escape(address))
+
+
 def page(title, body, refresh=False, wide=False):
     """refresh: True reloads every 3 s, a number every that many seconds."""
+    body = keep_words(body)
     meta = f'<meta http-equiv=refresh content={3 if refresh is True else refresh}>' if refresh else ''
     return (f'<!doctype html><html lang=zh-CN><head><meta charset=utf-8>'
             f'<meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">{meta}'
@@ -129,6 +169,28 @@ def chain(hotspot, phone, box=("on", "盒子", "运行中")):
             f'{escape(box[1])}：{escape(box[2])}；{escape(phone[1])}：{escape(phone[2])}">'
             f'{node("hotspot", hotspot)}<div class="link {hotspot[0]}"></div>'
             f'{node("box", box)}<div class="link {phone[0]}"></div>{node("phone", phone)}</div>')
+
+
+# Row icons (1.4.1): white strokes on a coloured rounded tile.
+TILES = {
+    "screen": '<rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20h7M12 16.5V20"/>',
+    "wifi": '<path d="M2.8 9.2a13.5 13.5 0 0 1 18.4 0M5.8 12.4a9.2 9.2 0 0 1 12.4 0M8.8 15.6a4.8 4.8 0 0 1 6.4 0"/>'
+            '<circle cx="12" cy="18.8" r="1.1" fill="currentColor" stroke="none"/>',
+    "settings": '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
+    "phone": '<rect x="7" y="2.8" width="10" height="18.4" rx="2.6"/><path d="M10.8 5.2h2.4"/>',
+    "globe": '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.4 3.9 5.2 3.9 8.5s-1.3 6.1-3.9 8.5'
+             'c-2.6-2.4-3.9-5.2-3.9-8.5S9.4 5.9 12 3.5z"/>',
+    "box": '<rect x="4" y="11" width="16" height="7.5" rx="2"/><path d="M8.5 7.6a5 5 0 0 1 7 0M10.6 9.4a2 2 0 0 1 2.8 0"/>',
+    "download": '<path d="M12 4v10.5M7.5 10 12 14.5 16.5 10M5 19.5h14"/>',
+    "check": '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    "alert": '<path d="M12 6.5v7M12 17.3v.2"/>',
+    "doc": '<path d="M7 3.5h7l4 4v13H7z"/><path d="M14 3.5v4h4M9.5 12h6M9.5 15.5h6"/>',
+}
+
+
+def tile(color, name):
+    return (f'<span class="tile {color}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+            f'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{TILES[name]}</svg></span>')
 
 
 def banner(text, kind="ok"):
@@ -157,11 +219,12 @@ def group(title, cells, foot=""):
 def phone_rows(devices, active, last, nonce, idle):
     """Bluetooth-style 'My devices': tap a phone to connect it or remove it from the box."""
     if not devices:
-        return '<div class=cell><span class=main><span>还没有添加 iPhone</span></span></div>'
+        return f'<div class=cell>{tile("gray", "phone")}<span class=main><span>还没有添加 iPhone</span></span></div>'
     html = ""
     for phone, name in devices.items():
         state = "正在使用" if phone == active else "上次使用" if phone == last else "未连接"
-        summary = (f'<summary class="cell{" on" if phone == active else ""}"><span class=main><b>{escape(name)}</b>'
+        summary = (f'<summary class="cell{" on" if phone == active else ""}">{tile("green" if phone == active else "gray", "phone")}'
+                   f'<span class=main><b>{escape(name)}</b>'
                    f'<span>蓝牙 …{escape(phone[-5:])}</span></span><span class=value>{state}</span><span class=chev></span></summary>')
         actions = ""
         if phone == active:
@@ -221,5 +284,5 @@ def other_screen(address):
     if not address:
         return ""
     return (f'<p class=group-title>在车机或另一台设备上操作</p><div class=group><p class=code style="font-size:1.6rem;letter-spacing:0;overflow-wrap:anywhere">'
-            f'{escape(address)}</p><p class=foot style="margin:0 var(--pad-x) 1rem;text-align:center">'
+            f'{url(address)}</p><p class=foot style="margin:0 var(--pad-x) 1rem;text-align:center">'
             '添加 iPhone 时，那部 iPhone 要一直停在「设置 → 蓝牙」，所以请在车机浏览器或另一台手机输入上面的地址，在那里完成这一步。</p></div>')

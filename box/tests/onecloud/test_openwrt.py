@@ -336,9 +336,14 @@ class ManagedPageTests(unittest.TestCase):
 
     def test_shows_phones_and_router_wifi_without_network_setup(self):
         html = self.page.render("")
+        # What is on screen, not the style sheet's comments; "Wi-Fi" keeps its hyphen from breaking, addresses break
+        # before the port (1.4.1).
+        shown = html.split("</style>", 1)[1].replace("\u2011", "-").replace("<wbr>", "")
         for text in ("交给 iPhone 的 Wi-Fi", "Car-5G", "在 OpenWrt 后台设置 Wi-Fi", "https://dashplay.lan:18443/",
                      "添加"):
-            self.assertIn(text, html)
+            self.assertIn(text, shown)
+        self.assertIn("在 OpenWrt 后台设置 Wi\u2011Fi", html)
+        self.assertIn("https://dashplay.lan<wbr>:18443/", html)
         for text in ("盒子热点", "重新进行首次设置", "使用方式", "第 1 步", "数据线", "用户名 root", "密码 1234", "组合与验证状态"):
             self.assertNotIn(text, html)
         # The settings page runs on 18080; a relative link stayed there and got a 404 (review 2026-10-12).
@@ -355,8 +360,16 @@ class ManagedPageTests(unittest.TestCase):
         update.save(self.state / "update-check.json", {"checked_at": 1, "current": "2026.10.19.1", "latest": "2026.10.20",
                                                        "notes": "- 新功能<b>\n- 修复", "available": True, "online": True})
         html = self.page.render("")
-        for text in ("程序更新", "有新版本 2026.10.20", "当前 2026.10.19.1", "- 新功能&lt;b&gt;<br>- 修复", "立即升级", "检查更新"):
+        for text in ("程序更新", "有新版本 2026.10.20", "当前 2026.10.19.1", "- 新功能&lt;b&gt;<br>- 修复", "立即升级", "检查更新",
+                     'href="https://github.com/wz980305/AutoPlay/releases/tag/v2026.10.20">完整更新说明'):
             self.assertIn(text, html)
+        # A CHANGELOG section as the notes: its opening paragraph, without Markdown marks (1.4.1).
+        update.save(self.state / "update-check.json", {
+            "checked_at": 1, "current": "1.4.0", "latest": "1.4.1", "available": True, "online": True,
+            "notes": "无线断开后**自动邀请一次**，\n`触控`最后一个点。\n\n- **投屏页**：很长的细节……\n- 测试：……"})
+        html = self.page.render("")
+        self.assertIn("<span class=clamp>无线断开后自动邀请一次，<br>触控最后一个点。</span>", html)
+        self.assertNotIn("很长的细节", html)
         update.save(self.state / "update-check.json", {"checked_at": 1, "latest": "2026.10.20", "available": True,
                                                        "online": False})
         html = self.page.render("")
@@ -389,12 +402,36 @@ class ManagedPageTests(unittest.TestCase):
         nonce = self.page.pairing.nonce
         with self.assertRaises(ValueError):
             self.page.apply("/update", {"action": "install", "nonce": "stale"})
-        with patch.object(update, "launch", return_value="已开始升级") as launch, \
-                patch.object(update, "check") as check:
+        import threading
+        release = threading.Event()
+        with patch.object(update, "launch", return_value="已开始升级，约 2–5 分钟") as launch, \
+                patch.object(update, "check", side_effect=lambda root: release.wait(5)) as check:
             self.assertEqual(self.page.apply("/update", {"action": "install", "nonce": nonce}), {"ask": "install"})   # asks first (1.2.0)
-            self.assertEqual(self.page.apply("/update", {"action": "install", "nonce": nonce, "confirmed": "1"}), "已开始升级")
+            # Started: nothing to say at the top, the group shows the upgrade running (1.4.1).
+            self.assertEqual(self.page.apply("/update", {"action": "install", "nonce": nonce, "confirmed": "1"}), "")
             launch.assert_called_once_with(self.state.parent)
-            self.assertIn("正在检查更新", self.page.apply("/update", {"action": "check", "nonce": nonce}))
+            # Checking: no banner asking to reload; the group says "checking" and the page refreshes itself (1.4.1).
+            self.assertEqual(self.page.apply("/update", {"action": "check", "nonce": nonce}), "")
+            html = self.page.render("")
+            self.assertIn("正在检查更新…", html)
+            self.assertIn("http-equiv=refresh content=2", html)
+            self.assertNotIn('class="banner', html)
+            self.assertNotIn("value=check>检查更新", html, "no second check while one runs")
+            self.page.apply("/update", {"action": "check", "nonce": nonce})
+            release.set()
+            for _ in range(100):
+                if not self.page.check_running():
+                    break
+                time.sleep(.02)
+            self.assertEqual(check.call_count, 1, "one check at a time")
+            self.assertNotIn("正在检查更新", self.page.render(""))
+        # Refused (CarPlay in use): said in the update group, not at the top.
+        with patch.object(update, "launch", return_value="正在使用 CarPlay：停车、断开后再升级"):
+            reply = self.page.apply("/update", {"action": "install", "nonce": nonce, "confirmed": "1"})
+        self.assertEqual(reply, {"m": "正在使用 CarPlay：停车、断开后再升级", "at": "update"})
+        html = self.page.render("m=正在使用 CarPlay：停车、断开后再升级&at=update")
+        self.assertIn('<p class=foot>正在使用 CarPlay：停车、断开后再升级</p>', html)
+        self.assertNotIn('class="banner', html)
         update.save(self.state / "update-status.json", {"phase": "installing", "message": "正在安装", "at": time.time()})
         html = self.page.render("")
         self.assertIn("正在升级", html)

@@ -4,7 +4,7 @@
 
 <p align="center"><img src="docs/images/tesla-model3-carplay-2026-11-02.jpg" width="640" alt="Model 3 车机浏览器里的 CarPlay 主屏"> <img src="docs/images/f50-in-hand-2026-11-02.jpg" width="240" alt="手里的中兴 F50，车机上是 CarPlay"></p>
 
-[English](README.en.md) · 当前版本 **1.4.0**（2026-11-05）· [变更记录](CHANGELOG.md) · [安装使用说明](交付资料/AutoPlay-1.4.0-安装使用说明.md)
+[English](README.en.md) · 当前版本 **1.4.1**（2026-11-05）· [变更记录](CHANGELOG.md) · [安装使用说明](交付资料/AutoPlay-1.4.1-安装使用说明.md)
 
 ## 为什么是这条路
 
@@ -32,7 +32,7 @@ AutoPlay 想做的是把这台"别处"缩到最小。CarPlay 的本质是 iPhone
 
 **1.1.0** 把声音默认交给了特斯拉蓝牙，并引入了上游 DashPlay 十月下旬到十一月初在实车上做的一批可靠性修复：F50 蓝牙控制器上电时解除 rfkill 软阻塞、配对代理的"代际"保护、每个新连接完整的空闲宽限、损坏的 AppCDS 归档自动删除、证书申请前先确认网络通了再出手。**1.2.0** 没有改功能，只改界面：两张页面按车机浏览器真实的窗口形状（带边框 773×601、无边框 1256×706 CSS 像素）逐屏核对，投屏页的五个下拉改成页内的大号选项表，盒子设置页换到同一套字号和触控尺度，配对码和按钮在首屏，删除手机和升级不再依赖浏览器的 `confirm()` 弹窗（`docs/UI-1.2.0.md`）。**1.3.0** 按车主上车一周后的清单做减法：设置面板按 iOS「设置」的样子收口（每行一个彩色图标、标签、当前值，行内不再有小字），删掉网页里的声音和备用控制，盒子页不再报"上游在线"；并修浏览器被拉回时偶尔弹出屏幕键盘的问题——画布不再持有焦点（`docs/UI-1.3.0.md`）。
 
-**1.3.1** 起每个版本由 GitHub Actions 编译接收端、跑全部测试后签名发布，盒子在设置页一键在线升级（`docs/RELEASE.md`）。**1.4.0** 可以把特斯拉的位置交给 iPhone 的 CarPlay 导航（默认关闭）；做法由调研定下而不是实车试错——iPhone 会照用车机给的坏位置，所以只发新鲜、连续的点，否则什么都不发（`docs/LOCATION.md`）。
+**1.3.1** 起每个版本由 GitHub Actions 编译接收端、跑全部测试后签名发布，盒子在设置页一键在线升级（`docs/RELEASE.md`）。**1.4.0** 可以把特斯拉的位置交给 iPhone 的 CarPlay 导航（默认关闭）；做法由调研定下而不是实车试错——iPhone 会照用车机给的坏位置，所以只发新鲜、连续的点，否则什么都不发（`docs/LOCATION.md`）。**1.4.1** 借鉴 DashPlay 11.04：无线 CarPlay 意外断开后盒子主动请回那部 iPhone 一次，画面流卡住 10 秒内重连；盒子设置页按窗口形状重排，顶部只留需要处理的提示。
 
 还要上车确认的：屏幕键盘的修复（台架上无法复现车机的触发条件）；车辆定位在国行车上的坐标系（停车时对照一次 iPhone 指南针）和行驶中浏览器给新位置的频率。其他已知但未动的事项，每一版的 `CHANGELOG.md` 末尾都列了。没有长期浸泡数据。
 
@@ -48,7 +48,7 @@ AutoPlay 想做的是把这台"别处"缩到最小。CarPlay 的本质是 iPhone
 
 ## 安装与日常使用
 
-完整步骤在[安装使用说明](交付资料/AutoPlay-1.4.0-安装使用说明.md)，这里只说轮廓。在电脑上编译接收端（JDK 21 + Gradle）和投屏页（Node），用 OpenWrt 的 Docker SDK 打出四个 apk：`autoplay`（程序本体，装到 `/opt/autoplay`）、`autoplay-jre`（jlink 裁剪的 Temurin 21）、`luci-app-autoplay` 和它的中文翻译。把它们推到盒子上 `apk add`，跑一次 `board_zte_f50.py --setup` 让 F50 的蓝牙用上私有的 BlueZ（不要 `apk add bluez-daemon`，它会带进不匹配的内核模块），放好身份文件，重启服务。安装脚本会把局域网改到 100.96.0.1、把 5 GHz 设成 CN / 149，并保留你在 LuCI 里改过的 149–165 内的信道。
+完整步骤在[安装使用说明](交付资料/AutoPlay-1.4.1-安装使用说明.md)，这里只说轮廓。在电脑上编译接收端（JDK 21 + Gradle）和投屏页（Node），用 OpenWrt 的 Docker SDK 打出四个 apk：`autoplay`（程序本体，装到 `/opt/autoplay`）、`autoplay-jre`（jlink 裁剪的 Temurin 21）、`luci-app-autoplay` 和它的中文翻译。把它们推到盒子上 `apk add`，跑一次 `board_zte_f50.py --setup` 让 F50 的蓝牙用上私有的 BlueZ（不要 `apk add bluez-daemon`，它会带进不匹配的内核模块），放好身份文件，重启服务。安装脚本会把局域网改到 100.96.0.1、把 5 GHz 设成 CN / 149，并保留你在 LuCI 里改过的 149–165 内的信道。
 
 之后有三个地方可以看和改：
 

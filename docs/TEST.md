@@ -13,13 +13,13 @@ python3 -m unittest discover -s openwrt/tests      # 安装脚本 90-autoplay-te
 # 接收端：1.3.1 起 GitHub Actions 对每次推送跑 ./gradlew build（编译两个模块并跑全部测试），见下文「接收端」
 
 # 盒子侧：设置页、状态模型、守护（supervision）、升级日志与回滚、证书退避、时钟下限、出厂重置、平台、诊断、装机脚本
-cd box && python3 -m unittest discover -s tests/onecloud        # 239 个（1.4.0：加一个"车辆定位开关在重建的 config.json 里保留"），通过
+cd box && python3 -m unittest discover -s tests/onecloud        # 243 个（1.4.1：+4，在线状态 allowed、操作结果就地显示、行图标、Wi-Fi 不断行），通过
 
 # 蓝牙桥：test_reason、test_relay 等 7 个可直接跑；test_bluez、test_recovery 需要 dbus-daemon 和 dbus-next 0.2.3
 cd box && python3 -m unittest discover -s tests/bluetooth       # 没有 dbus-next 时那两个模块报 import 错误，是环境问题
 ```
 
-测试身份全是合成数据。裁剪前后的基线在 `box/docs/TEST-BASELINE.md`（375 → 225 是删掉的 Debian/N1/有线/STA 测试减去新模块的测试；1.2.0 为 263，删除上游刷机脚本及其 4 个测试文件后为 238，1.3.0 起仍为 238，1.4.0 为 239）。
+测试身份全是合成数据。裁剪前后的基线在 `box/docs/TEST-BASELINE.md`（375 → 225 是删掉的 Debian/N1/有线/STA 测试减去新模块的测试；1.2.0 为 263，删除上游刷机脚本及其 4 个测试文件后为 238，1.3.0 起仍为 238，1.4.0 为 239，1.4.1 为 243）。
 
 ### 投屏页（无浏览器）
 
@@ -35,13 +35,13 @@ node scripts/build-esbuild.mjs                                   # 或 npm run b
 
 ```sh
 cd receiver/web && npm run build:offline
-python3 ../../box/tools/render_settings_states.py out/box-states              # 盒子设置页 8 个状态 → 静态 HTML
+python3 ../../box/tools/render_settings_states.py out/box-states              # 盒子设置页 10 个状态 → 静态 HTML
 CHROME=/path/to/chromium node scripts/ui-shots.mjs out/ui-shots [viewer|box]  # 特斯拉 773×601、1256×706、1256×560、1920×1200、手机
 ```
 
 需要 `playwright-core` 和一个 Chromium；全部本地 mock，不碰盒子和手机。每个形状打印标签/说明字号、行高和有无横向溢出。
 
-五个检查脚本（`check`、`check-car`、`check-browser`、`check-runtime`，0.1.1 起；`check-location`，1.4.0；`check-audio` 随页面音频于 1.3.0 删除）用 `typescript` 即时编译被测模块，在 Node 里模拟 DOM 表面：输入控制器（含 30ms 最短按压、补发抬起、绝不聚焦画布）、车载模式和特斯拉默认值、状态提示（`status.ts`）、页内选项表、浏览器检测、车辆定位（特斯拉浏览器的占位精度与常数时间戳、GCJ-02 与特斯拉自己的换算对照、一次只读一个位置、页面隐藏时不读）。`check-flac.mjs` 随有线代码删除。这三步在 0.1.0 合并时都通过。
+五个检查脚本（`check`、`check-car`、`check-browser`、`check-runtime`，0.1.1 起；`check-location`，1.4.0；`check-audio` 随页面音频于 1.3.0 删除）用 `typescript` 即时编译被测模块，在 Node 里模拟 DOM 表面：输入控制器（含 30ms 最短按压、补发抬起、抬起前补发最后位置（1.4.1）、绝不聚焦画布）、向盒子请求的期限（1.4.1，`ask-box.ts`）、车载模式和特斯拉默认值、状态提示（`status.ts`）、页内选项表、浏览器检测、车辆定位（特斯拉浏览器的占位精度与常数时间戳、GCJ-02 与特斯拉自己的换算对照、一次只读一个位置、页面隐藏时不读）。`check-flac.mjs` 随有线代码删除。这三步在 0.1.0 合并时都通过。
 
 ### 接收端
 
@@ -49,7 +49,7 @@ CHROME=/path/to/chromium node scripts/ui-shots.mjs out/ui-shots [viewer|box]  # 
 cd receiver && ./gradlew build          # 编译两个模块并跑测试；1.3.1 起每次推送都在 GitHub Actions 上跑
 ```
 
-1.1.0 到 1.3.0 在没有 Gradle 网络的环境里写的 Kotlin 改动，1.3.1 的第一次 Actions 运行就编译并通过了测试（`receiver/docs/UNVERIFIED-KOTLIN.md` 留作记录）。1.4.0 新增 `CarLocationTest`（16 个）和 `Iap2LocationReporterTest`（7 个）；本地没有 Gradle 网络时，推到分支后在 Actions 里 Run workflow 即可得到同样的编译和测试。
+1.1.0 到 1.3.0 在没有 Gradle 网络的环境里写的 Kotlin 改动，1.3.1 的第一次 Actions 运行就编译并通过了测试（`receiver/docs/UNVERIFIED-KOTLIN.md` 留作记录）。1.4.0 新增 `CarLocationTest`（16 个）和 `Iap2LocationReporterTest`（7 个）；1.4.1 新增 `ScreenStreamReadDeadlineTest`（4 个，回环套接字上的半截消息）和 `WirelessSessionRecoveryTest`（6 个）；本地没有 Gradle 网络时，推到分支后在 Actions 里 Run workflow 即可得到同样的编译和测试。
 
 ### 探测页渲染
 

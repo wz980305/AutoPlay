@@ -1,6 +1,7 @@
 """The status model (docs/STATUS-MODEL.md), the settings page's banners from it, its Host check and its
 factory-reset page."""
 import json
+import urllib.parse
 import os
 from pathlib import Path
 import sys
@@ -146,6 +147,40 @@ class PageBannerTests(unittest.TestCase):
         self.status.update(tesla_upstream="unknown", tesla_internet="上游状态检测中；局域网 CarPlay 正常。")
         self.assertNotIn("检测中", self.page.render(""))
 
+    def test_results_are_said_in_their_group_and_errors_at_the_top(self):
+        # 1.4.1: a banner at the top is for states to act on and for errors; what an action did is the footer of the
+        # group it happened in, and an invitation's note replaces the iPhone group's usual line for that load.
+        self.page.pairing.devices = lambda: {"02:00:00:00:00:01": "小王的 iPhone"}
+        nonce = self.page.pairing.nonce
+        self.page.pairing.use = lambda phone: None
+        reply = self.page.apply("/pair", {"nonce": nonce, "action": "use", "phone": "02:00:00:00:00:01"})
+        self.assertEqual(reply["at"], "phones")
+        html = self.page.render(urllib.parse.urlencode(reply))
+        self.assertIn(f'<p class=foot>{reply["m"]}</p>', html)
+        self.assertNotIn('class="banner', html)
+        self.assertNotIn("添加 iPhone 时，请在车机", html, "the note replaces the usual line once")
+        self.assertIn("添加 iPhone 时，请在车机", self.page.render(""))
+        self.page.pairing.stop = lambda: None
+        self.assertEqual(self.page.apply("/pair", {"nonce": nonce, "action": "cancel"}), "")
+        html = self.page.render(urllib.parse.urlencode({"m": "错误：页面已过期，请刷新后重试。", "at": "phones"}))
+        self.assertIn('class="banner bad span"', html)
+        self.assertIn("页面已过期", html)
+
+    def test_rows_carry_icons_and_no_lines_under_links(self):
+        html = self.page.render("")
+        for icon in ('class="tile blue"', 'class="tile gray"', 'class="tile green"'):
+            self.assertIn(icon, html)
+        for gone in ("Wi-Fi 名称、密码或信道改了以后", "画面卡顿、断线时", "我的 iPhone"):
+            self.assertNotIn(gone, html.replace("\u2011", "-"))
+
+    def test_wifi_keeps_its_hyphen_in_text_but_fields_keep_what_they_hold(self):
+        import settings_ui as ui
+        html = ui.keep_words('<p>连上 Wi-Fi 后</p><input name=ssid value="My Wi-Fi"><span title="Wi-Fi">Wi-Fi</span>')
+        self.assertEqual(html, '<p>连上 Wi\u2011Fi 后</p><input name=ssid value="My Wi-Fi">'
+                               '<span title="Wi-Fi">Wi\u2011Fi</span>')
+        self.assertEqual(ui.url("https://car.example.com:18443/"), "https://car.example.com<wbr>:18443/")
+        self.assertEqual(ui.url("https://a.example/?x=<1>"), "https://a.example/?x=&lt;1&gt;")
+
     def test_pairing_lost_tells_the_owner_to_re_add(self):
         self.status.set("phone", "pairing-lost", "pairing-lost")
         self.assertIn("请删除此 iPhone 后重新添加", self.page.render(""))
@@ -182,14 +217,14 @@ class PageBannerTests(unittest.TestCase):
         self.assertIn("从盒子上删除这部 iPhone？", html)
         self.assertIn("小王的 iPhone", html)
         self.assertIn('name=confirmed value="1"', html)
-        self.assertNotIn("我的 iPhone", html, "the question is the whole screen")
-        # second press carries the confirmation
+        self.assertNotIn("添加 iPhone", html, "the question is the whole screen")
+        # second press carries the confirmation; the phone leaving the list says it all (no banner, 1.4.1)
         reply = self.page.apply("/pair", {"nonce": nonce, "action": "remove", "phone": "02:00:00:00:00:01", "confirmed": "1"})
-        self.assertIn("已从盒子上删除", reply)
+        self.assertEqual(reply, "")
         self.assertEqual(removed, ["02:00:00:00:00:01"])
         # a phone that is gone: no question, the normal page
         self.page.pairing.devices = lambda: {}
-        self.assertIn("我的 iPhone", self.page.render("ask=remove&phone=02%3A00%3A00%3A00%3A00%3A01"))
+        self.assertIn("添加 iPhone", self.page.render("ask=remove&phone=02%3A00%3A00%3A00%3A00%3A01"))
 
     def test_an_update_is_confirmed_on_the_page_too(self):
         nonce = self.page.pairing.nonce
@@ -200,12 +235,13 @@ class PageBannerTests(unittest.TestCase):
         self.assertIn("现在升级到 1.4.0？", html)
         self.assertIn("立即升级", html)
         self.assertNotIn("confirm(", html)
-        with patch("settings_page.update.launch", return_value="正在升级") as launch:
-            self.assertEqual(self.page.apply("/update", {"nonce": nonce, "action": "install", "confirmed": "1"}), "正在升级")
+        with patch("settings_page.update.launch", return_value="正在升级，请稍候") as launch:
+            self.assertEqual(self.page.apply("/update", {"nonce": nonce, "action": "install", "confirmed": "1"}),
+                             {"m": "正在升级，请稍候", "at": "update"})
         launch.assert_called_once()
         # nothing to install (offline or none found): the normal page instead of an empty question
         (self.state / "update-check.json").write_text(json.dumps({"available": False, "latest": "1.3.0", "checked_at": 1}))
-        self.assertIn("我的 iPhone", self.page.render("ask=install"))
+        self.assertIn("添加 iPhone", self.page.render("ask=install"))
 
 
     def test_the_page_demands_the_typed_words(self):

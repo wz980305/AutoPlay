@@ -1,7 +1,7 @@
-# AutoPlay 1.4.0 安装 / 卸载 / 使用说明
+# AutoPlay 1.4.1 安装 / 卸载 / 使用说明
 
 > 适用：中兴 F50（MU300，已 Root + OpenWrt 25.12，内核 5.4）上的无线 CarPlay，画面投到特斯拉车机浏览器。
-> 1.0.0 是**首个在特斯拉车内实测通过的版本**（无线 CarPlay 画面、触摸、导航播报已验证）；1.0.1 是它的收尾；**1.1.0 把声音默认全部交给特斯拉蓝牙**（见第三节），并引入 DashPlay 10.26–11.01 的可靠性修复；**1.2.0 只改界面**：两张页面按特斯拉的窗口形状核对，下拉与确认框改在页内画（见第六节）；**1.3.0** 按上车一周后的清单收口：设置面板按 iOS「设置」的样子（每行图标、无小字），网页里的声音和「备用控制」删掉，盒子页不再报"上游在线"，并修浏览器拉回时偶尔弹键盘的问题（见第七节）；**1.3.1** 接上在线升级：项目有了自己的发布密钥，每个版本是 GitHub 上一个签过名的 Release，装好 1.3.1 以后在设置页点一下就能升级（见第八节）。**1.3.2** 设置面板左侧分类去掉图标、删掉「允许 2560 分辨率」，盒子页「检查更新」下不再有「上次检查」一行。**1.4.0** 可以把车辆定位交给 iPhone 的 CarPlay 导航（默认关闭，见第九节）；「显示 → 画质」的「应用并重连」只在改了内容大小或帧率时才出现。接收端的 Kotlin 自 1.1.0 起未在本地编译过，1.3.1 起由 GitHub Actions 编译；自己编译时留意 `receiver/docs/UNVERIFIED-KOTLIN.md`。
+> 1.0.0 是**首个在特斯拉车内实测通过的版本**（无线 CarPlay 画面、触摸、导航播报已验证）；1.0.1 是它的收尾；**1.1.0 把声音默认全部交给特斯拉蓝牙**（见第三节），并引入 DashPlay 10.26–11.01 的可靠性修复；**1.2.0 只改界面**：两张页面按特斯拉的窗口形状核对，下拉与确认框改在页内画（见第六节）；**1.3.0** 按上车一周后的清单收口：设置面板按 iOS「设置」的样子（每行图标、无小字），网页里的声音和「备用控制」删掉，盒子页不再报"上游在线"，并修浏览器拉回时偶尔弹键盘的问题（见第七节）；**1.3.1** 接上在线升级：项目有了自己的发布密钥，每个版本是 GitHub 上一个签过名的 Release，装好 1.3.1 以后在设置页点一下就能升级（见第八节）。**1.3.2** 设置面板左侧分类去掉图标、删掉「允许 2560 分辨率」，盒子页「检查更新」下不再有「上次检查」一行。**1.4.0** 可以把车辆定位交给 iPhone 的 CarPlay 导航（默认关闭，见第九节）；「显示 → 画质」的「应用并重连」只在改了内容大小或帧率时才出现。**1.4.1** 无线 CarPlay 意外断开后盒子会主动请回那部 iPhone 一次、画面流卡住 10 秒内重连；盒子设置页按窗口形状重排，顶部只留需要处理的提示（见第十节）。接收端的 Kotlin 自 1.1.0 起未在本地编译过，1.3.1 起由 GitHub Actions 编译；自己编译时留意 `receiver/docs/UNVERIFIED-KOTLIN.md`。
 
 ---
 
@@ -13,9 +13,9 @@
 
 ### 2. 拿到安装包
 
-**直接下载（推荐）**：GitHub 仓库 `wz980305/AutoPlay` 的 Releases → 最新版本（现在是 `v1.4.0`），下载 `autoplay-1.4.0-r1.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk` 和与盒子架构对应的 `autoplay-jre-*_<架构>.apk`（F50 一般是 `aarch64_generic`；`ssh root@<盒子> cat /etc/apk/arch` 可查）。`SHA256SUMS` 里有每个文件的哈希。
+**直接下载（推荐）**：GitHub 仓库 `wz980305/AutoPlay` 的 Releases → 最新版本（现在是 `v1.4.1`），下载 `autoplay-1.4.1-r1.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk` 和与盒子架构对应的 `autoplay-jre-*_<架构>.apk`（F50 一般是 `aarch64_generic`；`ssh root@<盒子> cat /etc/apk/arch` 可查）。`SHA256SUMS` 里有每个文件的哈希。
 
-**自己编译**：需要 JDK 21 工具链 + Docker（SDK 镜像 `openwrt/sdk:x86-64-25.12.5`），或者一条命令 `sh box/scripts/release.sh 1.4.0`（同 GitHub Actions 里跑的那条，产物在 `out/release-1.4.0/`）。分步：
+**自己编译**：需要 JDK 21 工具链 + Docker（SDK 镜像 `openwrt/sdk:x86-64-25.12.5`），或者一条命令 `sh box/scripts/release.sh 1.4.1`（同 GitHub Actions 里跑的那条，产物在 `out/release-1.4.1/`）。分步：
 
 ```sh
 # 都在仓库根目录执行
@@ -24,12 +24,12 @@
 # 编译投屏页
 (cd receiver/web && npm ci && npm run build)
 # 打程序包
-AUTOPLAY_VERSION=1.4.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
+AUTOPLAY_VERSION=1.4.1 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 # 用 Docker SDK 打 apk
 sh openwrt/scripts/build-packages.sh out/ autoplay-bundle.tar
 ```
 
-产物在 `out/`：`autoplay-1.4.0-r1.apk`、`autoplay-jre-*_<架构>.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk`。
+产物在 `out/`：`autoplay-1.4.1-r1.apk`、`autoplay-jre-*_<架构>.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk`。
 
 ### 3. 装到 F50（手动路线）
 ```sh
@@ -156,3 +156,11 @@ apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
 - 有报告说部分特斯拉固件在授权位置后浏览器会崩溃（多为 Intel 的 MCU2）。遇到就关掉这个开关，或在浏览器地址栏撤销本站的位置权限。
 - 位置只在盒子内存里经过，不写日志、不保存。
 - 觉得导航位置反而变差了，关掉即可，回到 1.3 的状态。
+
+## 十、1.4.1 的变化
+
+- **断线后**：一个正在用的无线 CarPlay 自己断开（干扰、车开出信号好的位置）时，盒子在 45 秒内经蓝牙主动邀请那部 iPhone 一次，不再等它自己回到盒子的 Wi-Fi。只一次、只给那部 iPhone；盒子自己做的断开（长时间不用释放、改显示或定位、关机）不会触发。
+- **画面停住**：画面流传到半截卡住超过 10 秒，盒子断开并重连，而不是一直停在最后一帧。
+- **触控**：很短的拖动、拖回起点不再被当成轻点。
+- **盒子设置页**（`http://100.96.0.1:18080/`）：顶部只在需要你处理时出现提示（蓝牙没启动、缺认证文件、证书不能续签、出错）。点「检查更新」后在「程序更新」里就地转圈，页面自己刷新出结果；邀请、拒绝等结果写在对应分组下面。每行有彩色图标；手机、车机窄窗、车机全屏、电脑大屏上都核对过排版。有新版本时只显示说明的第一段，点「完整更新说明」看全部。
+- 操作和地址都没有变化；不需要重新配对或重新申请证书。装着 1.3.1 或更新版本的盒子在设置页点「立即升级」即可。

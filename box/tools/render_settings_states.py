@@ -4,11 +4,13 @@
 
 Writes box-<state>.html for: fresh (no identity, certificate waiting for a route), live (two phones, one in use),
 live-open (a phone's row unfolded), pair-waiting, pair-confirm (passkey), bt-failed, ask-remove and ask-install (the
-1.2.0 confirmation screens). receiver/web/scripts/ui-shots.mjs photographs them at the Tesla window shapes.
+1.2.0 confirmation screens), and since 1.4.1 checking (a check from the button running in place), invited (an action's
+result as the iPhone group's footer) and up-to-date. receiver/web/scripts/ui-shots.mjs photographs them at the Tesla window shapes.
 No device, D-Bus or network is touched: the page is given fake status and pairing data.
 """
 import json
 import sys
+import time
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -35,7 +37,7 @@ LIVE = {"bluetooth": ("on", None), "identity": ("provided", None), "phone": ("li
         "certificate": ("ok", None, {"not_after": "2027-01-28"}), "uplink": ("online", None)}
 
 
-def make(fields, devices=None, presence=None, pair=None, cert=None, query="", update_check=None):
+def make(fields, devices=None, presence=None, pair=None, cert=None, query="", update_check=None, checking=False):
     status = Status(clock=lambda: 1_793_600_000, **{**BASE, **fields})
     for domain, value in (cert or {}).items():
         status.set(domain, *value[:2], **(value[2] if len(value) > 2 else {}))
@@ -44,6 +46,9 @@ def make(fields, devices=None, presence=None, pair=None, cert=None, query="", up
     page.pairing.presence = lambda: presence or {}
     if pair:
         page.pairing.status = lambda: pair
+    if checking:
+        page.checking.set()
+        page.check_started = time.monotonic()
     check = state / "update-check.json"
     if update_check is not None:
         check.write_text(json.dumps(update_check))
@@ -81,6 +86,12 @@ states = {
                         update_check={"available": True, "online": True, "latest": "1.4.0", "current": "1.3.0",
                                       "checked_at": 1_793_500_000, "notes": "修复若干问题"}),
 }
+ONE = {"02:00:00:00:00:01": "小王的 iPhone"}
+states["checking"] = make({}, devices=ONE, presence={"active": "02:00:00:00:00:01"}, cert=LIVE, checking=True)
+states["invited"] = make({}, devices=PHONES, presence={"last_phone": "02:00:00:00:00:02"}, cert=LIVE,
+                         query="m=" + "已邀请这部 iPhone 接入，约 1 分钟内有效。请保持它的蓝牙打开。" + "&at=phones",
+                         update_check={"available": False, "online": True, "latest": "1.4.1", "current": "1.4.1",
+                                       "checked_at": 1_793_500_000})
 states["live-open"] = unfold(make({}, devices=PHONES, presence={"active": "02:00:00:00:00:01", "last_phone": "02:00:00:00:00:02"},
                                   cert=LIVE), 1)
 for name, html in states.items():
