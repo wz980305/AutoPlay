@@ -16,7 +16,9 @@ const messages = {
   waited: ['已等待 ', 'waiting '], secondsUnit: [' 秒', ' s'],
   starting: ['正在准备画面', 'Preparing picture'], startingHint: ['iPhone 已连接，正在等待 CarPlay 画面。', 'iPhone is connected. Waiting for the CarPlay picture.'],
   renegotiating: ['正在调整画面', 'Adjusting picture'], renegotiatingHint: ['按新的窗口大小重新连接 CarPlay，画面会短暂中断，通常约 5 秒。', 'Reconnecting CarPlay for the new window size. The picture pauses, usually for about 5 seconds.'],
-  access: ['请先打开盒子网页', 'Open the box page first'], accessHint: ['在车机浏览器打开配对 iPhone 的盒子网页，点一次「在车机打开」，浏览器会记住此设置。', 'In the car browser, open the box page used for pairing and tap "open on the car" once. The browser will remember this setting.'],
+  // No token: the page asks the box for it when it opens (boot.ts, receiver-access.json) and did not get it. Until
+  // 1.4.3 this told the driver to tap a button the box page does not have (1.5.0).
+  access: ['未取得盒子的访问许可', 'No access to the box'], accessHint: ['本页打开时没有从盒子取到访问许可。请检查盒子电源与车机的 AutoPlay 热点连接，然后刷新本页。', 'This page did not get its access from the box when it opened. Check the box’s power and the car’s AutoPlay hotspot connection, then reload this page.'],
   fullscreen: ['无边框模式', 'Borderless mode'],
   borderlessOn: ['已开启无边框', 'Borderless mode on'],
   checkingNetwork: ['正在检查网络', 'Checking network'],

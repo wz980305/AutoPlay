@@ -343,6 +343,11 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
   assert.deepEqual(statusHint('reconnecting',0.5),{key:'reconnectingHint',seconds:null,boxLink:false},'a dropped link names the box at once, the time after 3 s');
   assert.equal(statusHint('reconnecting',12.2).seconds,12);
   assert.equal(statusHint('access',0).key,'accessHint');
+  { // 1.5.0: the text for "no token" names what helps (power, hotspot, reload), not a button the box page no longer has.
+    const i18n=readFileSync(new URL('./src/i18n.ts',import.meta.url),'utf8');
+    assert.doesNotMatch(i18n,/在车机打开|open on the car/);
+    assert.match(i18n,/accessHint: \['[^']*刷新本页。', '[^']*reload this page\.'\]/);
+  }
 }
 { // Debug overlay (2026-10-16; two lines since 1.3.0, the page plays no sound): nothing for no picture yet.
   const {hudLines}=await load('debug-hud');
