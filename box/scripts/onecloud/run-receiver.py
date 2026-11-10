@@ -108,9 +108,13 @@ def redact(line, token, password):
 def kept_location(saved: dict) -> dict:
     """The viewer page's car-location switch and datum (1.4.0, docs/LOCATION.md), which only the receiver writes:
     config.json is rebuilt at every start, and without this a reboot switched the feature off again."""
-    datum = saved.get("carLocationDatum")
-    return {"carLocation": saved.get("carLocation") is True,
-            "carLocationDatum": datum if datum in ("wgs84", "gcj02") else "wgs84"}
+    datum, picked = saved.get("carLocationDatum"), saved.get("carLocationDatumPicked") is True
+    # 1.5.0: "auto" (GCJ-02 where the car's browser says mainland China, else WGS-84) is the default. A "wgs84" the
+    # owner never chose - all 1.4.x wrote it - follows the default; "gcj02" was always a choice.
+    if datum not in ("auto", "wgs84", "gcj02") or (datum == "wgs84" and not picked):
+        datum = "auto"
+    return {"carLocation": saved.get("carLocation") is True, "carLocationDatum": datum,
+            "carLocationDatumPicked": picked or datum == "gcj02"}
 
 def main():
     parser = argparse.ArgumentParser()

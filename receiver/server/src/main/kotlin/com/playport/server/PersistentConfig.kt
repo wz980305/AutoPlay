@@ -37,7 +37,8 @@ data class PersistentConfig(
     val mdns: String = "jmdns",
     /** The page's "car location" switch and the datum of the browser's coordinates (CarLocation). */
     val carLocation: Boolean = false,
-    val carLocationDatum: String = "wgs84",
+    val carLocationDatum: String = "auto",
+    val carLocationDatumPicked: Boolean = false,
 ) {
     /** Server defaults from this file (CLI flags are applied on top and override). */
     fun toServerDefaults(identityDir: Path, stateDir: Path): ServerConfig = ServerConfig(
@@ -67,6 +68,7 @@ data class PersistentConfig(
         mdns = mdns,
         carLocation = carLocation,
         carLocationDatum = carLocationDatum,
+        carLocationDatumPicked = carLocationDatumPicked,
         identityDir = identityDir,
         stateDir = stateDir,
     )
@@ -77,6 +79,7 @@ data class PersistentConfig(
             display: DisplayState,
             carLocation: Boolean = config.carLocation,
             carLocationDatum: String = config.carLocationDatum,
+            carLocationDatumPicked: Boolean = config.carLocationDatumPicked,
         ): PersistentConfig = PersistentConfig(
             deviceName = config.deviceName,
             model = config.model,
@@ -106,6 +109,7 @@ data class PersistentConfig(
             mdns = config.mdns,
             carLocation = carLocation,
             carLocationDatum = carLocationDatum,
+            carLocationDatumPicked = carLocationDatumPicked,
         )
     }
 }

@@ -25,7 +25,10 @@ KEEP = re.compile(r"viewer stats|Receive: (video|audio)|session (active|ended)|d
                   r"|accepted by the iPhone|CarPlay is live|rejecting|WARN|ERROR|^boot "
                   # 1.4.3: why a session ended or came back by the box's own doing (the drive of 2026-11-10 showed a
                   # 5-minute idle release and the one re-invitation only as their effects)
-                  r"|no viewer for|a viewer opened the page|wireless session dropped|idle release|incomplete after")
+                  r"|no viewer for|a viewer opened the page|wireless session dropped|idle release|incomplete after"
+                  # 1.5.0: switching car location on reconnects CarPlay on purpose. Without this line the two
+                  # reconnections of 2026-11-10 read as drops; its summary each minute says which datum is applied.
+                  r"|car location")
 LINE_CHARS = 300
 # The page's own report is the longest line and its end is what explains a frozen picture (stalls, lag, revived,
 # location); cut at 300 it ended in the middle of "height" (1.4.3).

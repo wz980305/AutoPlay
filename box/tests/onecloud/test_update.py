@@ -247,6 +247,91 @@ class SignedReleaseTests(unittest.TestCase):
             update.previous_packages('2026.10.19.1', (), self.dir / 'unsigned', key=self.pub)
         self.assertFalse((self.dir / 'unsigned').exists())
 
+    def kept_setup(self, kept=''):
+        """A stand-in mu300-user-packages that writes down what it was asked to keep, and the box's arch file."""
+        tool, asked, index = self.dir / 'mu300-user-packages', self.dir / 'asked', self.dir / 'index'
+        tool.write_text(f'#!/bin/sh\nprintf "%s\\n" "$@" >> "{asked}"\n[ ! -f "{self.dir}/refuse" ]\n')
+        tool.chmod(0o755)
+        if kept:
+            index.write_text(kept)
+        arch = self.dir / 'arch'
+        arch.write_text('aarch64_generic\n')
+        real_path = Path
+        patcher = patch.object(update, 'Path', lambda *parts: arch if parts == ('/etc/apk/arch',) else real_path(*parts))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return tool, asked, index
+
+    def keep(self, tool, index, versions, **more):
+        said = []
+        with patch.object(update, 'apk_version', versions.get):
+            code = update.keep_for_system_update(self.root, say=said.append, key=self.pub, tool=tool, index=index, **more)
+        return code, ' '.join(said)
+
+    def test_the_installed_packages_are_handed_to_the_systems_keep_store(self):
+        # mu300-linux's system update installs again only what its feeds have, or a file kept beforehand (1.5.0).
+        packages = {name: f'new {name}'.encode() for name in update.OPENWRT_PACKAGES + ('autoplay-jre',)}
+        self.openwrt_release('1.5.0', packages, jre='21.0.12.1-r3')
+        tool, asked, index = self.kept_setup()
+        versions = {'autoplay': '1.5.0-r1', 'autoplay-jre': '21.0.12.1-r3'}
+        code, said = self.keep(tool, index, versions, work=self.dir / 'not-there-yet')
+        self.assertEqual(code, 0, said)
+        names = [Path(line).name for line in asked.read_text().splitlines()]
+        self.assertEqual(names, ['keep', 'autoplay-jre-21.0.12.1-r3_aarch64_generic.apk', 'autoplay-1.5.0-r1.apk',
+                                 'luci-app-autoplay-1.5.0-r1.apk', 'luci-i18n-autoplay-zh-cn-1.5.0-r1.apk'],
+                         'the JRE first: the others need it')
+        self.assertIn('已登记 4 个安装包', said)
+
+    def test_what_is_kept_already_is_not_fetched_again_and_local_files_are_used(self):
+        packages = {name: f'new {name}'.encode() for name in update.OPENWRT_PACKAGES + ('autoplay-jre',)}
+        self.openwrt_release('1.5.0', packages, jre='21.0.12.1-r3')
+        versions = {'autoplay': '1.5.0-r1', 'autoplay-jre': '21.0.12.1-r3'}
+        everything = ('autoplay-jre 21.0.12.1-r3 a.apk\nautoplay 1.5.0-r1 b.apk\n'
+                      'luci-app-autoplay 1.5.0-r1 c.apk\nluci-i18n-autoplay-zh-cn 1.5.0-r1 d.apk\n')
+        tool, asked, index = self.kept_setup(everything)
+        code, said = self.keep(tool, index, versions)
+        self.assertEqual((code, asked.exists()), (0, False), said)
+        self.assertIn('已登记', said)
+        # After an online update: the JRE is kept, the three new files are in the cache. Nothing is downloaded - the
+        # server no longer has them - and a cache file that is not the release's is not used.
+        index.write_text(everything.replace('1.5.0-r1', '1.4.3-r1'))
+        cache = self.dir / 'cache'; cache.mkdir()
+        for name in update.OPENWRT_PACKAGES:
+            (cache / f'{name}-1.5.0-r1.apk').write_bytes(packages[name])
+            (self.server.root / f'owrt/v1.5.0/{name}-1.5.0-r1.apk').unlink()
+        code, said = self.keep(tool, index, versions, have=sorted(cache.glob('*.apk')))
+        self.assertEqual(code, 0, said)
+        self.assertEqual([Path(line).parent for line in asked.read_text().splitlines()[1:]], [cache] * 3)
+        asked.unlink()
+        (cache / 'autoplay-1.5.0-r1.apk').write_bytes(b'something else')
+        code, said = self.keep(tool, index, versions, have=sorted(cache.glob('*.apk')))
+        self.assertEqual((code, asked.exists()), (1, False), 'a wrong local file is fetched instead, and that failed here')
+        self.assertIn('没有登记', said)
+
+    def test_keeping_never_raises_and_says_why_it_did_not_happen(self):
+        versions = {'autoplay': '1.5.0-r1', 'autoplay-jre': '21.0.12.1-r3'}
+        code, said = self.keep(self.dir / 'no-such-tool', self.dir / 'index', versions)
+        self.assertEqual(code, 0)
+        self.assertIn('不需要这一步', said)
+        tool, asked, index = self.kept_setup()
+        code, said = self.keep(tool, index, versions)             # this version was never published
+        self.assertEqual(code, 1)
+        self.assertIn('不是正式发布的版本', said)
+        packages = {name: b'x' for name in update.OPENWRT_PACKAGES + ('autoplay-jre',)}
+        self.openwrt_release('1.5.0', packages, jre='21.0.12.1-r3')
+        (self.dir / 'refuse').write_text('')
+        code, said = self.keep(tool, index, versions)             # the tool refused
+        self.assertEqual(code, 1)
+        self.assertIn('没有成功', said)
+        (self.dir / 'refuse').unlink()
+        sums = self.server.root / 'owrt/v1.5.0/SHA256SUMS'
+        sums.write_text(sums.read_text().replace('autoplay-1.5.0', 'autoplay-9.9.9'))   # tampered list
+        asked.unlink()
+        code, said = self.keep(tool, index, versions)
+        self.assertEqual((code, asked.exists()), (1, False))
+        self.assertIn('签名不对', said)
+        self.assertEqual(update.kept_versions(self.dir / 'none'), {})
+
     def test_the_mirror_is_used_when_github_fails(self):
         self.publish({'format': 1, 'version': '2026.10.20', 'online': True})
         self.server.down.add('latest/autoplay-update.json')

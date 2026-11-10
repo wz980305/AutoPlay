@@ -9,7 +9,7 @@ async function load(name) {
 }
 let intervals = 0;
 globalThis.window = { setInterval: () => ++intervals, clearInterval: () => {} };
-const { toFix, askLocation, LocationFeed, wgsToGcj, gcjToWgs, inChina, compassText } = await load('location');
+const { toFix, askLocation, LocationFeed, wgsToGcj, gcjToWgs, inChina, compassText, mainlandZone, autoDatum, browserZone } = await load('location');
 
 const position = (coords, timestamp = 4242424) => ({ coords: { accuracy: 9999.99, altitude: null, speed: null, heading: null, ...coords }, timestamp });
 const meters = (a, b, c, d) => {
@@ -36,6 +36,16 @@ const meters = (a, b, c, d) => {
   assert.ok(meters(wLat, wLon, 22.5431, 114.0579) < 0.01, 'inverts');
   assert.deepEqual(wgsToGcj(-33.8688, 151.2093), [-33.8688, 151.2093]);
   assert.equal(inChina(22.54, 113.95), true); assert.equal(inChina(-33.87, 151.21), false);
+}
+{ // "Automatic" (1.5.0): GCJ-02 only where the browser's time zone says mainland China and the position is in China's
+  // rectangle. Hong Kong, Macau and Taipei are inside the rectangle with zones of their own; no zone means WGS-84.
+  for (const zone of ['Asia/Shanghai', 'Asia/Urumqi', 'asia/chongqing', ' Asia/Harbin ', 'PRC']) assert.equal(mainlandZone(zone), true, zone);
+  for (const zone of ['Asia/Hong_Kong', 'Asia/Macau', 'Asia/Taipei', 'Asia/Tokyo', 'Etc/UTC', 'UTC', '', null, undefined]) assert.equal(mainlandZone(zone), false, String(zone));
+  assert.equal(autoDatum(22.5431, 114.0579, 'Asia/Shanghai'), 'gcj02');
+  assert.equal(autoDatum(22.3193, 114.1694, 'Asia/Hong_Kong'), 'wgs84');
+  assert.equal(autoDatum(22.5431, 114.0579, ''), 'wgs84', 'a browser that names no zone keeps the old default');
+  assert.equal(autoDatum(-33.8688, 151.2093, 'Asia/Shanghai'), 'wgs84', 'a mainland zone far from China');
+  assert.equal(typeof browserZone(), 'string');
 }
 { // Written as the iPhone's Compass app writes it.
   assert.equal(compassText(22.5431, 114.0579, true), '22°32′35″ 北纬  114°3′28″ 东经');

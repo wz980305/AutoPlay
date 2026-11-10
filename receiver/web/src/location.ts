@@ -22,6 +22,8 @@ export interface Fix {
   heading?: number;
   /** position.timestamp: when the browser got the fix (ms since 1970). */
   time: number;
+  /** The browser's IANA time zone, for the box's "auto" datum (1.5.0); absent when the browser names none. */
+  zone?: string;
 }
 
 const finite = (value: number | null | undefined): value is number => typeof value === 'number' && Number.isFinite(value);
@@ -54,6 +56,19 @@ export function askLocation(geo: Geolocation | undefined, timeoutMs = 20_000): P
 /** China's GCJ-02 (the same formula as the box's ChinaDatum): the published offset of a few hundred metres. */
 const A = 6378245.0, EE = 0.00669342162296594323;
 export function inChina(lat: number, lon: number): boolean { return lon >= 72.004 && lon <= 137.8347 && lat >= 0.8293 && lat <= 55.8271; }
+/** Mainland China's IANA time zones with their older names (the box's ChinaDatum.mainlandZone has the same list):
+ *  Hong Kong, Macau and Taipei, inside the same rectangle, have their own. */
+const MAINLAND_ZONES = new Set(['asia/shanghai', 'asia/urumqi', 'asia/chongqing', 'asia/chungking', 'asia/harbin', 'asia/kashgar', 'prc']);
+export function mainlandZone(zone: string | null | undefined): boolean { return !!zone && MAINLAND_ZONES.has(zone.trim().toLowerCase()); }
+/** The browser's time zone; '' when it will not say. */
+export function browserZone(): string {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; }
+}
+/** What the "auto" datum comes to (1.5.0): GCJ-02 where the browser says mainland China - a China-market Model 3's
+ *  browser gave GCJ-02 (owner's check against the iPhone's Compass, 2026-11-10) - and WGS-84 everywhere else. */
+export function autoDatum(lat: number, lon: number, zone: string | null | undefined): 'gcj02' | 'wgs84' {
+  return mainlandZone(zone) && inChina(lat, lon) ? 'gcj02' : 'wgs84';
+}
 export function wgsToGcj(lat: number, lon: number): [number, number] {
   if (!inChina(lat, lon)) return [lat, lon];
   const x = lon - 105, y = lat - 35, PI = Math.PI;

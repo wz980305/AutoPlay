@@ -87,10 +87,12 @@ def release_summary(notes):
 
 class SettingsPage:
     def __init__(self, state: Path, status, on_change, allowed_networks, admin="/cgi-bin/luci/admin/network/wireless",
-                 root=None):
+                 root=None, thermal=None):
         """status() -> dict for display (a status_model snapshot); on_change(reason) restarts the service;
         allowed_networks() -> the networks whose clients may use the page; admin: LuCI's Wi-Fi page;
-        root: the program directory (factory reset)."""
+        root: the program directory (factory reset); thermal() -> (temps by zone, cooling at work), as
+        platform_openwrt.thermal gives them (1.5.0; none: the page says nothing about heat)."""
+        self.thermal = thermal or (lambda: ({}, {}))
         self.state = state
         self.root = root or state.parent
         self.admin = admin
@@ -486,7 +488,22 @@ class SettingsPage:
         error = status.get("tesla_error", "")
         if error:
             html += ui.banner("车机网络设置失败：" + error + "。CarPlay 不受影响。", "bad")
+        hottest, slowed = self.heat()
+        if slowed:
+            # 1.5.0: said only while the system is really holding the processor back for heat, which the owner can
+            # do something about. The drive of 2026-11-10 reached 72 C parked in the sun with nobody told.
+            html += ui.banner(f"盒子过热（{hottest} °C），系统正在降低它的速度，CarPlay 可能卡顿。"
+                              "请把它移到晒不到的地方或靠近出风口。", "wait")
         return html
+
+    def heat(self):
+        """(the hottest zone in whole degrees or None, whether the kernel holds the processor back for heat): only
+        the processor's own cooling devices count (thermal-cpufreq-N, thermal-cpu-N), not a charger's."""
+        try:
+            temps, cooling = self.thermal()
+        except Exception:   # a page must not fail over a sensor
+            return None, False
+        return (max(temps.values()) if temps else None), any(name.startswith("cpu") for name in cooling)
 
     # Page ------------------------------------------------------------------------------------
 
@@ -536,7 +553,11 @@ class SettingsPage:
         presence = self.pairing.presence()
         phase = self.pairing.status().get("phase", "closed")
         reach = self.ddns_block()
-        advanced = (f'<a class=cell href="/diag.txt">{ui.tile("gray", "doc")}<span class=main><b>下载诊断记录</b></span>'
+        hottest, slowed = self.heat()
+        heat = "" if hottest is None else (
+            f'<div class=cell>{ui.tile("orange" if slowed else "gray", "heat")}<span class=main><b>盒子温度</b>'
+            + ("<span>过热，正在降速</span>" if slowed else "") + f'</span><span class=value>{hottest} °C</span></div>')
+        advanced = (heat + f'<a class=cell href="/diag.txt">{ui.tile("gray", "doc")}<span class=main><b>下载诊断记录</b></span>'
                     '<span class=chev></span></a><a class="cell destructive" href="/reset">恢复出厂设置…</a>')
         intro = ui.other_screen(self.home()) if not devices and not refresh else ""
         if refresh:

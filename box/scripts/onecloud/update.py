@@ -342,6 +342,93 @@ def previous_packages(version, prefixes, work, names=OPENWRT_PACKAGES, key=KEY):
     return files
 
 
+# mu300-linux's own update (mu300-update apply) puts a new system image in place and installs again only the packages
+# its feeds have; one installed from a file comes back only if a copy was handed to `mu300-user-packages keep`, which
+# stores it in /etc/mu300/user-apks with a line "NAME VERSION FILE" in its index (read in mu300-linux 833616a, not
+# run on a device from here). AutoPlay's four packages are such files, so without this a system update leaves the
+# box without AutoPlay (the pairings and settings in state/ stay). 1.5.0 hands them over itself: after each online
+# update, and on `update.py keep`. The JRE comes first: the other three need it or each other.
+SYSTEM_KEEP = "/opt/mu300/bin/mu300-user-packages"
+KEPT_INDEX = "/etc/mu300/user-apks/index"
+KEPT_NAMES = ("autoplay-jre",) + OPENWRT_PACKAGES
+
+
+def kept_versions(index=None):
+    """{package: version} of what mu300-user-packages keeps; {} without an index."""
+    try:
+        lines = Path(index or KEPT_INDEX).read_text().splitlines()
+    except OSError:
+        return {}
+    return {fields[0]: fields[1] for fields in (line.split() for line in lines) if len(fields) >= 3}
+
+
+def keep_for_system_update(root, say=print, key=KEY, have=(), tool=None, index=None, work=None):
+    """Hand the installed release's package files to mu300-user-packages, so mu300-linux's system update installs
+    AutoPlay again. Only what is not kept yet is fetched, from the installed version's signed release (a file in
+    `have` with the right hash is used as it is). Returns 0 when there was nothing to do or it is done, 1 otherwise;
+    never raises."""
+    try:
+        tool = Path(tool or SYSTEM_KEEP)
+        if not tool.is_file():
+            say("这台盒子的系统没有 mu300-user-packages，不需要这一步。")
+            return 0
+        version, jre = current_version(root, True), apk_version("autoplay-jre")
+        if not version:
+            raise UpdateError("没有找到已安装的 autoplay 软件包")
+        installed = apk_version("autoplay")
+        kept = kept_versions(index)
+        names = [] if not jre or kept.get("autoplay-jre") == jre else ["autoplay-jre"]
+        if kept.get("autoplay") != installed or any(name not in kept for name in OPENWRT_PACKAGES):
+            names += OPENWRT_PACKAGES
+        if not names:
+            say(f"已登记：系统更新后会自动装回 AutoPlay {version}。")
+            return 0
+        prefixes = mirrors(root, True)
+        base = PREVIOUS_FEED.format(version=version)
+        try:
+            sums = fetch(base + "SHA256SUMS", prefixes, limit=1 << 16)
+            signature = fetch(base + "SHA256SUMS.sig", prefixes, limit=4096)
+        except NotFound:
+            raise UpdateError(f"找不到 {version} 的发布文件（它不是正式发布的版本）") from None
+        if not verify(sums, signature, key):
+            raise UpdateError("发布文件校验清单的签名不对")
+        digests = {name: digest.strip() for digest, _, name in (line.partition("  ") for line in sums.decode().splitlines())}
+        arch = Path("/etc/apk/arch").read_text().strip()
+        local = {Path(path).name: Path(path) for path in have}
+        directory = Path(work or tempfile.mkdtemp(prefix="autoplay-keep."))
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        files = []
+        try:
+            for name in names:
+                pattern = (rf"autoplay-jre-{re.escape(jre)}_{re.escape(arch)}\.apk" if name == "autoplay-jre"
+                           else rf"{re.escape(name)}-[0-9][^/]*\.apk")
+                found = [file for file in digests if re.fullmatch(pattern, file)]
+                if len(found) != 1:
+                    raise UpdateError(f"{version} 的发布文件里没有 {name}" + (f"（{arch}）" if name == "autoplay-jre" else ""))
+                file = found[0]
+                if file in local and local[file].is_file() and file_sha256(local[file]) == digests[file]:
+                    files.append(local[file])
+                    continue
+                say(f"正在下载 {file}")
+                target = fetch(base + file, prefixes, target=directory / file, limit=256 << 20)
+                if file_sha256(target) != digests[file]:
+                    raise UpdateError(f"{file} 校验不符")
+                files.append(target)
+            done = run(str(tool), "keep", *map(str, files), timeout=300)
+            if done.returncode != 0:
+                raise UpdateError("mu300-user-packages keep 没有成功：" + (done.stderr or done.stdout).strip()[-300:])
+        finally:
+            if not work:
+                shutil.rmtree(directory, ignore_errors=True)
+        say(f"已登记 {len(files)} 个安装包：系统更新后会自动装回 AutoPlay {version}。")
+        return 0
+    except UpdateError as error:
+        say(f"没有登记：{error}")
+    except Exception as error:   # an extra step after an update: it must never be what fails
+        say(f"没有登记：{type(error).__name__}: {str(error)[-200:]}")
+    return 1
+
+
 def settings_port():
     port = run("uci", "-q", "get", "autoplay.main.settings_port", timeout=5).stdout.strip()
     return int(port) if port.isdigit() else 18080
@@ -554,6 +641,11 @@ def install(root, openwrt=None, key=KEY):
             install_openwrt(root, manifest, status, work, key)
         status("done", f"已升级到 {manifest['version']}", version=manifest["version"], backup=str(saved))
         check(root, openwrt, key, manifest)
+        # After the page has its answer: the new packages go to mu300-linux's keep store, when the box has one
+        # (1.5.0). The files just installed are still in the cache; only a JRE not kept yet is downloaded.
+        cache = Path(root).parent / CACHE
+        keep_for_system_update(root, say=lambda text: print(text, flush=True), key=key,
+                               have=sorted(cache.glob("*.apk")) if cache.is_dir() else ())
         return 0
     except UpdateError as error:
         status("failed", str(error))
@@ -645,7 +737,7 @@ def checker(root, stopped, enabled=True, first=120):
 def main(argv=None):
     os.umask(0o077)   # status, check and backup files hold nothing for others; the backup holds keys
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["check", "launch", "install"])
+    parser.add_argument("command", choices=["check", "launch", "install", "keep"])
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent)
     args = parser.parse_args(argv)
     if args.command == "check":
@@ -654,6 +746,8 @@ def main(argv=None):
     if args.command == "launch":
         print(launch(args.root))
         return 0
+    if args.command == "keep":   # before `mu300-update apply`: so the new system installs AutoPlay again
+        return keep_for_system_update(args.root)
     return install(args.root)
 
 

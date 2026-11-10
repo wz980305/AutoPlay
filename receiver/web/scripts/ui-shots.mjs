@@ -121,7 +121,7 @@ if (ONLY !== 'box') {   // English labels (the longest strings) at the windowed 
 }
 if (ONLY !== 'viewer') for (const vp of SHAPES) {
   console.log(`box ${vp.tag} ${vp.w}x${vp.h}@${vp.dsf}`);
-  for (const state of ['fresh', 'live', 'live-open', 'pair-waiting', 'pair-confirm', 'bt-failed', 'ask-remove', 'ask-install', 'checking', 'invited']) {
+  for (const state of ['fresh', 'live', 'live-open', 'pair-waiting', 'pair-confirm', 'bt-failed', 'ask-remove', 'ask-install', 'checking', 'invited', 'hot']) {
     for (const scheme of (vp.tag === 'tesla-window' || vp.tag === 'phone' ? ['dark', 'light'] : ['dark'])) {
       const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, deviceScaleFactor: vp.dsf, locale: 'zh-CN', colorScheme: scheme });
       const page = await ctx.newPage();

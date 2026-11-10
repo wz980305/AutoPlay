@@ -3,7 +3,7 @@ const messages = {
   settings: ['AutoPlay 设置', 'AutoPlay settings'], close: ['关闭', 'Close'], done: ['完成', 'Done'],
   commonTab: ['常用', 'General'], displayTab: ['显示', 'Display'], supportTab: ['连接', 'Connection'], settingsNav: ['设置分类', 'Settings categories'],
   appearance: ['外观', 'Appearance'], frameSettings: ['画质', 'Picture'],
-  navigation: ['导航', 'Navigation'], carLocation: ['使用车辆定位', 'Use car location'], datum: ['坐标系', 'Coordinate system'],
+  navigation: ['导航', 'Navigation'], carLocation: ['使用车辆定位', 'Use car location'], datum: ['坐标系', 'Coordinate system'], datumAuto: ['自动', 'Automatic'],
   locationDenied: ['车机浏览器没有允许本页使用位置。', 'The car browser did not allow this page to use location.'],
   locationUnavailable: ['车机浏览器暂时拿不到位置，请稍后再试。', 'The car browser has no position right now. Try again later.'],
   locationReconnecting: ['已开启，正在重新连接 CarPlay。', 'On. Reconnecting CarPlay.'],

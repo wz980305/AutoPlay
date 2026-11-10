@@ -29,6 +29,9 @@ data class LocationMessage(
     val heading: Double? = null,
     /** `position.timestamp`. Diagnostic only: a 2026 Tesla browser reports a constant that is not epoch time. */
     val time: Long? = null,
+    /** The browser's IANA time zone ("Asia/Shanghai"), which tells mainland China from its neighbours for
+     *  [CarLocation.Datum.AUTO] (1.5.0). */
+    val zone: String? = null,
 )
 
 /**
@@ -49,7 +52,7 @@ data class LocationMessage(
  */
 class CarLocation(
     enabled: Boolean,
-    datum: Datum = Datum.WGS84,
+    datum: Datum = Datum.AUTO,
     private val staleMillis: Long = STALE_MILLIS,
     private val monotonicMillis: () -> Long = { System.nanoTime() / 1_000_000 },
     private val wallMillis: () -> Long = System::currentTimeMillis,
@@ -59,11 +62,19 @@ class CarLocation(
 
     /** What the browser's coordinates are in. The iPhone takes GNSS coordinates, WGS-84, everywhere. */
     enum class Datum(val id: String) {
+        /**
+         * GCJ-02 where the browser says it is in mainland China, WGS-84 everywhere else (1.5.0, the default). A
+         * China-market Model 3's browser gave GCJ-02: with it converted, the iPhone's Compass showed the same
+         * position as the car (owner's parked check, 2026-11-10; docs/LOCATION.md). Mainland China is told from Hong
+         * Kong, Macau, Taiwan and the other neighbours inside [ChinaDatum.inChina]'s rectangle by the browser's time
+         * zone ([ChinaDatum.mainlandZone]); a browser that names no zone, or UTC, gets WGS-84 as before 1.5.0.
+         */
+        AUTO("auto"),
         WGS84("wgs84"),
         /** China's GCJ-02, as Chinese maps use; converted back to WGS-84 inside China. */
         GCJ02("gcj02");
 
-        companion object { fun of(id: String?): Datum = entries.firstOrNull { it.id == id?.lowercase() } ?: WGS84 }
+        companion object { fun of(id: String?): Datum = entries.firstOrNull { it.id == id?.lowercase() } ?: AUTO }
     }
 
     private class Received(val seq: Long, val fix: CarPlayLocationFix, val lat: Double, val lon: Double, val at: Long)
@@ -85,6 +96,8 @@ class CarLocation(
     private var sent = 0
     private var withSpeed = 0
     private var lastAccuracy: Double? = null
+    /** What [Datum.AUTO] came to for the newest fix ("gcj02", "wgs84"), for the summary line. */
+    private var lastTreatedAs: Datum? = null
 
     /** Switched by the owner. Off drops the last fix at once, so nothing more is sent on the running link. */
     fun setSwitch(value: Boolean) = synchronized(lock) {
@@ -153,7 +166,12 @@ class CarLocation(
             }
         }
         jumpedTo = null
-        val (wgsLat, wgsLon) = if (datum == Datum.GCJ02) ChinaDatum.toWgs84(lat, lon) else lat to lon
+        val treatedAs = when (datum) {
+            Datum.AUTO -> if (ChinaDatum.mainlandZone(message.zone) && ChinaDatum.inChina(lat, lon)) Datum.GCJ02 else Datum.WGS84
+            else -> datum
+        }
+        lastTreatedAs = treatedAs
+        val (wgsLat, wgsLon) = if (treatedAs == Datum.GCJ02) ChinaDatum.toWgs84(lat, lon) else lat to lon
         val fix = CarPlayLocationFix(
             latitudeDegrees = wgsLat,
             longitudeDegrees = wgsLon,
@@ -179,7 +197,8 @@ class CarLocation(
             "car location: last ${(now - windowStart) / 1000} s new=${counts[Update.ACCEPTED.ordinal]} " +
                 "repeated=${counts[Update.REPEATED.ordinal]} jumped=${counts[Update.JUMPED.ordinal]} " +
                 "dropped=${counts[Update.REJECTED.ordinal]} off=${counts[Update.OFF.ordinal]} sent=$sent " +
-                "withSpeed=$withSpeed requested=$requested datum=${datum.id} " +
+                "withSpeed=$withSpeed requested=$requested " +
+                "datum=${datum.id}${if (datum == Datum.AUTO) "(${lastTreatedAs?.id ?: "-"})" else ""} " +
                 "accuracy=${lastAccuracy?.let { String.format(Locale.ROOT, "%.0f m", it) } ?: "not reported"}",
         )
         windowStart = now
@@ -224,6 +243,13 @@ object ChinaDatum {
     private const val EE = 0.00669342162296594323
 
     fun inChina(lat: Double, lon: Double): Boolean = lon in 72.004..137.8347 && lat in 0.8293..55.8271
+
+    /** The IANA time zones of mainland China, with their older names. Hong Kong, Macau and Taipei have their own. */
+    private val MAINLAND_ZONES = setOf("asia/shanghai", "asia/urumqi", "asia/chongqing", "asia/chungking",
+        "asia/harbin", "asia/kashgar", "prc")
+
+    /** Whether a browser's time zone is one of mainland China's; false for none, "UTC" or anything else. */
+    fun mainlandZone(zone: String?): Boolean = zone?.trim()?.lowercase() in MAINLAND_ZONES
 
     fun toGcj02(lat: Double, lon: Double): Pair<Double, Double> {
         if (!inChina(lat, lon)) return lat to lon

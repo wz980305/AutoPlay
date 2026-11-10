@@ -95,7 +95,9 @@ class DiagLogTests(unittest.TestCase):
         self.assertEqual(len(diagnostics.keep(['1 [x] WARN y - ' + 'z' * 900])[0]), 300)
         for line in ('1 [carplay-supervisor] INFO playport - no viewer for 300 s: CarPlay released until a page opens',
                      '1 [carplay-supervisor] INFO playport - a viewer opened the page: inviting the iPhone again',
-                     '1 [carplay-supervisor] INFO playport - wireless session dropped; inviting its iPhone once without waiting'):
+                     '1 [carplay-supervisor] INFO playport - wireless session dropped; inviting its iPhone once without waiting',
+                     '1 [x] INFO playport - car location switched on datum=auto',
+                     '1 [x] INFO playport - car location: last 60 s new=58 repeated=2 datum=auto(gcj02)'):
             self.assertEqual(diagnostics.keep([line]), [line])
 
     def test_a_download_opens_with_the_release_and_the_clock(self):

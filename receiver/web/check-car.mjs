@@ -315,6 +315,9 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
   const sample={width:1280,height:846,fps:29.6,hevc:false,videoKbps:2412,decodeMs:63.4,queue:1,rttMs:41.2};
   assert.deepEqual(hudLines(sample,true),['1280×846 · 30 fps · H.264 · 2.4 Mbps','解码 63 ms · 队列 1 · 往返 41 ms']);
   assert.deepEqual(hudLines({...sample,width:0,hevc:null,rttMs:-1},false),['No picture yet','Decode 63 ms · Queue 1 · RTT –']);
+  // 1.5.0: the car-location line says which datum the box applies, so "automatic" can be checked in the car.
+  assert.equal(hudLines({...sample,location:{perSecond:1,kmh:43.4,datum:'GCJ-02（自动）'}},true)[2],'车辆定位 1.0/s · 43 km/h · GCJ-02（自动）');
+  assert.equal(hudLines({...sample,location:{perSecond:0.5,kmh:null}},false)[2],'Car location 0.5/s');
 }
 
 { // Compatible display (2026-10-17): a Tesla on Chrome 113 decoded at full rate and showed nothing with the

@@ -6,8 +6,9 @@ export interface HudSample {
   videoKbps: number; decodeMs: number; queue: number;
   /** Last ping round trip to the box (the pong queues behind every frame not yet sent), -1 before the first. */
   rttMs: number;
-  /** Car location (1.4.0), while its switch is on: fixes sent per second and the last speed (km/h, null unknown). */
-  location?: { perSecond: number; kmh: number | null };
+  /** Car location (1.4.0), while its switch is on: fixes sent per second, the last speed (km/h, null unknown) and,
+   *  since 1.5.0, the datum the box applies ("GCJ-02 (auto)"). */
+  location?: { perSecond: number; kmh: number | null; datum?: string };
 }
 
 function rate(kbps: number) { return kbps >= 1000 ? `${(kbps / 1000).toFixed(1)} Mbps` : `${Math.round(kbps)} kbps`; }
@@ -20,7 +21,7 @@ export function hudLines(s: HudSample, zh: boolean): string[] {
   ];
   if (s.location) {
     const speed = s.location.kmh === null ? '' : ` · ${Math.round(s.location.kmh)} km/h`;
-    lines.push(`${zh ? '车辆定位' : 'Car location'} ${s.location.perSecond.toFixed(1)}/s${speed}`);
+    lines.push(`${zh ? '车辆定位' : 'Car location'} ${s.location.perSecond.toFixed(1)}/s${speed}${s.location.datum ? ` · ${s.location.datum}` : ''}`);
   }
   return lines;
 }

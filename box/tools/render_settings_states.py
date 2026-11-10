@@ -37,11 +37,12 @@ LIVE = {"bluetooth": ("on", None), "identity": ("provided", None), "phone": ("li
         "certificate": ("ok", None, {"not_after": "2027-01-28"}), "uplink": ("online", None)}
 
 
-def make(fields, devices=None, presence=None, pair=None, cert=None, query="", update_check=None, checking=False):
+def make(fields, devices=None, presence=None, pair=None, cert=None, query="", update_check=None, checking=False,
+         thermal=({"soc": 58, "nr": 47, "chg": 41}, {})):
     status = Status(clock=lambda: 1_793_600_000, **{**BASE, **fields})
     for domain, value in (cert or {}).items():
         status.set(domain, *value[:2], **(value[2] if len(value) > 2 else {}))
-    page = SettingsPage(state, status.snapshot, lambda reason: None, lambda: [], root=root)
+    page = SettingsPage(state, status.snapshot, lambda reason: None, lambda: [], root=root, thermal=lambda: thermal)
     page.pairing.devices = lambda: devices or {}
     page.pairing.presence = lambda: presence or {}
     if pair:
@@ -94,6 +95,9 @@ states["invited"] = make({}, devices=PHONES, presence={"last_phone": "02:00:00:0
                                        "checked_at": 1_793_500_000})
 states["live-open"] = unfold(make({}, devices=PHONES, presence={"active": "02:00:00:00:00:01", "last_phone": "02:00:00:00:00:02"},
                                   cert=LIVE), 1)
+# 1.5.0: the box in a parked car in the sun, the kernel holding the processor back.
+states["hot"] = make({}, devices=ONE, presence={"active": "02:00:00:00:00:01"}, cert=LIVE,
+                     thermal=({"soc": 74, "nr": 61, "chg": 52}, {"cpufreq-0": "2/9", "cpufreq-1": "3/9"}))
 for name, html in states.items():
     (OUT / f"box-{name}.html").write_text(html)
     print(f"wrote {OUT / f'box-{name}.html'} ({len(html)} bytes)")

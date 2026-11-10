@@ -143,6 +143,54 @@ class CarLocationTest {
         assertEquals(false, car.start())
     }
 
+    /** The position the iPhone is given, read back from the $GPGGA sentence. */
+    private fun sent(car: CarLocation): Pair<Double, Double> {
+        val fields = car.latestNmea()!!.lineSequence().first().split(',')
+        return (fields[2].take(2).toDouble() + fields[2].drop(2).toDouble() / 60) to
+            (fields[4].take(3).toDouble() + fields[4].drop(3).toDouble() / 60)
+    }
+
+    @Test fun autoConvertsOnlyWhereTheBrowserSaysMainlandChina() {
+        // A China-market Model 3 (2026-11-10): its browser's position was GCJ-02. The time zone tells the mainland
+        // from Hong Kong, 30 km from Shenzhen and inside the same rectangle, whose cars give WGS-84.
+        val (gLat, gLon) = ChinaDatum.toGcj02(shenzhenWgs.first, shenzhenWgs.second)
+        val mainland = location(datum = CarLocation.Datum.AUTO).apply { start() }
+        mainland.update(fix(lat = gLat, lon = gLon).copy(zone = "Asia/Shanghai"))
+        val (lat, lon) = sent(mainland)
+        assertTrue("$lat,$lon", CarLocation.meters(lat, lon, shenzhenWgs.first, shenzhenWgs.second) < 0.5)
+
+        for (zone in listOf("Asia/Hong_Kong", "Asia/Macau", "Asia/Taipei", "Asia/Seoul", "UTC", "", null)) {
+            val elsewhere = location(datum = CarLocation.Datum.AUTO).apply { start() }
+            elsewhere.update(fix(lat = 22.3193, lon = 114.1694).copy(zone = zone))
+            val (hkLat, hkLon) = sent(elsewhere)
+            assertTrue("zone $zone moved the position", CarLocation.meters(hkLat, hkLon, 22.3193, 114.1694) < 0.5)
+        }
+        // A mainland time zone far from China (a car that kept its zone abroad): the rectangle still decides.
+        val abroad = location(datum = CarLocation.Datum.AUTO).apply { start() }
+        abroad.update(fix(lat = -33.8688, lon = 151.2093).copy(zone = "Asia/Shanghai"))
+        val (sLat, sLon) = sent(abroad)
+        assertTrue(CarLocation.meters(sLat, sLon, -33.8688, 151.2093) < 0.5)
+    }
+
+    @Test fun anExplicitDatumIgnoresTheTimeZone() {
+        val (gLat, gLon) = ChinaDatum.toGcj02(shenzhenWgs.first, shenzhenWgs.second)
+        val wgs = location(datum = CarLocation.Datum.WGS84).apply { start() }
+        wgs.update(fix(lat = gLat, lon = gLon).copy(zone = "Asia/Shanghai"))
+        val (lat, lon) = sent(wgs)
+        assertTrue(CarLocation.meters(lat, lon, gLat, gLon) < 0.5)
+        val gcj = location(datum = CarLocation.Datum.GCJ02).apply { start() }
+        gcj.update(fix(lat = gLat, lon = gLon).copy(zone = "Asia/Hong_Kong"))
+        val (cLat, cLon) = sent(gcj)
+        assertTrue(CarLocation.meters(cLat, cLon, shenzhenWgs.first, shenzhenWgs.second) < 0.5)
+    }
+
+    @Test fun mainlandZonesAreChinasOwn() {
+        for (zone in listOf("Asia/Shanghai", "Asia/Urumqi", "asia/chongqing", " Asia/Harbin ", "PRC")) assertTrue(zone, ChinaDatum.mainlandZone(zone))
+        for (zone in listOf("Asia/Hong_Kong", "Asia/Macau", "Asia/Taipei", "Asia/Tokyo", "Etc/UTC", "UTC", "", null)) {
+            assertEquals(zone, false, ChinaDatum.mainlandZone(zone))
+        }
+    }
+
     @Test fun gcj02CoordinatesGoToTheIphoneAsWgs84() {
         val car = location(datum = CarLocation.Datum.GCJ02).apply { start() }
         val (gLat, gLon) = ChinaDatum.toGcj02(shenzhenWgs.first, shenzhenWgs.second)
@@ -170,7 +218,8 @@ class CarLocationTest {
 
     @Test fun datumIdsReadBack() {
         assertEquals(CarLocation.Datum.GCJ02, CarLocation.Datum.of("GCJ02"))
-        assertEquals(CarLocation.Datum.WGS84, CarLocation.Datum.of("bd09"))
-        assertEquals(CarLocation.Datum.WGS84, CarLocation.Datum.of(null))
+        assertEquals(CarLocation.Datum.WGS84, CarLocation.Datum.of("wgs84"))
+        assertEquals(CarLocation.Datum.AUTO, CarLocation.Datum.of("bd09"))
+        assertEquals(CarLocation.Datum.AUTO, CarLocation.Datum.of(null))
     }
 }

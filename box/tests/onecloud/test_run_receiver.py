@@ -72,11 +72,18 @@ class AccessFileTests(unittest.TestCase):
     def test_the_car_location_switch_survives_the_rebuilt_config(self):
         # 1.4.0: config.json is rebuilt at every start from uci and the saved display; the page's car-location switch
         # and datum, which only the receiver writes, are carried over, and anything unexpected falls back to off/WGS-84.
-        self.assertEqual(run_receiver.kept_location({}), {"carLocation": False, "carLocationDatum": "wgs84"})
-        self.assertEqual(run_receiver.kept_location({"carLocation": True, "carLocationDatum": "gcj02"}),
-                         {"carLocation": True, "carLocationDatum": "gcj02"})
-        self.assertEqual(run_receiver.kept_location({"carLocation": "yes", "carLocationDatum": "bd09"}),
-                         {"carLocation": False, "carLocationDatum": "wgs84"})
+        keep = run_receiver.kept_location
+        self.assertEqual(keep({}), {"carLocation": False, "carLocationDatum": "auto", "carLocationDatumPicked": False})
+        self.assertEqual(keep({"carLocation": True, "carLocationDatum": "gcj02"}),
+                         {"carLocation": True, "carLocationDatum": "gcj02", "carLocationDatumPicked": True})
+        self.assertEqual(keep({"carLocation": "yes", "carLocationDatum": "bd09"}),
+                         {"carLocation": False, "carLocationDatum": "auto", "carLocationDatumPicked": False})
+        # 1.5.0: the "wgs84" every 1.4.x wrote without being asked follows the new default, on or off; one the owner
+        # picked stays, and so does "auto".
+        self.assertEqual(keep({"carLocation": True, "carLocationDatum": "wgs84"})["carLocationDatum"], "auto")
+        self.assertEqual(keep({"carLocation": True, "carLocationDatum": "wgs84", "carLocationDatumPicked": True}),
+                         {"carLocation": True, "carLocationDatum": "wgs84", "carLocationDatumPicked": True})
+        self.assertEqual(keep({"carLocationDatum": "auto", "carLocationDatumPicked": True})["carLocationDatum"], "auto")
         self.assertIn("**kept_location(saved),", HERE.read_text())
 
     def test_the_jvm_still_gets_the_bluetooth_flags_for_older_receivers(self):

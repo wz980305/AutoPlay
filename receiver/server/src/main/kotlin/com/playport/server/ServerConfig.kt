@@ -40,8 +40,10 @@ data class ServerConfig(
     val accessToken: String = generateToken(),
     /** Pass the car browser's position to the iPhone (CarLocation, docs/LOCATION.md); switched in the page, kept in config.json. */
     val carLocation: Boolean = false,
-    /** What the browser's coordinates are in: "wgs84" (default) or "gcj02" (CarLocation.Datum). */
-    val carLocationDatum: String = "wgs84",
+    /** What the browser's coordinates are in: "auto" (default since 1.5.0), "wgs84" or "gcj02" (CarLocation.Datum). */
+    val carLocationDatum: String = "auto",
+    /** The owner chose the datum in the page; run-receiver.py moves an unchosen "wgs84" of 1.4.x to "auto". */
+    val carLocationDatumPicked: Boolean = false,
 ) {
     val mfiDirectory: Path get() = identityDir.resolve("offline-mfi")
 

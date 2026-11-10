@@ -113,6 +113,9 @@ font-variant-numeric:tabular-nums;padding:.8rem var(--pad-x) .6rem;margin:0}
 @media (min-width:1100px){main.wide{max-width:64rem;display:grid;grid-template-columns:1fr 1fr;column-gap:1.6rem;align-items:start}
 main.wide>.span{grid-column:1/-1}}
 """
+# What a page carries: the sheet without its comments, which are for whoever reads this file (1.5.0: they were a
+# seventh of every page, and a test could "find" a sentence that only a comment said).
+CSS = re.sub(r"\n\s*\n+", "\n", re.sub(r"/\*.*?\*/", "", STYLE, flags=re.S))
 
 ICONS = {
     "box": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
@@ -155,7 +158,7 @@ def page(title, body, refresh=False, wide=False):
     meta = f'<meta http-equiv=refresh content={3 if refresh is True else refresh}>' if refresh else ''
     return (f'<!doctype html><html lang=zh-CN><head><meta charset=utf-8>'
             f'<meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">{meta}'
-            f'<title>{escape(title)}</title><style>{STYLE}</style></head>'
+            f'<title>{escape(title)}</title><style>{CSS}</style></head>'
             f'<body><main{" class=wide" if wide else ""}>{body}</main>{UNFOLD}</body></html>')
 
 
@@ -185,6 +188,7 @@ TILES = {
     "check": '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
     "alert": '<path d="M12 6.5v7M12 17.3v.2"/>',
     "doc": '<path d="M7 3.5h7l4 4v13H7z"/><path d="M14 3.5v4h4M9.5 12h6M9.5 15.5h6"/>',
+    "heat": '<path d="M10 5a2 2 0 0 1 4 0v8.4a4.2 4.2 0 1 1-4 0z"/><path d="M12 10v6"/>',
 }
 
 

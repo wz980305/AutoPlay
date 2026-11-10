@@ -378,6 +378,24 @@ class ManagedPageTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.page.apply(path, {"nonce": nonce})
 
+    def test_the_box_temperature_and_an_alert_only_while_it_is_slowed_for_heat(self):
+        # 2026-11-10: 72 C in a parked car, and the page had nothing to say about it.
+        html = self.page.render("")
+        self.assertNotIn("盒子温度", html, "no sensor, no row")
+        self.page.thermal = lambda: ({"soc": 63, "nr": 48}, {})
+        html = self.page.render("")
+        self.assertIn("<b>盒子温度</b></span><span class=value>63 °C</span>", html)
+        self.assertNotIn("过热", html)
+        self.page.thermal = lambda: ({"soc": 74, "nr": 55}, {"devfreq-0": "1/2"})
+        self.assertNotIn("过热", self.page.render(""), "the processor's own cooling is what counts")
+        self.page.thermal = lambda: ({"soc": 74, "nr": 55}, {"cpufreq-0": "2/9"})
+        html = self.page.render("")
+        self.assertIn("盒子过热（74 °C），系统正在降低它的速度", html)
+        self.assertIn("<span>过热，正在降速</span></span><span class=value>74 °C</span>", html)
+        def broken(): raise OSError("sensor")
+        self.page.thermal = broken
+        self.assertNotIn("盒子温度", self.page.render(""))
+
     def test_the_daily_check_is_shown_with_the_update_button(self):
         import update
         update.save(self.state / "update-check.json", {"checked_at": 1, "current": "2026.10.19.1", "latest": "2026.10.20",

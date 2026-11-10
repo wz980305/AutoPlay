@@ -12,7 +12,7 @@ import { reachable, TESLA_HOPS } from './tesla-fullscreen';
 import { hudLines } from './debug-hud';
 import { compatDisplayOn } from './compat-display';
 import { askBox, READ_MS, WRITE_MS } from './ask-box';
-import { LocationFeed, askLocation, compassText, gcjToWgs, inChina, type Fix } from './location';
+import { LocationFeed, askLocation, autoDatum, browserZone, compassText, gcjToWgs, inChina, type Fix } from './location';
 import { attachPickers, refreshPickers } from './picker';
 import type { ServerMessage, ClientMessage } from './protocol';
 
@@ -459,7 +459,7 @@ function pageEvent(ev: number) {
   connection.send({type:'stats',stats:{ev,hidden:document.hidden?1:0,borderless:teslaBorderless()?1:0,width:screen.clientWidth,height:screen.clientHeight,...viewport()}});
 }
 /** Which page build runs (raised with each build tried in the car). */
-const BUILD = 202610310112;
+const BUILD = 202611101700;
 /** What the browser says of the space it gives the page, to find the car's bar over a fullscreen page (2026-10-13):
  *  window, visual viewport (and its offset), screen, available screen, outer window, pixel ratio. */
 function viewport(): Record<string, number> {
@@ -542,7 +542,7 @@ window.setInterval(()=>{
   send({type:'stats',stats:{fps:reportFrames/seconds,decodeMs:video.decodeLatencyMs,queue:video.decodeQueueSize,
     kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,borderless:teslaBorderless()?1:0,
     width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),
-    ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,desync:video.desynchronized,build:BUILD,webView,teslaMode:TESLA?1:0,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...stalls,...lag.take(performance.now()),...locationFeed.take()}});
+    ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,desync:video.desynchronized,build:BUILD,webView,teslaMode:TESLA?1:0,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...stalls,...lag.take(performance.now()),...locationFeed.take(),...(locationFeed.enabled?{locGcj:datumInUse()==='gcj02'?1:0,locAuto:datumSelect.value==='auto'?1:0}:{})}});
   judgeDecoder(video.decodeLatencyMs, reportFrames/seconds);
   if (active) judgeFrameRate(stalls.caughtUp);
   reportFrames=0;reportBytes=0;reportStart=now;touchSum=0;touchCount=0;
@@ -560,28 +560,40 @@ compatSwitch.onchange = () => { saveFlag('f50-compat-display', compatSwitch.chec
 const locationSwitch = el<HTMLInputElement>('car-location-on'), datumSelect = el<HTMLSelectElement>('car-location-datum');
 const datumRow = el<HTMLButtonElement>('car-location-datum-row');
 let lastFix: Fix | null = null, hudFixes = 0, locationBusy = false;
+/** The car browser's time zone goes with each fix: the box's "auto" datum tells mainland China by it (1.5.0). */
+const zone = browserZone();
+const DATUM_NAME: Record<string, string> = { wgs84: 'WGS-84', gcj02: 'GCJ-02' };
+/** The datum the box applies to the last fix: the chosen one, or what "auto" comes to here. */
+function datumInUse(): string {
+  return datumSelect.value !== 'auto' ? datumSelect.value : lastFix ? autoDatum(lastFix.lat, lastFix.lon, zone) : 'wgs84';
+}
 const locationFeed = new LocationFeed(fix => {
   lastFix = fix; hudFixes++; showDatumChoices();
-  send({ type: 'location', location: fix });
+  send({ type: 'location', location: zone ? { ...fix, zone } : fix });
 }, navigator.geolocation, () => !document.hidden, () => toast(t('locationDenied')));
-/** The datum row shows inside mainland China only (or once GCJ-02 is chosen). Each choice carries the position it
- *  would give the iPhone, written as the iPhone's Compass app writes it: the one that matches Compass is right. */
+/** The datum row shows inside China's rectangle only (or once GCJ-02 is chosen). Each choice carries the position it
+ *  would give the iPhone, written as the iPhone's Compass app writes it: the one that matches Compass is right.
+ *  "Automatic" also says which of the two it comes to here. */
 function showDatumChoices() {
   const china = lastFix !== null && inChina(lastFix.lat, lastFix.lon);
   datumRow.hidden = !locationSwitch.checked || !(china || datumSelect.value === 'gcj02');
   if (!lastFix) return;
   const zh = language === 'zh', [gLat, gLon] = gcjToWgs(lastFix.lat, lastFix.lon);
-  datumSelect.options[0].dataset.detail = compassText(lastFix.lat, lastFix.lon, zh);
-  datumSelect.options[1].dataset.detail = compassText(gLat, gLon, zh);
+  const wgs = compassText(lastFix.lat, lastFix.lon, zh), gcj = compassText(gLat, gLon, zh);
+  const auto = autoDatum(lastFix.lat, lastFix.lon, zone);
+  for (const option of Array.from(datumSelect.options)) {
+    option.dataset.detail = option.value === 'auto' ? `${DATUM_NAME[auto]} · ${auto === 'gcj02' ? gcj : wgs}` : option.value === 'gcj02' ? gcj : wgs;
+  }
 }
 function applyLocation(on: boolean, datum: string) {
-  locationSwitch.checked = on; datumSelect.value = datum === 'gcj02' ? 'gcj02' : 'wgs84';
+  locationSwitch.checked = on; datumSelect.value = datum === 'gcj02' || datum === 'wgs84' ? datum : 'auto';
   locationFeed.setEnabled(on); showDatumChoices(); refreshPickers();
 }
-function showLocation(from: Display) { if (!locationBusy) applyLocation(from.carLocation === true, from.carLocationDatum ?? 'wgs84'); }
+function showLocation(from: Display) { if (!locationBusy) applyLocation(from.carLocation === true, from.carLocationDatum ?? 'auto'); }
 /** On asks the browser first (its prompt, the first time); a refusal leaves the switch off. On reconnects CarPlay
- *  once, for the iPhone to learn of the new location source; off and a new datum take effect at once. */
-async function setLocation(on: boolean, datum: string) {
+ *  once, for the iPhone to learn of the new location source; off and a new datum take effect at once. The datum goes
+ *  to the box only when the owner picked one (picked): the switch alone leaves the box's as it is. */
+async function setLocation(on: boolean, datum: string, picked = false) {
   if (!token || locationBusy) return;
   const was = { on: locationFeed.enabled, datum: datumSelect.value };
   locationBusy = true; locationSwitch.disabled = true;
@@ -591,7 +603,7 @@ async function setLocation(on: boolean, datum: string) {
       if (permission !== 'granted') { applyLocation(false, was.datum); toast(t(permission === 'denied' ? 'locationDenied' : 'locationUnavailable')); return; }
     }
     const { ok, body } = await askBox<{ ok?: boolean; restarting?: boolean }>(`/api/location?token=${encodeURIComponent(token)}`,
-      { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ enabled: on, datum }) }, WRITE_MS);
+      { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(picked ? { enabled: on, datum } : { enabled: on }) }, WRITE_MS);
     if (!ok || !body?.ok) throw new Error();
     applyLocation(on, datum);
     if (body.restarting) toast(t('locationReconnecting'));
@@ -599,13 +611,14 @@ async function setLocation(on: boolean, datum: string) {
   finally { locationBusy = false; locationSwitch.disabled = false; }
 }
 locationSwitch.onchange = () => { void setLocation(locationSwitch.checked, datumSelect.value); };
-datumSelect.onchange = () => { void setLocation(true, datumSelect.value); };
+datumSelect.onchange = () => { void setLocation(true, datumSelect.value, true); };
 function updateHud() {
   const now = performance.now(), seconds = Math.max(0.25, (now - hudStart) / 1000);
   if (!hud.hidden) hud.textContent = hudLines({ width: painted ? canvas.width : 0, height: canvas.height, fps: hudFrames / seconds,
     hevc: display ? display.hevc : null, videoKbps: hudBytes * 8 / 1000 / seconds, decodeMs: video.decodeLatencyMs,
     queue: video.decodeQueueSize, rttMs: lag.last,
-    ...(locationFeed.enabled ? { location: { perSecond: hudFixes / seconds, kmh: lastFix?.speed === undefined ? null : lastFix.speed * 3.6 } } : {}) },
+    ...(locationFeed.enabled ? { location: { perSecond: hudFixes / seconds, kmh: lastFix?.speed === undefined ? null : lastFix.speed * 3.6,
+      datum: `${DATUM_NAME[datumInUse()]}${datumSelect.value === 'auto' ? (language === 'zh' ? '（自动）' : ' (auto)') : ''}` } } : {}) },
     language === 'zh').join('\n');
   hudFrames = 0; hudBytes = 0; hudStart = now; hudFixes = 0;
 }

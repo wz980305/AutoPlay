@@ -64,7 +64,8 @@ data class ClientMessage(
     val location: LocationMessage? = null,
 )
 
-/** POST /api/location: the switch, and optionally the datum of the browser's coordinates ("wgs84", "gcj02"). */
+/** POST /api/location: the switch, and - only when the owner picks one - the datum of the browser's coordinates
+ *  ("auto", "wgs84", "gcj02"). */
 @Serializable
 data class LocationSwitch(val enabled: Boolean, val datum: String? = null)
 

@@ -43,7 +43,7 @@ import diagnostics
 import own_domain
 import update
 from tesla_openwrt import OfflineChecks
-from platform_openwrt import OpenWrtPlatform, RUN
+from platform_openwrt import OpenWrtPlatform, RUN, thermal as read_thermal
 import viewer_port
 
 # uci autoplay.main: the seven owner-editable keys (tesla_only_box_delta.md section 5). Everything else is a
@@ -617,7 +617,8 @@ def main():
         stopped.set()
 
     trusted = []   # the network the settings page serves, once the Wi-Fi is known (it starts after that)
-    settings = SettingsPage(state, status.snapshot, request_reexec, lambda: list(trusted), root=root)
+    settings = SettingsPage(state, status.snapshot, request_reexec, lambda: list(trusted), root=root,
+                            thermal=read_thermal)
     offline_checks = OfflineChecks(state, platform=platform)
     maintainer = []   # own_domain.Maintainer, when an own name is set
     handoff_file = RUN / "handoff.json"

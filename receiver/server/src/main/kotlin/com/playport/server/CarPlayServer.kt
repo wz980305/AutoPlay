@@ -153,8 +153,11 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
         }, "wireless-quick-retry").apply { isDaemon = true; start() }
     }
 
+    /** The owner chose the datum in the page (an untouched one follows the default, "auto" since 1.5.0). */
+    @Volatile private var datumPicked = config.carLocationDatumPicked
+
     private fun persisted(): PersistentConfig =
-        PersistentConfig.of(config, display, carLocation.enabled, carLocation.datum.id)
+        PersistentConfig.of(config, display, carLocation.enabled, carLocation.datum.id, datumPicked)
 
     /**
      * The page's "car location" switch. On: the iPhone learns that this accessory gives location only when it
@@ -164,7 +167,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
      */
     fun setCarLocation(enabled: Boolean, datum: CarLocation.Datum? = null): Boolean {
         val changed = enabled != carLocation.enabled
-        datum?.let { carLocation.datum = it }
+        datum?.let { carLocation.datum = it; datumPicked = true }
         carLocation.setSwitch(enabled)
         configStore?.save(persisted())
         log.info("car location switched {}{} datum={}", if (enabled) "on" else "off", if (changed) "" else " (unchanged)",
