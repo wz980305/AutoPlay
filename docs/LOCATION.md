@@ -35,7 +35,7 @@
 
 | 查不到 | 答错的后果 | 代码的处理 |
 |---|---|---|
-| 国行特斯拉浏览器的坐标是 WGS-84 还是 GCJ-02 | iPhone 收到偏几百米的位置，照用 | 「坐标系」两项各自写出"按这个算，车在哪"，格式和 iPhone 指南针一样，**停车时对一眼指南针、点一样的那项**（§三）；默认 WGS-84（标准 Chromium 和特斯拉接口的默认字段都是 WGS-84） |
+| 国行特斯拉浏览器的坐标是 WGS-84 还是 GCJ-02 | iPhone 收到偏几百米的位置，照用 | 「坐标系」各项写出"按这个算，车在哪"，格式和 iPhone 指南针一样，停车时对一眼指南针就知道哪项对（§三）。**2026-11-10 车主实测：国行 Model 3（2022，AMD）的浏览器给的是 GCJ-02**——选 GCJ-02 后与指南针一致。所以 1.5.0 起默认「自动」：浏览器时区是中国大陆且位置在中国范围内按 GCJ-02，其余按 WGS-84（ADR-19）。只有这一辆车的一次实测；别的车型或固件若不同，手动选即可 |
 | 行驶中浏览器多久出一个新点、导航时会不会冻住 | 冻住的位置被当成"车还在这" | 只有**位置变了**才算新点；同一位置再来一遍（缓存或冻住）不算；2.5 s 没有新点就停发，iPhone 用回自己的 |
 
 崩溃风险：只在车主打开开关的那一刻请求授权；本车是 AMD（MCU3），没有查到 AMD 车的崩溃报告。浏览器真的崩了，关掉开关（或在地址栏撤销本站的位置权限）即可。
@@ -61,8 +61,9 @@
 ## 三、开关与坐标系
 
 - 「常用 → 导航 → 使用车辆定位」：打开时浏览器弹一次"是否允许使用位置"，拒绝则开关回到关。开关状态存在盒子（`config.json` 的 `carLocation`），授权存在浏览器。
-- 「坐标系」只在车在中国大陆境内（或已选 GCJ-02）时出现。点开后两项下面各有一行灰字，是"按这一项换算后交给 iPhone 的位置"，写法和 iPhone「指南针」App 底部一样（度分秒）。**停着车，打开 iPhone 指南针，选和它一致的那一项**——相差十几秒（约 300–600 m）的那项就是错的。之后不用再管。
-- 调试浮层（「显示 → 画质与兼容 → 显示调试信息」）打开时多一行「车辆定位 1.0/s · 43 km/h」：每秒送出几个点、当前车速。行驶中这一行应在 1/s 左右；长时间是 0 说明浏览器没给新位置（此时 iPhone 用自己的定位）。
+- 「坐标系」只在位置落在中国范围的矩形内（或已选 GCJ-02）时出现，三项：「自动」（默认，1.5.0）、WGS-84、GCJ-02。每项下面一行灰字是"按这一项换算后交给 iPhone 的位置"，写法和 iPhone「指南针」App 底部一样（度分秒）；「自动」那行前面写明它现在按哪个算（`GCJ-02 · …`）。正常不用动；想核对时**停着车，打开 iPhone 指南针**，「自动」那行应与它一致，不一致就手动选一致的那项（相差十几秒、约 300–600 m 的是错的）。
+- 「自动」怎么判断：投屏页把车机浏览器的时区（`Intl.DateTimeFormat().resolvedOptions().timeZone`）随每个位置发给盒子；时区是 `Asia/Shanghai`、`Asia/Urumqi`（及旧名 Chongqing、Harbin、Kashgar、PRC）且位置在矩形内 → GCJ-02，否则 WGS-84。香港、澳门、台湾、日本、韩国等都在矩形内，但各有自己的时区。浏览器不给时区或给 UTC 时按 WGS-84（即 1.4 的默认）。特斯拉浏览器报的时区是否就是车的时区，还没有在车上确认：看「自动」那行灰字或调试浮层即可知道。
+- 调试浮层（「显示 → 画质与兼容 → 显示调试信息」）打开时多一行「车辆定位 1.0/s · 43 km/h · GCJ-02（自动）」：每秒送出几个点、当前车速、盒子按哪个坐标系算（1.5.0）。行驶中这一行应在 1/s 左右；长时间是 0 说明浏览器没给新位置（此时 iPhone 用自己的定位）。
 
 ## 四、更好、不变、更坏
 
@@ -77,8 +78,9 @@
 
 - `wireless iAP2 tunnel accepted carLocation=true`：这次连接声明了位置。
 - `car location: the iPhone asked for sentence types [...]`、`started location updates`：iPhone 要了位置。
-- 每分钟一行 `car location: last 60 s new=58 repeated=2 jumped=0 dropped=0 off=0 sent=58 withSpeed=58 requested=true datum=wgs84 accuracy=not reported`：`new` 接近 60、`sent` 接近 `new` 是正常行驶；`jumped` 或 `dropped` 经常不为 0 说明浏览器的位置有问题，关掉开关。
-- 投屏页每 10 秒的 `viewer stats` 里有 `locSent`、`locFailed`、`locAcc`、`locDenied`。
+- 每分钟一行 `car location: last 60 s new=58 repeated=2 jumped=0 dropped=0 off=0 sent=58 withSpeed=58 requested=true datum=auto(gcj02) accuracy=not reported`：`new` 接近 60、`sent` 接近 `new` 是正常行驶；`jumped` 或 `dropped` 经常不为 0 说明浏览器的位置有问题，关掉开关。
+- 投屏页每 10 秒的 `viewer stats` 里有 `locSent`、`locFailed`、`locAcc`、`locDenied`，1.5.0 起还有 `locGcj`（1 = 按 GCJ-02 换算）和 `locAuto`（1 = 坐标系是「自动」）。
+- `car location switched on datum=…`：开关被打开或关上。打开会让 CarPlay 重新连接一次（约 6 秒），这是设计如此，不是掉线；1.5.0 起这些行进诊断记录。
 
 日志里没有坐标；盒子不保存位置。
 

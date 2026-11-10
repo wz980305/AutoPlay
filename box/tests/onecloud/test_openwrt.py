@@ -113,6 +113,25 @@ class TemperatureTests(unittest.TestCase):
             self.assertEqual(ow.hottest(Path(tmp)), 36.7)
             self.assertIsNone(ow.hottest(Path(tmp) / "none"))
 
+    def test_how_busy_the_processors_were_and_what_kept_them_busy(self):
+        # 2026-11-10: the load average said 4 with CarPlay and without, which told nothing about AutoPlay's share.
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = Path(tmp)
+            def write(total_idle, tasks):
+                (proc / "stat").write_text(f"cpu  {total_idle[0]} 0 0 {total_idle[1]} 0 0 0 0 0 0\ncpu0 1 2 3\n")
+                for pid, (name, ticks) in tasks.items():
+                    (proc / pid).mkdir(exist_ok=True)
+                    (proc / pid / "stat").write_text(f"{pid} ({name}) S 1 1 1 0 -1 4194560 10 0 0 0 {ticks} 0 0 0 20 0 1 0 100 0 0\n")
+            (proc / "self").mkdir()
+            meter = ow.CpuMeter(proc)
+            write((1000, 9000), {"10": ("java", 500), "11": ("java", 100), "12": ("kworker/0:1 (x)", 50), "13": ("python3", 70)})
+            self.assertIsNone(meter.sample(), "nothing to compare with yet")
+            write((1200, 9800), {"10": ("java", 600), "11": ("java", 140), "12": ("kworker/0:1 (x)", 60), "14": ("sh", 900)})
+            self.assertEqual(meter.sample(), {"busy": 20, "top": [["java", 14.0], ["kworker/0:1 (x)", 1.0]]},
+                             "a program's processes together; one that just started or ended is left out")
+            self.assertIsNone(meter.sample(), "no time passed")
+            self.assertIsNone(ow.CpuMeter(proc / "none").sample())
+
     def test_each_zone_by_name_and_only_the_cooling_that_is_at_work(self):
         # 2026-11-10: 71.9 C at the worst drop, and no way to tell the chip from the modem or the charger.
         with tempfile.TemporaryDirectory() as tmp:

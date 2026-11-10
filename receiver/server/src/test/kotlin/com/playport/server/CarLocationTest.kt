@@ -146,8 +146,9 @@ class CarLocationTest {
     /** The position the iPhone is given, read back from the $GPGGA sentence. */
     private fun sent(car: CarLocation): Pair<Double, Double> {
         val fields = car.latestNmea()!!.lineSequence().first().split(',')
-        return (fields[2].take(2).toDouble() + fields[2].drop(2).toDouble() / 60) to
-            (fields[4].take(3).toDouble() + fields[4].drop(3).toDouble() / 60)
+        val lat = fields[2].take(2).toDouble() + fields[2].drop(2).toDouble() / 60
+        val lon = fields[4].take(3).toDouble() + fields[4].drop(3).toDouble() / 60
+        return (if (fields[3] == "S") -lat else lat) to (if (fields[5] == "W") -lon else lon)
     }
 
     @Test fun autoConvertsOnlyWhereTheBrowserSaysMainlandChina() {

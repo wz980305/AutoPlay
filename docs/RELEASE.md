@@ -15,6 +15,8 @@
 
 地址：清单固定从 `releases/latest/download/autoplay-update.json` 取，其余从 `releases/download/v<版本>/<文件名>` 取。1.4.2 起这些 github.com 地址先经 REST API 下载（`api.github.com/repos/<owner>/<repo>/releases/latest` 或 `/releases/tags/v<版本>` 查出 asset 地址，带 `Accept: application/octet-stream` 取文件）：github.com 的下载链接在车主的网络上返回过 502，API 的 asset 接口能下。API 拒绝（未登录每小时 60 次）或连不上时，退回 github.com 链接，再按 uci `update_mirror`（默认 `https://ghfast.top/`）加前缀重试。签名让任何来源都不需要被信任。
 
+1.5.0 起，升级成功之后盒子还会把新装的包交给 mu300-linux 的 `mu300-user-packages keep`（`update.keep_for_system_update`；盒子上没有这个工具就什么都不做），这样 mu300-linux 自己的系统更新会把 AutoPlay 装回来；`python3 /opt/autoplay/update.py keep` 手动做同一件事。这一步失败只写日志，不影响升级结果。
+
 ## 二、密钥
 
 一对 Ed25519 密钥（`openssl genpkey -algorithm ed25519`）：
@@ -34,8 +36,8 @@
 在自己电脑上做同样的事（需要 JDK 21、Node、Docker、`gh`）：
 
 ```sh
-sh box/scripts/release.sh 1.4.3                      # 只构建到 out/release-1.4.3，不发布
-AUTOPLAY_RELEASE_KEY_FILE=~/autoplay-release.key sh box/scripts/release.sh 1.4.3 --publish
+sh box/scripts/release.sh 1.5.0                      # 只构建到 out/release-1.5.0，不发布
+AUTOPLAY_RELEASE_KEY_FILE=~/autoplay-release.key sh box/scripts/release.sh 1.5.0 --publish
 ```
 
 ## 四、盒子那边发生什么
@@ -61,7 +63,7 @@ ssh root@100.96.0.1 'cd /tmp/autoplay-upgrade && apk update && apk add --upgrade
     autoplay-jre-*_$(cat /etc/apk/arch).apk autoplay-[0-9]*.apk luci-app-autoplay-*.apk luci-i18n-autoplay-zh-cn-*.apk'
 ```
 
-之后的 1.3.2、1.4.0、1.4.1、1.4.2、1.4.3……都在设置页点一下。`apk` 的包签名（`--allow-untrusted`）仍未做：安全性由清单里的哈希和清单的签名保证，这是 WP9 剩下的一项。
+之后的 1.3.2、1.4.0、1.4.1、1.4.2、1.4.3、1.5.0……都在设置页点一下。`apk` 的包签名（`--allow-untrusted`）仍未做：安全性由清单里的哈希和清单的签名保证，这是 WP9 剩下的一项。
 
 ## 六、常见问题
 

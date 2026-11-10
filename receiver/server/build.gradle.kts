@@ -46,6 +46,14 @@ application {
 }
 
 // Run from the repository root so ./identity and ./web/dist resolve by default.
+// A failing test by name and with its message in the build log (1.5.0): CI said "79 tests completed, 1 failed".
+tasks.test {
+    testLogging {
+        events("failed", "skipped")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
+}
+
 tasks.named<JavaExec>("run") {
     workingDir = rootProject.projectDir
 }

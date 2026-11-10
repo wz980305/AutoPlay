@@ -61,7 +61,7 @@ mkdir -p node_modules && ln -sfn /opt/npm-tools/node_modules/typescript node_mod
 OpenWrt 包解开到 `/opt/autoplay` 的内容是 `autoplay-bundle-<版本>.tar`，由 `box/scripts/build-bundle.sh` 从本仓库打出（先完成第 1、2 节）：
 
 ```sh
-AUTOPLAY_VERSION=1.4.3 sh box/scripts/build-bundle.sh autoplay-bundle.tar      # RECEIVER=<路径> 指定接收端构建目录，默认 ../receiver
+AUTOPLAY_VERSION=1.5.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar      # RECEIVER=<路径> 指定接收端构建目录，默认 ../receiver
 ```
 
 需要主机上有：接收端的 `installDist` 产物和 `web/dist/`、`javac` 21、pip、curl、unzip。它从经过审核的源码目录枚举顶层 Python 模块（不再依赖 `.git`，新增模块不会遗漏），另下载两份固定哈希的依赖：dbus-next 0.2.3（蓝牙桥）和 acme.sh 3.1.6 连同 DuckDNS、DNSPod 两个 DNS 钩子（证书）；`scan-sensitive.py` 的检查会拒绝打进个人文件。

@@ -176,6 +176,49 @@ def cpu_mhz(cpus=Path("/sys/devices/system/cpu/cpufreq")):
     return result
 
 
+class CpuMeter:
+    """How busy the processors were since the last call, and what kept them busy (1.5.0). The load average said 4
+    for a whole drive, with CarPlay and without (2026-11-10): on this kernel it counts waiting kernel threads, so it
+    cannot say whether AutoPlay heats the box. From /proc/stat and /proc/PID/stat, in percent of all processors
+    together: {"busy": 14, "top": [["java", 8.2], ["hostapd", 1.1], ["python3", 0.6]]}."""
+
+    def __init__(self, proc=Path("/proc")):
+        self.proc, self.before = proc, None
+
+    def read(self):
+        fields = [int(value) for value in (self.proc / "stat").read_text().split("\n", 1)[0].split()[1:9]]
+        tasks = {}
+        for entry in self.proc.iterdir():
+            if not entry.name.isdigit():
+                continue
+            try:
+                text = (entry / "stat").read_text()
+                name, rest = text[text.index("(") + 1:text.rindex(")")], text[text.rindex(")") + 2:].split()
+                tasks[entry.name] = (name, int(rest[11]) + int(rest[12]))
+            except (OSError, ValueError, IndexError):
+                continue   # it ended while being read
+        return sum(fields), fields[3] + fields[4], tasks
+
+    def sample(self):
+        """None the first time and whenever /proc cannot be read."""
+        try:
+            now = self.read()
+        except (OSError, ValueError, IndexError):
+            return None
+        before, self.before = self.before, now
+        if before is None or now[0] <= before[0]:
+            return None
+        span = now[0] - before[0]
+        used = {}
+        for pid, (name, ticks) in now[2].items():
+            earlier = before[2].get(pid)
+            if earlier and earlier[0] == name and ticks > earlier[1]:
+                used[name] = used.get(name, 0) + ticks - earlier[1]   # a program's processes together
+        top = sorted(used.items(), key=lambda item: -item[1])[:3]
+        return {"busy": round(100 * (1 - (now[1] - before[1]) / span)),
+                "top": [[name, round(100 * ticks / span, 1)] for name, ticks in top]}
+
+
 def neighbours(arp=Path("/proc/net/arp"), leases=Path("/tmp/dhcp.leases")):
     """MAC -> {"ip", "name"} of what the box talks to: the kernel's neighbour table and dnsmasq's leases. The F50's
     Wi-Fi firmware reports no signal or counters per client (mu300-linux FINDINGS 180), so who each station is, is
@@ -220,6 +263,7 @@ class OpenWrtPlatform:
         self.ap_interface = interface   # the access point handed to the iPhone, once known
         self.children = []
         self.bluetooth_state = None     # state/ directory, set by the supervisor
+        self.cpu = CpuMeter()
 
     boot_id = staticmethod(boot_id)
 
@@ -334,6 +378,9 @@ class OpenWrtPlatform:
         frequencies = cpu_mhz()
         if frequencies:
             data["cpu_mhz"] = frequencies
+        busy = self.cpu.sample()
+        if busy:
+            data["cpu"] = busy
         if self.ap_interface:
             data["peers"] = stations(subprocess.run(["iw", "dev", self.ap_interface, "station", "dump"],
                                                     capture_output=True, text=True, timeout=5).stdout, neighbours())

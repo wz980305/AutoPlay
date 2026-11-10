@@ -1,7 +1,7 @@
-# AutoPlay 1.4.3 安装 / 卸载 / 使用说明
+# AutoPlay 1.5.0 安装 / 卸载 / 使用说明
 
 > 适用：中兴 F50（MU300，已 Root + OpenWrt 25.12，内核 5.4）上的无线 CarPlay，画面投到特斯拉车机浏览器。
-> 1.0.0 是**首个在特斯拉车内实测通过的版本**（无线 CarPlay 画面、触摸、导航播报已验证）；1.0.1 是它的收尾；**1.1.0 把声音默认全部交给特斯拉蓝牙**（见第三节），并引入 DashPlay 10.26–11.01 的可靠性修复；**1.2.0 只改界面**：两张页面按特斯拉的窗口形状核对，下拉与确认框改在页内画（见第六节）；**1.3.0** 按上车一周后的清单收口：设置面板按 iOS「设置」的样子（每行图标、无小字），网页里的声音和「备用控制」删掉，盒子页不再报"上游在线"，并修浏览器拉回时偶尔弹键盘的问题（见第七节）；**1.3.1** 接上在线升级：项目有了自己的发布密钥，每个版本是 GitHub 上一个签过名的 Release，装好 1.3.1 以后在设置页点一下就能升级（见第八节）。**1.3.2** 设置面板左侧分类去掉图标、删掉「允许 2560 分辨率」，盒子页「检查更新」下不再有「上次检查」一行。**1.4.0** 可以把车辆定位交给 iPhone 的 CarPlay 导航（默认关闭，见第九节）；「显示 → 画质」的「应用并重连」只在改了内容大小或帧率时才出现。**1.4.1** 无线 CarPlay 意外断开后盒子会主动请回那部 iPhone 一次、画面流卡住 10 秒内重连；盒子设置页按窗口形状重排，顶部只留需要处理的提示（见第十节）。**1.4.2** 在线升级先经 GitHub API 下载，github.com 的下载链接返回 502 时也能升级。**1.4.3** 「下载诊断记录」更完整：各处温度和是否降频、车机页面的完整报告、盒子自己的断开与重新邀请。接收端的 Kotlin 自 1.1.0 起未在本地编译过，1.3.1 起由 GitHub Actions 编译；自己编译时留意 `receiver/docs/UNVERIFIED-KOTLIN.md`。
+> 1.0.0 是**首个在特斯拉车内实测通过的版本**（无线 CarPlay 画面、触摸、导航播报已验证）；1.0.1 是它的收尾；**1.1.0 把声音默认全部交给特斯拉蓝牙**（见第三节），并引入 DashPlay 10.26–11.01 的可靠性修复；**1.2.0 只改界面**：两张页面按特斯拉的窗口形状核对，下拉与确认框改在页内画（见第六节）；**1.3.0** 按上车一周后的清单收口：设置面板按 iOS「设置」的样子（每行图标、无小字），网页里的声音和「备用控制」删掉，盒子页不再报"上游在线"，并修浏览器拉回时偶尔弹键盘的问题（见第七节）；**1.3.1** 接上在线升级：项目有了自己的发布密钥，每个版本是 GitHub 上一个签过名的 Release，装好 1.3.1 以后在设置页点一下就能升级（见第八节）。**1.3.2** 设置面板左侧分类去掉图标、删掉「允许 2560 分辨率」，盒子页「检查更新」下不再有「上次检查」一行。**1.4.0** 可以把车辆定位交给 iPhone 的 CarPlay 导航（默认关闭，见第九节）；「显示 → 画质」的「应用并重连」只在改了内容大小或帧率时才出现。**1.4.1** 无线 CarPlay 意外断开后盒子会主动请回那部 iPhone 一次、画面流卡住 10 秒内重连；盒子设置页按窗口形状重排，顶部只留需要处理的提示（见第十节）。**1.4.2** 在线升级先经 GitHub API 下载，github.com 的下载链接返回 502 时也能升级。**1.4.3** 「下载诊断记录」更完整：各处温度和是否降频、车机页面的完整报告、盒子自己的断开与重新邀请。**1.5.0** 车辆定位的坐标系默认「自动」（中国大陆按 GCJ-02）；盒子设置页显示盒子温度，过热降速时提醒；mu300-linux 系统更新后自动装回 AutoPlay（第十一、十二节）。接收端的 Kotlin 自 1.1.0 起未在本地编译过，1.3.1 起由 GitHub Actions 编译；自己编译时留意 `receiver/docs/UNVERIFIED-KOTLIN.md`。
 
 ---
 
@@ -13,12 +13,12 @@
 
 ### 2. 拿到安装包
 
-**直接下载（推荐）**：GitHub 仓库 `wz980305/AutoPlay` 的 Releases → 最新版本（现在是 `v1.4.3`），下载 `autoplay-1.4.3-r1.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk` 和与盒子架构对应的 `autoplay-jre-*_<架构>.apk`（F50 一般是 `aarch64_generic`；`ssh root@<盒子> cat /etc/apk/arch` 可查）。`SHA256SUMS` 里有每个文件的哈希。
+**直接下载（推荐）**：GitHub 仓库 `wz980305/AutoPlay` 的 Releases → 最新版本（现在是 `v1.5.0`），下载 `autoplay-1.5.0-r1.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk` 和与盒子架构对应的 `autoplay-jre-*_<架构>.apk`（F50 一般是 `aarch64_generic`；`ssh root@<盒子> cat /etc/apk/arch` 可查）。`SHA256SUMS` 里有每个文件的哈希。
 
 浏览器下载返回 502 时，改走 GitHub API 的 asset 接口（在电脑的终端里，一个空文件夹中运行；只取 F50 用得到的包，最后一步核对哈希）：
 
 ```sh
-TAG=v1.4.3
+TAG=v1.5.0
 curl -s https://api.github.com/repos/wz980305/AutoPlay/releases/tags/$TAG \
   | python3 -c 'import json,sys; [print(a["url"], a["name"]) for a in json.load(sys.stdin)["assets"]]' \
   | grep -E ' (autoplay-[0-9].*|luci-.*|autoplay-jre-.*_aarch64_generic\.apk|SHA256SUMS)$' \
@@ -26,7 +26,7 @@ curl -s https://api.github.com/repos/wz980305/AutoPlay/releases/tags/$TAG \
 grep -E 'autoplay-[0-9]|luci-|aarch64_generic' SHA256SUMS | shasum -a 256 -c -
 ```
 
-**自己编译**：需要 JDK 21 工具链 + Docker（SDK 镜像 `openwrt/sdk:x86-64-25.12.5`），或者一条命令 `sh box/scripts/release.sh 1.4.3`（同 GitHub Actions 里跑的那条，产物在 `out/release-1.4.3/`）。分步：
+**自己编译**：需要 JDK 21 工具链 + Docker（SDK 镜像 `openwrt/sdk:x86-64-25.12.5`），或者一条命令 `sh box/scripts/release.sh 1.5.0`（同 GitHub Actions 里跑的那条，产物在 `out/release-1.5.0/`）。分步：
 
 ```sh
 # 都在仓库根目录执行
@@ -35,12 +35,12 @@ grep -E 'autoplay-[0-9]|luci-|aarch64_generic' SHA256SUMS | shasum -a 256 -c -
 # 编译投屏页
 (cd receiver/web && npm ci && npm run build)
 # 打程序包
-AUTOPLAY_VERSION=1.4.3 sh box/scripts/build-bundle.sh autoplay-bundle.tar
+AUTOPLAY_VERSION=1.5.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 # 用 Docker SDK 打 apk
 sh openwrt/scripts/build-packages.sh out/ autoplay-bundle.tar
 ```
 
-产物在 `out/`：`autoplay-1.4.3-r1.apk`、`autoplay-jre-*_<架构>.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk`。
+产物在 `out/`：`autoplay-1.5.0-r1.apk`、`autoplay-jre-*_<架构>.apk`、`luci-app-autoplay-*.apk`、`luci-i18n-autoplay-zh-cn-*.apk`。
 
 ### 3. 装到 F50（手动路线）
 ```sh
@@ -158,8 +158,8 @@ apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
 默认 CarPlay 导航用 iPhone 自己的定位。打开这个开关后，特斯拉的位置（车顶天线）每秒经盒子交给 iPhone；iPhone 自己定位差时（放在中控下方、包里、高楼之间）会改用它，自己定位好时基本不变。
 
 1. 停着车，投屏页右上角「设置」→「常用」→「导航」→ 打开「使用车辆定位」。浏览器问"是否允许使用位置"时点允许（拒绝则开关自动关回去）。CarPlay 会重新连接一次，约 5 秒。
-2. **只需做一次**：在中国大陆境内，「使用车辆定位」下面会出现「坐标系」。打开 iPhone 的「指南针」App，看底部的经纬度；再点「坐标系」，两项下面各有一行灰色经纬度，选和指南针**一致**的那一项（另一项会差十几秒）。
-3. 想看它是否在工作：「显示 → 画质与兼容 → 显示调试信息」，画面右下角的调试信息多一行「车辆定位 1.0/s · 车速」。行驶中应在 1/s 左右；是 0 表示浏览器没给新位置，这时 iPhone 用自己的定位，和没开一样。
+2. 在中国大陆境内，「使用车辆定位」下面会出现「坐标系」，默认「自动」（1.5.0）：国行特斯拉的浏览器给的是国内地图用的 GCJ-02 坐标，盒子会换算成 iPhone 用的 WGS-84。一般不用动。想核对一次：停着车，打开 iPhone 的「指南针」App 看底部的经纬度，再点「坐标系」——「自动」下面那行灰字应写着 `GCJ-02 · …` 并与指南针一致；不一致就选一致的那一项（错的那项会差十几秒）。之前已经手动选过的，保持你选的不变。
+3. 想看它是否在工作：「显示 → 画质与兼容 → 显示调试信息」，画面右下角的调试信息多一行「车辆定位 1.0/s · 车速 · GCJ-02（自动）」。行驶中应在 1/s 左右；是 0 表示浏览器没给新位置，这时 iPhone 用自己的定位，和没开一样。
 
 注意：
 
@@ -175,3 +175,48 @@ apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
 - **触控**：很短的拖动、拖回起点不再被当成轻点。
 - **盒子设置页**（`http://100.96.0.1:18080/`）：顶部只在需要你处理时出现提示（蓝牙没启动、缺认证文件、证书不能续签、出错）。点「检查更新」后在「程序更新」里就地转圈，页面自己刷新出结果；邀请、拒绝等结果写在对应分组下面。每行有彩色图标，说明文字改成一句话；手机、车机窄窗、车机全屏、电脑大屏上都核对过排版。没有网络时的提示从"上游不可用"改为"盒子没有网络（没有 4G 信号）"。有新版本时只显示说明的第一段，点「完整更新说明」看全部。
 - 操作和地址都没有变化；不需要重新配对或重新申请证书。装着 1.3.1 或更新版本的盒子在设置页点「立即升级」即可。
+
+## 十一、1.5.0 的变化
+
+- **坐标系「自动」**：见第九节第 2 步。打开或关上「使用车辆定位」时 CarPlay 会重新连接一次（约 6 秒），这是正常的。
+- **盒子温度**：盒子设置页「高级」里多一行「盒子温度」。盒子被晒得过热、系统开始给处理器降速时，页面顶部会提醒；这时把盒子移到晒不到的地方或靠近空调出风口。作为参照：一次两个半小时的行车里，它在 57–72 °C 之间。
+- **诊断记录**多了处理器实际占用（哪个程序占多少）和车辆定位开关的记录，便于分清"掉线"和"按设计的重连"。
+- 操作和地址没有变化，不需要重新配对。
+
+## 十二、升级盒子的系统（mu300-linux 的 OpenWrt）
+
+盒子的系统由 mu300-linux 提供，它有自己的更新命令 `mu300-update`，换上新的系统镜像并把你加过的东西带过去。**AutoPlay 的四个软件包是从文件安装的，系统更新后要靠事先"登记"才会被装回来**；配对、证书、设置（`/opt/autoplay/state`）和认证文件不受影响。1.5.0 起每次在线升级后盒子会自己登记；下面第 2 步是手动确认。以下在停车、断开 CarPlay、SIM 卡能上网时，经 SSH 在盒子上操作。这一流程根据 mu300-linux 的脚本写成，**还没有在真机上完整跑过**，请在不急着用车时做，并保留回退（不要加 `--no-rollback`）。
+
+1. 先在盒子设置页把 AutoPlay 升到 1.5.0 或更新。
+2. 登记并确认：
+
+   ```sh
+   python3 /opt/autoplay/update.py keep      # "已登记…"；首次会下载约 45 MB
+   mu300-user-packages keep                  # 应列出 autoplay、autoplay-jre、luci-app-autoplay、luci-i18n-autoplay-zh-cn
+   ```
+3. 看一眼现状，内核保持 5.4（AutoPlay 的蓝牙是按 5.4 配的，不要执行 `mu300-update kernel 6.18` 之类）：
+
+   ```sh
+   mu300-update check
+   mu300-update kernel
+   ```
+4. 备份 AutoPlay 的数据到电脑（里面有配对密钥，自己保管）：
+
+   ```sh
+   tar czf /tmp/autoplay-state.tgz -C / opt/autoplay/state etc/config/autoplay
+   ```
+5. 更新系统并等它重启：
+
+   ```sh
+   mu300-update apply
+   ```
+6. 重启后盒子需要能上网（AutoPlay 依赖的 Python 等要重新下载）。查看装回的情况：
+
+   ```sh
+   mu300-user-packages status
+   ```
+   AutoPlay 的包互相依赖，第一遍可能只装回 `autoplay-jre`；这时再运行 `mu300-user-packages retry`（必要时两次），直到四个都回来。
+7. 打开盒子设置页（`:18080`）：顶部三个圆点应全绿、蓝牙在运行，再连一次 iPhone。蓝牙起不来时先「下载诊断记录」，不要急着改别的。
+8. 不行就退回原来的系统：`mu300-update rollback`。
+
+较新的 mu300-linux 默认打开 USB 调试（adb）且不设密码，插上盒子 USB 口的电脑能直接拿到管理员权限。不需要它时可以关掉：`mu300-usb adb off`（关过的设置在更新后保持）。

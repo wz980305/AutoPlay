@@ -150,7 +150,9 @@ the checks are answered as long as the AP is up.
 
 A bar above the connection chain is for a state the owner has to act on, or an
 error: Bluetooth not starting, the identity missing, a certificate that cannot
-be renewed, an expired page. Everything else is said where it happened:
+be renewed, an expired page, and (1.5.0) the box overheating - only while the
+kernel really holds the processor back for heat (a cooling device of the
+processor above state 0), not above some temperature of our choosing. Everything else is said where it happened:
 
 - what a button did goes in the footer of its own group (`?m=…&at=phones` or
   `&at=update`): "已邀请，1 分钟内有效…" under the iPhones, a refused

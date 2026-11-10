@@ -48,7 +48,7 @@ iPhone 只连接出示有效配件证书、并能用对应私钥签名的接收�
 程序包 `autoplay-bundle-<版本>.tar` 是 OpenWrt 包解开到 `/opt/autoplay` 的内容：先构建 `receiver/`（`./gradlew :server:installDist`，网页 `npm run build`），再在仓库根目录
 
 ```sh
-AUTOPLAY_VERSION=1.4.3 sh box/scripts/build-bundle.sh autoplay-bundle.tar
+AUTOPLAY_VERSION=1.5.0 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 ```
 
 它只打包 git 已提交的文件，另下载两份固定哈希的依赖：dbus-next 0.2.3（蓝牙桥接）和 acme.sh 3.1.6 连同 DuckDNS 与 DNSPod 两个 DNS 钩子（证书）。

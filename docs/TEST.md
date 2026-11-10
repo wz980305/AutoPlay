@@ -13,13 +13,13 @@ python3 -m unittest discover -s openwrt/tests      # 安装脚本 90-autoplay-te
 # 接收端：1.3.1 起 GitHub Actions 对每次推送跑 ./gradlew build（编译两个模块并跑全部测试），见下文「接收端」
 
 # 盒子侧：设置页、状态模型、守护（supervision）、升级日志与回滚、证书退避、时钟下限、出厂重置、平台、诊断、装机脚本
-cd box && python3 -m unittest discover -s tests/onecloud        # 256 个（1.4.3：+7，行车诊断记录的温区、降频、设备、ping 原因），通过
+cd box && python3 -m unittest discover -s tests/onecloud        # 261 个（1.5.0：+5，盒子温度与过热提醒、处理器占用、系统更新保留、坐标系迁移；Python 3.11–3.13 下都通过），通过
 
 # 蓝牙桥：test_reason、test_relay 等 7 个可直接跑；test_bluez、test_recovery 需要 dbus-daemon 和 dbus-next 0.2.3
 cd box && python3 -m unittest discover -s tests/bluetooth       # 没有 dbus-next 时那两个模块报 import 错误，是环境问题
 ```
 
-测试身份全是合成数据。裁剪前后的基线在 `box/docs/TEST-BASELINE.md`（375 → 225 是删掉的 Debian/N1/有线/STA 测试减去新模块的测试；1.2.0 为 263，删除上游刷机脚本及其 4 个测试文件后为 238，1.3.0 起仍为 238，1.4.0 为 239，1.4.1 为 243，1.4.2 为 249，1.4.3 为 256）。
+测试身份全是合成数据。裁剪前后的基线在 `box/docs/TEST-BASELINE.md`（375 → 225 是删掉的 Debian/N1/有线/STA 测试减去新模块的测试；1.2.0 为 263，删除上游刷机脚本及其 4 个测试文件后为 238，1.3.0 起仍为 238，1.4.0 为 239，1.4.1 为 243，1.4.2 为 249，1.4.3 为 256，1.5.0 为 261）。
 
 ### 投屏页（无浏览器）
 
@@ -49,7 +49,7 @@ CHROME=/path/to/chromium node scripts/ui-shots.mjs out/ui-shots [viewer|box]  # 
 cd receiver && ./gradlew build          # 编译两个模块并跑测试；1.3.1 起每次推送都在 GitHub Actions 上跑
 ```
 
-1.1.0 到 1.3.0 在没有 Gradle 网络的环境里写的 Kotlin 改动，1.3.1 的第一次 Actions 运行就编译并通过了测试（`receiver/docs/UNVERIFIED-KOTLIN.md` 留作记录）。1.4.0 新增 `CarLocationTest`（16 个）和 `Iap2LocationReporterTest`（7 个）；1.4.1 新增 `ScreenStreamReadDeadlineTest`（4 个，回环套接字上的半截消息）和 `WirelessSessionRecoveryTest`（6 个）；本地没有 Gradle 网络时，推到分支后在 Actions 里 Run workflow 即可得到同样的编译和测试。
+1.1.0 到 1.3.0 在没有 Gradle 网络的环境里写的 Kotlin 改动，1.3.1 的第一次 Actions 运行就编译并通过了测试（`receiver/docs/UNVERIFIED-KOTLIN.md` 留作记录）。1.4.0 新增 `CarLocationTest`（16 个）和 `Iap2LocationReporterTest`（7 个）；1.5.0 的 `CarLocationTest` 加 3 个（坐标系「自动」只在大陆时区换算、手选的不看时区、时区名单）；1.4.1 新增 `ScreenStreamReadDeadlineTest`（4 个，回环套接字上的半截消息）和 `WirelessSessionRecoveryTest`（6 个）；本地没有 Gradle 网络时，推到分支后在 Actions 里 Run workflow 即可得到同样的编译和测试。
 
 ### 探测页渲染
 
