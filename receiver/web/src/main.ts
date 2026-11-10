@@ -77,9 +77,10 @@ const nightNow = () => isNight(parseNightMode(nightSelect.value), new Date(), da
 const boxLinks: [HTMLAnchorElement, BoxLinkFrom][] = boxPort ? [[el<HTMLAnchorElement>('box-link'), 'page'], [el<HTMLAnchorElement>('box-link-panel'), 'panel']] : [];
 const aimBoxLinks = () => { for (const [link, from] of boxLinks) link.href = boxPageUrl(location.hostname, boxPort, nightNow(), from); };
 for (const [link] of boxLinks) { link.addEventListener('click', aimBoxLinks); link.hidden = false; }
-/** Day or night for the settings panel and its option sheets (1.5.0): the colours CarPlay is asked for, the same
- *  answer the links to the box page carry (re-aimed here too, so the two never differ). The waiting screen and
- *  everything over the picture stay dark (style.css). */
+/** Day or night for this page's own screens (1.5.0) - the waiting screen, the settings panel and its option sheets:
+ *  the colours CarPlay is asked for, the same answer the links to the box page carry (re-aimed here too, so the two
+ *  never differ). index.html's head sets it once before the first paint, by the same rule; from here on this does.
+ *  The picture's surround and everything over the picture stay dark (style.css). */
 function applyTheme() { document.documentElement.dataset.theme = nightNow() ? 'dark' : 'light'; aimBoxLinks(); }
 applyTheme();
 function render() {
@@ -467,7 +468,7 @@ function pageEvent(ev: number) {
   connection.send({type:'stats',stats:{ev,hidden:document.hidden?1:0,borderless:teslaBorderless()?1:0,width:screen.clientWidth,height:screen.clientHeight,...viewport()}});
 }
 /** Which page build runs (raised with each build tried in the car). */
-const BUILD = 202611102100;
+const BUILD = 202611102200;
 /** What the browser says of the space it gives the page, to find the car's bar over a fullscreen page (2026-10-13):
  *  window, visual viewport (and its offset), screen, available screen, outer window, pixel ratio. */
 function viewport(): Record<string, number> {

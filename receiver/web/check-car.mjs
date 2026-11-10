@@ -174,11 +174,29 @@ assert.equal(isNight('day',at(23,0),true),false);assert.equal(isNight('night',at
   // main.ts sets the theme from the same answer the links carry.
   const {readFileSync}=await import('node:fs');
   const css=readFileSync(new URL('./src/style.css',import.meta.url),'utf8'),main=readFileSync(new URL('./src/main.ts',import.meta.url),'utf8');
-  assert.match(css,/:root\[data-theme=light\] dialog \{[^}]*--bg:#F2F2F7;[^}]*--cell:#FFF;[^}]*--label:#000;/);
-  assert.doesNotMatch(css,/:root\[data-theme=light\] (?!dialog)/,'only the dialogs change: the waiting screen and the picture stay dark');
+  assert.match(css,/:root\[data-theme=light\] dialog, :root\[data-theme=light\] #overlay \{[^}]*--bg:#F2F2F7;[^}]*--cell:#FFF;[^}]*--label:#000;/);
+  assert.match(css,/:root\[data-theme=light\] dialog, :root\[data-theme=light\] #overlay \{/,'the panel, its sheets and the waiting screen');
+  assert.doesNotMatch(css,/:root\[data-theme=light\] (?!dialog|#overlay)/,'nothing else changes: the picture, its surround and the notices over it stay dark');
+  assert.match(css,/#app \{[^}]*background:#000;/);
+  // The waiting screen is drawn before the bundle runs, so index.html's head decides day or night by itself. Its few
+  // lines and night.ts isNight() must agree for every mode, minute and browser preference.
+  const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');
+  const early=/<head>.*?<script>(.*?)<\/script>.*?<\/head>/s.exec(html)?.[1];
+  assert.ok(early,'the early script is in the head');
+  assert.ok(html.indexOf('<script>')<html.indexOf('<body'),'before the body');
+  const vm=await import('node:vm');
+  for(const mode of [null,'schedule','system','day','night','nonsense'])for(const [h,m] of [[0,0],[6,29],[6,30],[12,0],[18,29],[18,30],[23,59]])for(const dark of [true,false]){
+    let theme=null;
+    vm.runInNewContext(early,{localStorage:{getItem:key=>key==='f50-night-mode'?mode:null},Date:class{getHours(){return h}getMinutes(){return m}},
+      matchMedia:query=>({matches:query==='(prefers-color-scheme: dark)'&&dark}),document:{documentElement:{setAttribute:(name,value)=>{if(name==='data-theme')theme=value}}}});
+    assert.equal(theme,isNight(parseNightMode(mode),at(h,m),dark)?'dark':'light',`${mode} ${h}:${m} ${dark}`);
+  }
+  let untouched=true; // no storage (a locked-down browser): nothing set, the page stays as the style sheet has it
+  vm.runInNewContext(early,{localStorage:{getItem(){throw new Error('denied')}},Date,matchMedia:()=>({matches:false}),document:{documentElement:{setAttribute(){untouched=false}}}});
+  assert.ok(untouched);
   assert.match(main,/dataset\.theme = nightNow\(\) \? 'dark' : 'light'; aimBoxLinks\(\);/);
 }
-console.log('Car checks passed: aspect fit, hiccups, decode backlog, night schedule, box page link and way back, day colours.');
+console.log('Car checks passed: aspect fit, hiccups, decode backlog, night schedule, box page link and way back, day colours, the early day/night rule.');
 { // View areas (2026-10-14): a window shape seen before is an area switch, never a reconnect.
   const windowed={width:1280,height:996}, full={width:1920,height:1080};
   const start={width:1280,height:996,hevc:true,fps:30};

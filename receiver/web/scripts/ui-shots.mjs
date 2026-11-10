@@ -112,8 +112,8 @@ if (ONLY !== 'box') for (const vp of SHAPES) {
   console.log('   ', JSON.stringify({ ...measured, state: await page.evaluate(() => document.getElementById('app').dataset.state) }));
   await ctx.close();
 }
-// Day (1.5.0): the panel and its sheets in the light colours, at the two shapes the car shows; the waiting screen,
-// which stays dark, once for the record. Picking 夜间 in the sheet turns the panel dark at once.
+// Day (1.5.0): the waiting screen, the panel and its sheets in the light colours, at the two shapes the car shows.
+// Picking 夜间 in the sheet turns the page dark at once.
 if (ONLY !== 'box') for (const vp of SHAPES.slice(0, 2)) {
   console.log(`viewer day ${vp.tag}`);
   const { ctx, page } = await viewer(vp, { night: 'day' });

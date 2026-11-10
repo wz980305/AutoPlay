@@ -45,7 +45,7 @@ button:disabled { opacity:.45; cursor:default; }
 /* Waiting screen: the state is the message (viewer audit V14). Brand as an eyebrow, the state line large, one reason
    under it, then the things a driver can do here as full-height rows. */
 #overlay { position:absolute; top:0; right:0; bottom:0; left:0; inset:0; display:flex; align-items:center; justify-content:center;
-  padding:max(var(--space-4),env(safe-area-inset-top)) var(--space-3) max(var(--space-4),env(safe-area-inset-bottom)); background:#000; overflow:auto; pointer-events:none; }
+  padding:max(var(--space-4),env(safe-area-inset-top)) var(--space-3) max(var(--space-4),env(safe-area-inset-bottom)); background:var(--bg); overflow:auto; pointer-events:none; }
 .welcome { width:min(760px,72vw); min-width:min(100%,22rem); text-align:center; animation:rise .45s cubic-bezier(.2,.8,.2,1) both; }
 .welcome h1 { font-size:var(--t-body); line-height:1.2; letter-spacing:.08em; text-transform:uppercase; font-weight:600; color:var(--secondary); margin:0 0 var(--space-2); }
 .status { display:flex; align-items:center; justify-content:center; gap:var(--space-2); font-size:var(--t-display); line-height:1.3; font-weight:600; letter-spacing:normal; margin:0; }
@@ -189,14 +189,15 @@ dialog.picker::backdrop { background:rgba(0,0,0,.6); }
 .picker .option[aria-selected=true] .check { visibility:visible; }
 .picker .btn.plain { flex:none; width:auto; margin:var(--space-2) var(--space-4) var(--space-4); }
 
-/* Day (1.5.0, ADR-20). The settings panel and its option sheets take the colours CarPlay is asked for: main.ts sets
-   data-theme from the night mode (schedule, browser, day, night), the same answer the link to the box page carries,
-   so the panel, the box page and CarPlay on the iPhone are light or dark together. Only the dialogs: the waiting
-   screen, the picture's surround and the notices over the picture stay dark. The values are the box page's light set
-   (box/scripts/onecloud/settings_ui.py LIGHT; a box test holds the two together). Lines between rows are a whole
-   pixel here: half a pixel vanished on a light page at the Tesla's 1.53 scale. ::backdrop does not inherit a dialog's
-   variables in every Chromium, so its colours are written out. */
-:root[data-theme=light] dialog { color-scheme:light; color:var(--label); --bg:#F2F2F7; --cell:#FFF; --cell-hi:#FFF; --press:#D1D1D6; --sep:rgba(60,60,67,.24);
+/* Day (1.5.0, ADR-20). This page's own screens - the waiting screen, the settings panel and its option sheets - take
+   the colours CarPlay is asked for: data-theme is set from the night mode (schedule, browser, day, night), by the
+   few lines in index.html's head before anything is drawn and by main.ts from then on, the same answer the link to
+   the box page carries. So the waiting screen, the panel, the box page and CarPlay on the iPhone are light or dark
+   together. What belongs to the picture stays dark: its surround (#app), the veil and the notices over it. The
+   values are the box page's light set (box/scripts/onecloud/settings_ui.py LIGHT; a box test holds the two
+   together). Lines between rows are a whole pixel here: half a pixel vanished on a light page at the Tesla's 1.53
+   scale. ::backdrop does not inherit a dialog's variables in every Chromium, so its colours are written out. */
+:root[data-theme=light] dialog, :root[data-theme=light] #overlay { color-scheme:light; color:var(--label); --bg:#F2F2F7; --cell:#FFF; --cell-hi:#FFF; --press:#D1D1D6; --sep:rgba(60,60,67,.24);
   --label:#000; --secondary:rgba(60,60,67,.7); --tint:#007AFF; --tint-under-white:#007AFF; --green:#34C759; --red:#FF3B30; --orange:#FF9500;
   --fill:rgba(120,120,128,.14); --chev:rgba(60,60,67,.45); --hair:1px; }
 :root[data-theme=light] dialog::backdrop { background:#F2F2F7; }

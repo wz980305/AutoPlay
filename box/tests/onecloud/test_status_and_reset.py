@@ -365,8 +365,8 @@ class PageLayoutTests(unittest.TestCase):
         self.assertIn('<meta name=color-scheme content="light dark">', head)
 
     def test_the_panel_and_this_page_share_their_colours(self):
-        """The CarPlay page's settings panel and the box page are twins: the same value for every colour they both
-        name, by day and by night. The two style sheets live apart (TypeScript bundle, Python string), so this holds
+        """The CarPlay page's own screens (the settings panel, the waiting screen) and the box page are twins: the same
+        value for every colour they both name, by day and by night. The two style sheets live apart (TypeScript bundle, Python string), so this holds
         them together."""
         import settings_ui as ui
         sheet = Path(__file__).resolve().parents[3] / "receiver/web/src/style.css"
@@ -378,7 +378,7 @@ class PageLayoutTests(unittest.TestCase):
             return dict(re.findall(r"(--[\w-]+)\s*:\s*([^;}]+?)\s*[;}]", block))
         mine = {"dark": values(ui.DARK + ";"), "light": values(ui.LIGHT + ";")}
         theirs = {"dark": values(css.split("{", 1)[1].split("}", 1)[0] + ";"),
-                  "light": values(re.search(r":root\[data-theme=light\] dialog \{([^}]*)\}", css).group(1) + ";")}
+                  "light": values(re.search(r":root\[data-theme=light\] dialog, :root\[data-theme=light\] #overlay \{([^}]*)\}", css).group(1) + ";")}
         shared = ("--bg", "--cell", "--press", "--sep", "--label", "--secondary", "--tint", "--green", "--red", "--orange", "--fill", "--chev")
         for theme in ("dark", "light"):
             for name in shared:
