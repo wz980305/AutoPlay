@@ -113,6 +113,29 @@ class TemperatureTests(unittest.TestCase):
             self.assertEqual(ow.hottest(Path(tmp)), 36.7)
             self.assertIsNone(ow.hottest(Path(tmp) / "none"))
 
+    def test_each_zone_by_name_and_only_the_cooling_that_is_at_work(self):
+        # 2026-11-10: 71.9 C at the worst drop, and no way to tell the chip from the modem or the charger.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name, kind, value in (("thermal_zone0", "soc-thmzone", "70421"), ("thermal_zone1", "nr-thmzone", "48100"),
+                                      ("thermal_zone2", "pa-thmzone", ""), ("thermal_zone3", None, "39000")):
+                (root / name).mkdir()
+                (root / name / "temp").write_text(value)
+                if kind:
+                    (root / name / "type").write_text(kind + "\n")
+            for name, kind, state in (("cooling_device0", "thermal-cpufreq-0", "2"), ("cooling_device1", "thermal-cpu-0", "0")):
+                (root / name).mkdir()
+                (root / name / "type").write_text(kind + "\n")
+                (root / name / "cur_state").write_text(state + "\n")
+                (root / name / "max_state").write_text("9\n")
+            self.assertEqual(ow.thermal(root), ({"soc": 70, "nr": 48, "zone3": 39}, {"cpufreq-0": "2/9"}))
+            self.assertEqual(ow.thermal(root / "none"), ({}, {}))
+            for policy, now, top in (("policy0", "1228800", "1228800"), ("policy4", "1703000", "2301000")):
+                (root / policy).mkdir()
+                (root / policy / "scaling_cur_freq").write_text(now + "\n")
+                (root / policy / "scaling_max_freq").write_text(top + "\n")
+            self.assertEqual(ow.cpu_mhz(root), ["1228/1228", "1703/2301"])
+
 
 class TrustedNetworkTests(unittest.TestCase):
     def test_only_the_network_of_the_wifi_handed_to_the_iphone(self):

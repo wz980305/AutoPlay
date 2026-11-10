@@ -136,6 +136,81 @@ def hottest(zones=Path("/sys/class/thermal")):
     return round(max(temps) / 1000, 1) if temps else None
 
 
+def thermal(zones=Path("/sys/class/thermal")):
+    """What is hot and whether the kernel is holding the CPU back (1.4.3; the drive of 2026-11-10 reached 71.9 C with
+    only "the hottest zone" recorded, so the chip, the 5G modem and the charger could not be told apart).
+    temps: every readable zone by its name without the "-thmzone" ending, whole degrees, an unnamed zone as zoneN;
+    throttle: only cooling devices whose state is not 0, as "state/max"."""
+    temps, throttle = {}, {}
+    for zone in sorted(zones.glob("thermal_zone*")):
+        try:
+            value = int((zone / "temp").read_text().strip())
+        except (OSError, ValueError):
+            continue
+        try:
+            name = (zone / "type").read_text().strip().removesuffix("-thmzone") or zone.name[8:]
+        except OSError:
+            name = zone.name[8:]
+        temps[name if name not in temps else f"{name}.{zone.name[12:]}"] = round(value / 1000)
+    for device in sorted(zones.glob("cooling_device*")):
+        try:
+            state = int((device / "cur_state").read_text().strip())
+            if state:
+                throttle[(device / "type").read_text().strip().removeprefix("thermal-")] = \
+                    f"{state}/{(device / 'max_state').read_text().strip()}"
+        except (OSError, ValueError):
+            continue
+    return temps, throttle
+
+
+def cpu_mhz(cpus=Path("/sys/devices/system/cpu/cpufreq")):
+    """Each frequency cluster's current and allowed-maximum MHz, "1703/2301": a maximum below the hardware's is the
+    thermal cap or a saving profile at work."""
+    result = []
+    for policy in sorted(cpus.glob("policy*"), key=lambda path: int(path.name[6:] or 0)):
+        try:
+            result.append(f"{int((policy / 'scaling_cur_freq').read_text()) // 1000}"
+                          f"/{int((policy / 'scaling_max_freq').read_text()) // 1000}")
+        except (OSError, ValueError):
+            continue
+    return result
+
+
+def neighbours(arp=Path("/proc/net/arp"), leases=Path("/tmp/dhcp.leases")):
+    """MAC -> {"ip", "name"} of what the box talks to: the kernel's neighbour table and dnsmasq's leases. The F50's
+    Wi-Fi firmware reports no signal or counters per client (mu300-linux FINDINGS 180), so who each station is, is
+    what there is to say about it."""
+    found = {}
+    try:
+        for line in arp.read_text().splitlines()[1:]:
+            fields = line.split()
+            if len(fields) >= 6 and fields[2] != "0x0":
+                found[fields[3].lower()] = {"ip": fields[0]}
+    except OSError:
+        pass
+    try:
+        for line in leases.read_text().splitlines():
+            fields = line.split()
+            if len(fields) >= 4:
+                entry = found.setdefault(fields[1].lower(), {"ip": fields[2]})
+                if fields[3] != "*":
+                    entry["name"] = fields[3][:32]
+    except OSError:
+        pass
+    return found
+
+
+def stations(text, known):
+    """`iw dev X station dump` as the drive log keeps it: only what the driver did report (the F50: the address
+    alone, eight nulls a station before 1.4.3), with the station's address on the LAN and its DHCP name."""
+    peers = []
+    for block, peer in zip(re.split(r"^Station ", text, flags=re.M)[1:], parse_stations(text)):
+        entry = {key: value for key, value in peer.items() if value is not None}
+        entry.update(known.get(block.split()[0].lower(), {}))
+        peers.append(entry)
+    return peers
+
+
 class OpenWrtPlatform:
     """Child processes, the Bluetooth adapter and the Wi-Fi read from OpenWrt. Standalone: the process and
     Bluetooth handling used to be inherited from DebianPlatform (code_inventory_trimming.md 2.1)."""
@@ -251,7 +326,15 @@ class OpenWrtPlatform:
         temp = hottest()
         if temp is not None:
             data["temp_c"] = temp
+        temps, throttle = thermal()
+        if temps:
+            data["temps"] = temps
+        if throttle:
+            data["throttle"] = throttle
+        frequencies = cpu_mhz()
+        if frequencies:
+            data["cpu_mhz"] = frequencies
         if self.ap_interface:
-            data["peers"] = parse_stations(subprocess.run(["iw", "dev", self.ap_interface, "station", "dump"],
-                                                          capture_output=True, text=True, timeout=5).stdout)
+            data["peers"] = stations(subprocess.run(["iw", "dev", self.ap_interface, "station", "dump"],
+                                                    capture_output=True, text=True, timeout=5).stdout, neighbours())
         return data

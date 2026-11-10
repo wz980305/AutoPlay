@@ -141,7 +141,9 @@ class SettingsPage:
                 if not self._allowed():
                     return self._send(403, "forbidden")
                 if self.path == "/diag.txt":
-                    return self._send(200, diagnostics.DiagLog(page.state / "diag").text(), "text/plain; charset=utf-8",
+                    header = {"event": "download", "wall": round(time.time()), "uptime": round(time.monotonic(), 1),
+                              "version": update.bundled_version(Path(__file__).resolve().parent)}
+                    return self._send(200, diagnostics.DiagLog(page.state / "diag").text(header), "text/plain; charset=utf-8",
                                       {"Content-Disposition": 'attachment; filename="autoplay-diag.txt"'})
                 if self.path == "/status.json":
                     return self._send(200, json.dumps(page.status(), ensure_ascii=False), "application/json")

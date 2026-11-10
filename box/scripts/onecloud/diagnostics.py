@@ -22,7 +22,14 @@ MAX_BYTES = 1_000_000
 INTERVAL = 10
 MAX_LINES = 40
 KEEP = re.compile(r"viewer stats|Receive: (video|audio)|session (active|ended)|display changed|wireless bootstrap"
-                  r"|accepted by the iPhone|CarPlay is live|rejecting|WARN|ERROR|^boot ")
+                  r"|accepted by the iPhone|CarPlay is live|rejecting|WARN|ERROR|^boot "
+                  # 1.4.3: why a session ended or came back by the box's own doing (the drive of 2026-11-10 showed a
+                  # 5-minute idle release and the one re-invitation only as their effects)
+                  r"|no viewer for|a viewer opened the page|wireless session dropped|idle release|incomplete after")
+LINE_CHARS = 300
+# The page's own report is the longest line and its end is what explains a frozen picture (stalls, lag, revived,
+# location); cut at 300 it ended in the middle of "height" (1.4.3).
+VIEWER_CHARS = 1500
 
 
 class DiagLog:
@@ -41,9 +48,12 @@ class DiagLog:
         finally:
             os.close(fd)
 
-    def text(self):
+    def text(self, header=None):
+        """Both files, oldest first. header: a first line for a download - the release and the clock, which the
+        "start" line no longer says once it has rotated out (2026-11-10: a download began 27 minutes into a boot)."""
         parts = [path.read_text(errors="replace") for path in (self.previous, self.current) if path.exists()]
-        return "".join(parts)
+        first = json.dumps(header, ensure_ascii=False, separators=(",", ":")) + "\n" if header else ""
+        return first + "".join(parts)
 
 
 class LogTail:
@@ -193,17 +203,33 @@ def net_counters():
 def ping_stats(address, count=5):
     """A short burst: {min, avg, max, loss %}. The gateway (the SIM's WAN) versus the phone shows whether
     the phone's power save adds the delay, or the radio link itself."""
-    try:
-        out = subprocess.run(["ping", "-c", str(count), "-i", "0.1", "-W", "1", "-q", address],
-                             capture_output=True, text=True, timeout=count + 3).stdout
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    loss = re.search(r"([\d.]+)% packet loss", out)
-    times = re.search(r"= ([\d.]+)/([\d.]+)/([\d.]+)/", out)
-    result = {"loss": float(loss.group(1))} if loss else {}
-    if times:
-        result.update(min=float(times.group(1)), avg=float(times.group(2)), max=float(times.group(3)))
-    return result or None
+    # 1.4.3: a ping that will not take "-i 0.1" (the drive of 2026-11-10 logged "phone": null 941 times) is asked
+    # again the plain way, three pings a second apart, and remembered; a burst that still says nothing says why.
+    global _ping_interval
+    attempts = ([["-c", str(count), "-i", "0.1"]] if _ping_interval else []) + [["-c", "3"]]
+    for options in attempts:
+        try:
+            done = subprocess.run(["ping", *options, "-W", "1", "-q", address],
+                                  capture_output=True, text=True, timeout=count + 3)
+        except subprocess.TimeoutExpired:
+            return {"error": "timeout"}
+        except OSError as error:
+            return {"error": type(error).__name__}
+        out = done.stdout or ""
+        loss = re.search(r"([\d.]+)% packet loss", out)
+        times = re.search(r"= ([\d.]+)/([\d.]+)/([\d.]+)", out)
+        result = {"loss": float(loss.group(1))} if loss else {}
+        if times:
+            result.update(min=float(times.group(1)), avg=float(times.group(2)), max=float(times.group(3)))
+        if result:
+            return result
+        if "-i" in options:
+            _ping_interval = False
+    words = (getattr(done, "stderr", "") or out or "").strip().splitlines()
+    return {"error": str(words[0])[:80] if words else "no output"}
+
+
+_ping_interval = True
 
 
 def tcp_stats(address):
@@ -211,6 +237,8 @@ def tcp_stats(address):
     `ss -tin`: smoothed RTT, retransmissions and bytes received per connection."""
     try:
         out = subprocess.run(["ss", "-tinH", "dst", address], capture_output=True, text=True, timeout=3).stdout
+    except FileNotFoundError:
+        return "no ss"   # OpenWrt has it in the ss package only; 941 nulls did not say so (1.4.3)
     except (OSError, subprocess.TimeoutExpired):
         return None
     connections = []
@@ -263,7 +291,7 @@ def ping_targets(state: Path, networks=None):
 
 
 def keep(lines, limit=MAX_LINES):
-    kept = [line.strip()[:300] for line in lines if KEEP.search(line)]
+    kept = [line.strip()[:VIEWER_CHARS if "viewer stats" in line else LINE_CHARS] for line in lines if KEEP.search(line)]
     return kept[-limit:]
 
 
@@ -275,12 +303,17 @@ def start(stopped, log: DiagLog, receiver_log: Path, platform, status, interval=
     log.append({"event": "start", "wall": round(time.time()), "uptime": round(time.monotonic(), 1),
                 "boot": platform.boot_id()[:8], "version": update.bundled_version(program)})
 
+    said = {}
+
     def loop():
         while not stopped.wait(interval):
             try:
                 record = {"uptime": round(time.monotonic(), 1), "mode": status.get("mode")}
-                record.update({key: status[key] for key in ("tesla_offline", "tesla_internet", "tesla_dns_log")
-                               if key in status})
+                # Only when it changes (1.4.3): the same sentence 941 times was a tenth of the file.
+                car = {key: status[key] for key in ("tesla_offline", "tesla_internet", "tesla_dns_log") if key in status}
+                if car != said.get("car"):
+                    said["car"] = car
+                    record.update(car)
                 record.update(platform.diagnostics())
                 record["net"] = net_counters()
                 if state is not None:
@@ -289,6 +322,9 @@ def start(stopped, log: DiagLog, receiver_log: Path, platform, status, interval=
                     record["ping"] = {name: ping_stats(address) for name, address in targets.items()}
                     if targets.get("phone"):
                         record["tcp"] = tcp_stats(targets["phone"])
+                        for peer in record.get("peers") or []:
+                            if peer.get("ip") == targets["phone"]:
+                                peer["is"] = "phone"
                 lines = keep(tail.read())
                 if lines:
                     record["log"] = lines

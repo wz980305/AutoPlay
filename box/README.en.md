@@ -48,7 +48,7 @@ How to obtain a legitimate identity is outside this project's scope; a shared id
 The bundle `autoplay-bundle-<version>.tar` is what the OpenWrt package unpacks to `/opt/autoplay`. Build `receiver/` first (`./gradlew :server:installDist`, and `npm run build` for the page), then from the repository root:
 
 ```sh
-AUTOPLAY_VERSION=1.4.2 sh box/scripts/build-bundle.sh autoplay-bundle.tar
+AUTOPLAY_VERSION=1.4.3 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 ```
 
 It packs committed files only and downloads two pinned dependencies: dbus-next 0.2.3 (Bluetooth bridge) and acme.sh 3.1.6 with the DuckDNS and DNSPod DNS hooks (certificates).

@@ -32,6 +32,26 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(peers[1]['peer'], '00:a4')
         self.assertIsNone(peers[1]['tx_retries'])
 
+    def test_the_drive_log_keeps_what_the_driver_said_and_who_the_station_is(self):
+        # The F50's firmware reports the address alone: eight nulls a station, five stations, every 10 s.
+        known = {'02:00:00:00:00:a4': {'ip': '100.96.0.150', 'name': 'iPhone'}}
+        peers = platform_openwrt.stations(STATIONS, known)
+        self.assertEqual(peers[1], {'peer': '00:a4', 'signal': -40, 'inactive_ms': 0, 'ip': '100.96.0.150', 'name': 'iPhone'})
+        self.assertEqual(platform_openwrt.stations('Station 02:00:00:00:00:B7 (on wlan0)\n', {}), [{'peer': '00:B7'}])
+
+    def test_neighbours_come_from_the_arp_table_and_the_leases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            arp, leases = Path(tmp) / 'arp', Path(tmp) / 'leases'
+            arp.write_text('IP address       HW type     Flags       HW address            Mask     Device\n'
+                           '100.96.0.150     0x1         0x2         02:00:00:00:00:A4     *        br-lan\n'
+                           '100.96.0.9       0x1         0x0         00:00:00:00:00:00     *        br-lan\n')
+            leases.write_text('1790000000 02:00:00:00:00:a4 100.96.0.150 iPhone 01:02\n'
+                              '1790000000 02:00:00:00:00:c1 100.96.0.160 * *\n')
+            self.assertEqual(platform_openwrt.neighbours(arp, leases),
+                             {'02:00:00:00:00:a4': {'ip': '100.96.0.150', 'name': 'iPhone'},
+                              '02:00:00:00:00:c1': {'ip': '100.96.0.160'}})
+            self.assertEqual(platform_openwrt.neighbours(Path(tmp) / 'no', Path(tmp) / 'no'), {})
+
 
 class DiagLogTests(unittest.TestCase):
     def setUp(self):
@@ -66,6 +86,47 @@ class DiagLogTests(unittest.TestCase):
         self.assertEqual(len(kept), diagnostics.MAX_LINES)
         self.assertTrue(kept[-1].endswith('fps=49'))
         self.assertEqual(diagnostics.keep(['boot 31.2s invitation sent', 'DEBUG x']), ['boot 31.2s invitation sent'])
+
+    def test_the_pages_report_is_kept_whole_and_the_boxs_own_decisions_are_kept(self):
+        # 2026-11-10: every viewer line ended at "height", before its stalls, lag and revived numbers.
+        report = '170382138 [x] INFO viewer - viewer stats client=1 ' + ' '.join(f'k{n}=1' for n in range(150)) + ' revived=2'
+        self.assertGreater(len(report), 300)
+        self.assertTrue(diagnostics.keep([report])[0].endswith('revived=2'))
+        self.assertEqual(len(diagnostics.keep(['1 [x] WARN y - ' + 'z' * 900])[0]), 300)
+        for line in ('1 [carplay-supervisor] INFO playport - no viewer for 300 s: CarPlay released until a page opens',
+                     '1 [carplay-supervisor] INFO playport - a viewer opened the page: inviting the iPhone again',
+                     '1 [carplay-supervisor] INFO playport - wireless session dropped; inviting its iPhone once without waiting'):
+            self.assertEqual(diagnostics.keep([line]), [line])
+
+    def test_a_download_opens_with_the_release_and_the_clock(self):
+        log = diagnostics.DiagLog(Path(self.tmp.name) / 'd')
+        log.append({'uptime': 5})
+        lines = log.text({'event': 'download', 'version': '1.4.3', 'wall': 1}).splitlines()
+        self.assertEqual(json.loads(lines[0]), {'event': 'download', 'version': '1.4.3', 'wall': 1})
+        self.assertEqual(json.loads(lines[1]), {'uptime': 5})
+        self.assertEqual(log.text(), '{"uptime":5}\n')
+
+    def test_what_the_car_can_reach_is_said_when_it_changes(self):
+        class Platform:
+            def boot_id(self): return 'abcdef0123'
+            def diagnostics(self): return {}
+        status = {'mode': 'openwrt', 'tesla_internet': 'online'}
+        stopped, log = threading.Event(), diagnostics.DiagLog(self.dir)
+        program = Path(self.tmp.name) / 'p'; program.mkdir()
+        diagnostics.start(stopped, log, Path(self.tmp.name) / 'none.log', Platform(), status, interval=0.03, program=program)
+        for _ in range(200):
+            if len(log.text().splitlines()) >= 4:
+                break
+            stopped.wait(0.02)
+        status['tesla_internet'] = 'offline'
+        seen = len(log.text().splitlines())
+        for _ in range(200):
+            if len(log.text().splitlines()) >= seen + 3:
+                break
+            stopped.wait(0.02)
+        stopped.set()
+        said = [r['tesla_internet'] for r in map(json.loads, log.text().splitlines()) if 'tesla_internet' in r]
+        self.assertEqual(said, ['online', 'offline'])
 
     def test_loop_writes_records_with_platform_and_log(self):
         class Platform:
@@ -188,6 +249,25 @@ class LagTests(unittest.TestCase):
                          [{'local': '7000', 'rtt': 85.2, 'rcv_rtt': 120.5, 'retrans': 7.0, 'rx_bytes': 123456.0, 'lost': 2.0}])
         run.return_value = Mock(stdout='5 packets transmitted, 0 received, 100% packet loss, time 4100ms\n')
         self.assertEqual(diagnostics.ping_stats('10.0.0.5'), {'loss': 100.0})
+
+    def test_a_ping_without_the_short_interval_is_asked_the_plain_way_and_says_why_it_failed(self):
+        # 2026-11-10: "phone": null and "tcp": null in all 941 records of a drive.
+        calls = []
+        def run(argv, **_):
+            calls.append(argv)
+            if '-i' in argv:
+                return Mock(stdout='', stderr='ping: invalid number \'0.1\'\n')
+            return Mock(stdout='3 packets transmitted, 3 packets received, 0% packet loss\n'
+                               'round-trip min/avg/max = 1.2/3.4/9.9 ms\n', stderr='')
+        with patch.object(diagnostics, '_ping_interval', True), patch('diagnostics.subprocess.run', side_effect=run):
+            self.assertEqual(diagnostics.ping_stats('10.0.0.5'), {'loss': 0.0, 'min': 1.2, 'avg': 3.4, 'max': 9.9})
+            self.assertEqual(diagnostics.ping_stats('10.0.0.5')['avg'], 3.4)
+            self.assertEqual(sum('-i' in argv for argv in calls), 1, 'remembered')
+        with patch.object(diagnostics, '_ping_interval', False), \
+                patch('diagnostics.subprocess.run', return_value=Mock(stdout='', stderr='ping: bad address\nmore')):
+            self.assertEqual(diagnostics.ping_stats('10.0.0.5'), {'error': 'ping: bad address'})
+        with patch('diagnostics.subprocess.run', side_effect=FileNotFoundError):
+            self.assertEqual(diagnostics.tcp_stats('10.0.0.5'), 'no ss')
 
     @patch('diagnostics.subprocess.run')
     def test_phone_address_on_the_current_network(self, run):
