@@ -3,6 +3,7 @@
 :root { color-scheme: dark; --bg:#000; --cell:#1C1C1E; --cell-hi:#2C2C2E; --press:#3A3A3C; --sep:rgba(84,84,88,.6);
   --label:#FFF; --secondary:rgba(235,235,245,.72); --tint:#0A84FF; --tint-under-white:#0066D6; --green:#30D158; --red:#FF453A; --gray:#8E8E93;
   --fill:rgba(120,120,128,.24); --overlay:rgba(20,20,22,.88); --overlay-edge:rgba(255,255,255,.28);
+  --orange:#FF9F0A; --chev:rgba(235,235,245,.55); --hair:.5px;
   /* Type: display (the state headline), title (sheet and banner), body (rows, hints, toasts), caption (Advanced only), mono (HUD). */
   --t-display:2.2rem; --t-title:1.6rem; --t-body:1.2rem; --t-caption:1rem; --t-mono:.8rem;
   /* Spacing and touch targets scale with the host interface, without resizing the video surface. */
@@ -59,7 +60,7 @@ button:disabled { opacity:.45; cursor:default; }
 .group { background:var(--cell); border-radius:var(--radius); overflow:hidden; }
 .cell { display:flex; align-items:center; gap:var(--space-2); width:100%; min-height:var(--hit-primary); padding:var(--space-2) var(--space-3); position:relative;
   background:none; border:0; border-radius:0; color:inherit; text-align:left; text-decoration:none; font:inherit; font-size:var(--t-body); }
-.group > :not([hidden]) ~ :not([hidden]), .group details > .inner { border-top:.5px solid var(--sep); }
+.group > :not([hidden]) ~ :not([hidden]), .group details > .inner { border-top:var(--hair) solid var(--sep); }
 a.cell, button.cell, summary.cell, label.cell { cursor:pointer; transition:background-color .12s ease-out; }
 a.cell:active, button.cell:active, summary.cell:active, label.cell:active { background:var(--press); transition:none; }
 button.cell:disabled { opacity:1; color:var(--secondary); }
@@ -72,10 +73,10 @@ button.cell:disabled { opacity:1; color:var(--secondary); }
 .tile { width:2rem; height:2rem; flex:none; border-radius:.45rem; display:grid; place-items:center; color:#fff; }
 .tile .ico { width:1.25rem; height:1.25rem; }
 .tile.blue { background:var(--tint); } .tile.green { background:var(--green); } .tile.gray { background:var(--gray); }
-.tile.indigo { background:#5E5CE6; } .tile.orange { background:#FF9F0A; } .tile.purple { background:#BF5AF2; }
+.tile.indigo { background:#5E5CE6; } .tile.orange { background:var(--orange); } .tile.purple { background:#BF5AF2; }
 .tile.red { background:var(--red); } .tile.teal { background:#30B0C7; } .tile.dark { background:#636366; }
 .chev { flex:none; display:block; }
-.chev::after { content:""; display:block; width:.5rem; height:.5rem; margin-right:.25rem; border:solid rgba(235,235,245,.55); border-width:0 2px 2px 0; transform:rotate(-45deg); }
+.chev::after { content:""; display:block; width:.5rem; height:.5rem; margin-right:.25rem; border:solid var(--chev); border-width:0 2px 2px 0; transform:rotate(-45deg); }
 details[open] > summary .chev::after { transform:rotate(45deg); }
 summary { list-style:none; } summary::-webkit-details-marker { display:none; }
 .group-title { color:var(--secondary); font-size:1rem; font-weight:500; margin:var(--space-4) var(--space-3) var(--space-1); }
@@ -87,7 +88,7 @@ summary { list-style:none; } summary::-webkit-details-marker { display:none; }
 /* Advanced: the codec row and the switch rows inside one details, separated like the group's own cells; captions allowed. */
 .inner.advanced { padding:0; }
 .inner.advanced > .cell { padding-left:var(--space-3); padding-right:var(--space-3); }
-.inner.advanced > :not([hidden]) ~ :not([hidden]) { border-top:.5px solid var(--sep); }   /* the hidden <select> behind a choice row is skipped */
+.inner.advanced > :not([hidden]) ~ :not([hidden]) { border-top:var(--hair) solid var(--sep); }   /* the hidden <select> behind a choice row is skipped */
 /* Choice rows (picker.ts): the row is a button showing the current option; the <select> behind it is hidden and only
    holds the value. A native <select> list is drawn by the car browser at the OS size, outside this scale. */
 /* As iOS lays a row out: the label keeps its line, the value takes what is left and is cut with an ellipsis. */
@@ -157,12 +158,12 @@ button.text { border-radius:var(--radius); background:var(--cell); color:var(--l
   font-weight:500; text-align:left; background:var(--cell); color:var(--label); }
 /* The chosen category as the iPad's Settings sidebar shows it: the tint fills the row. */
 .settings-nav button[aria-current=page] { background:var(--tint); color:#fff; }
-.settings-nav button:active { background:var(--press); color:#fff; }
+.settings-nav button:active { background:var(--press); color:var(--label); }
 .settings-body { min-width:0; overflow:auto; overscroll-behavior:contain; padding:0 .2rem max(var(--space-4),env(safe-area-inset-bottom)); scrollbar-gutter:stable; }
 .settings-page > .group-title:first-child { margin-top:.25rem; }
 .spaced { margin-top:var(--space-3); }
 /* Rows inside the picture form's fieldset are separated like any other rows of a group. */
-.group fieldset > :not([hidden]) ~ :not([hidden]) { border-top:.5px solid var(--sep); }
+.group fieldset > :not([hidden]) ~ :not([hidden]) { border-top:var(--hair) solid var(--sep); }
 /* Apply (1.4.0): an iOS action row, tint text across the row, that is there only while a picked value differs from
    what CarPlay uses (main.ts syncApply); it slides in with the change instead of a filled button standing there. */
 .cell.action { justify-content:center; color:var(--tint); font-weight:500; animation:rise .2s ease-out; }
@@ -180,13 +181,27 @@ dialog.picker::backdrop { background:rgba(0,0,0,.6); }
 .picker h2 { flex:none; padding:var(--space-3) var(--space-4) var(--space-2); }
 .picker .options { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; border-top:1px solid var(--sep); }
 .picker .option { min-height:var(--hit-primary); padding:var(--space-2) var(--space-4); }
-.picker .option + .option { border-top:.5px solid var(--sep); }
+.picker .option + .option { border-top:var(--hair) solid var(--sep); }
 .picker .option:active { background:var(--press); }
 .picker .option .main b { font-weight:400; }
 .picker .option[aria-selected=true] .main b { font-weight:600; }
 .picker .check { width:1.5rem; height:1.5rem; color:var(--tint); visibility:hidden; }
 .picker .option[aria-selected=true] .check { visibility:visible; }
 .picker .btn.plain { flex:none; width:auto; margin:var(--space-2) var(--space-4) var(--space-4); }
+
+/* Day (1.5.0, ADR-20). The settings panel and its option sheets take the colours CarPlay is asked for: main.ts sets
+   data-theme from the night mode (schedule, browser, day, night), the same answer the link to the box page carries,
+   so the panel, the box page and CarPlay on the iPhone are light or dark together. Only the dialogs: the waiting
+   screen, the picture's surround and the notices over the picture stay dark. The values are the box page's light set
+   (box/scripts/onecloud/settings_ui.py LIGHT; a box test holds the two together). Lines between rows are a whole
+   pixel here: half a pixel vanished on a light page at the Tesla's 1.53 scale. ::backdrop does not inherit a dialog's
+   variables in every Chromium, so its colours are written out. */
+:root[data-theme=light] dialog { color-scheme:light; color:var(--label); --bg:#F2F2F7; --cell:#FFF; --cell-hi:#FFF; --press:#D1D1D6; --sep:rgba(60,60,67,.24);
+  --label:#000; --secondary:rgba(60,60,67,.7); --tint:#007AFF; --tint-under-white:#007AFF; --green:#34C759; --red:#FF3B30; --orange:#FF9500;
+  --fill:rgba(120,120,128,.14); --chev:rgba(60,60,67,.45); --hair:1px; }
+:root[data-theme=light] dialog::backdrop { background:#F2F2F7; }
+:root[data-theme=light] dialog.picker { box-shadow:0 12px 40px rgba(0,0,0,.25); }
+:root[data-theme=light] dialog.picker::backdrop { background:rgba(0,0,0,.4); }
 @media (max-width:760px) {
   :root { font-size:18px; }
   .welcome { width:100%; min-width:0; }
@@ -207,4 +222,5 @@ dialog.picker::backdrop { background:rgba(0,0,0,.6); }
 }
 @media (prefers-reduced-transparency:reduce) {
   .capsule, #recovering .notice, header { background:#2C2C2E; }
+  :root[data-theme=light] dialog header { background:#F2F2F7; }
 }

@@ -55,6 +55,8 @@ async function viewer(vp, opts = {}) {
   const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, deviceScaleFactor: vp.dsf, locale: 'zh-CN', colorScheme: 'dark' });
   await ctx.addInitScript(() => { if (typeof VideoDecoder !== 'undefined') VideoDecoder.isConfigSupported = () => Promise.resolve({ supported: true }); });
   if (opts.lang) await ctx.addInitScript(lang => { try { localStorage.setItem('f50-language', lang); } catch { /* no storage */ } }, opts.lang);
+  // The night mode decides the panel's colours since 1.5.0; left at "schedule" a run would depend on the time of day.
+  await ctx.addInitScript(mode => { try { if (!localStorage.getItem('f50-night-mode')) localStorage.setItem('f50-night-mode', mode); } catch { /* no storage */ } }, opts.night ?? 'night');
   await ctx.route('**/receiver-access.json', r => r.fulfill({ json: { token: TOKEN, settingsPort: 18080 } }));
   await ctx.route('**/api/display*', r => r.request().method() === 'POST' ? r.fulfill({ json: { ok: true } })
     : r.fulfill({ json: { width: 1920, height: 1080, fps: 30, uiScale: 85, hevc: false } }));
@@ -94,7 +96,8 @@ if (ONLY !== 'box') for (const vp of SHAPES) {
     label: getComputedStyle(document.querySelector('.settings-page .cell .main b')).fontSize, value: getComputedStyle(document.querySelector('.settings-page .select-row .value')).fontSize,
     cell: Math.round(document.querySelector('.settings-page .select-row').getBoundingClientRect().height) }));
   await page.click('[data-picker="night-mode"]'); await settle(page); await shot(page, 'viewer-picker-night', vp);
-  await page.click('#picker-options .option:nth-child(3)'); await settle(page); await shot(page, 'viewer-settings-general-picked', vp);
+  // "Follow the browser" (dark here), so the rest of the pass stays in the night colours.
+  await page.click('#picker-options .option:nth-child(2)'); await settle(page); await shot(page, 'viewer-settings-general-picked', vp);
   await page.click('[data-settings-page="display"]'); await settle(page); await shot(page, 'viewer-settings-display', vp);
   await page.click('[data-picker="ui-scale"]'); await settle(page); await shot(page, 'viewer-picker-ui', vp);
   await page.keyboard.press('Escape'); await settle(page);
@@ -109,6 +112,35 @@ if (ONLY !== 'box') for (const vp of SHAPES) {
   console.log('   ', JSON.stringify({ ...measured, state: await page.evaluate(() => document.getElementById('app').dataset.state) }));
   await ctx.close();
 }
+// Day (1.5.0): the panel and its sheets in the light colours, at the two shapes the car shows; the waiting screen,
+// which stays dark, once for the record. Picking 夜间 in the sheet turns the panel dark at once.
+if (ONLY !== 'box') for (const vp of SHAPES.slice(0, 2)) {
+  console.log(`viewer day ${vp.tag}`);
+  const { ctx, page } = await viewer(vp, { night: 'day' });
+  await shot(page, 'viewer-waiting-day', vp);
+  await goLive(page);
+  await page.evaluate(() => document.getElementById('btn-settings').click()); await page.waitForTimeout(500);
+  await shot(page, 'viewer-settings-general-day', vp);
+  const seen = await page.evaluate(() => ({ theme: document.documentElement.dataset.theme, panel: getComputedStyle(document.getElementById('settings')).backgroundColor,
+    cell: getComputedStyle(document.querySelector('#settings .group')).backgroundColor, label: getComputedStyle(document.querySelector('#settings .cell .main b')).color,
+    waiting: getComputedStyle(document.getElementById('overlay')).backgroundColor, link: document.getElementById('box-link-panel').href, docW: document.documentElement.scrollWidth, winW: innerWidth }));
+  console.log('   ', JSON.stringify(seen));
+  await page.click('[data-picker="night-mode"]'); await settle(page); await shot(page, 'viewer-picker-night-day', vp);
+  await page.keyboard.press('Escape'); await settle(page);
+  await page.click('[data-settings-page="display"]'); await settle(page); await shot(page, 'viewer-settings-display-day', vp);
+  await page.click('#settings-display details > summary'); await page.waitForTimeout(700); await shot(page, 'viewer-settings-display-advanced-day', vp);
+  await page.click('[data-settings-page="connection"]'); await settle(page);
+  await page.locator('#settings-connection details > summary').first().click(); await page.waitForTimeout(700); await shot(page, 'viewer-settings-connection-day', vp);
+  await page.click('[data-settings-page="general"]'); await settle(page);
+  // A notice inside the panel: the location switch without the browser's permission (headless refuses it).
+  await page.click('#car-location-on'); await page.waitForTimeout(900); await shot(page, 'viewer-settings-general-day-notice', vp);
+  await page.waitForTimeout(6500);
+  await page.click('[data-picker="night-mode"]'); await settle(page);
+  await page.click('#picker-options .option:nth-child(4)'); await settle(page); await shot(page, 'viewer-settings-general-day-to-night', vp);
+  console.log('   ', JSON.stringify(await page.evaluate(() => ({ theme: document.documentElement.dataset.theme, panel: getComputedStyle(document.getElementById('settings')).backgroundColor,
+    link: document.getElementById('box-link-panel').href }))));
+  await ctx.close();
+}
 if (ONLY !== 'box') {   // English labels (the longest strings) at the windowed shape
   const vp = SHAPES[0];
   const { ctx, page } = await viewer(vp, { lang: 'en' });
@@ -121,8 +153,9 @@ if (ONLY !== 'box') {   // English labels (the longest strings) at the windowed 
   await ctx.close();
 }
 // The box page (1.5.0: the panel's twin). A name is a state of render_settings_states.py, with #net, #update or #more
-// for a category other than the first. Each is opened as the CarPlay page links to it, with ?night=1 or 0, in a
-// browser whose own preference is the opposite: a picture in the wrong colours shows at once.
+// for a category other than the first. Each is opened as the CarPlay page's settings panel links to it, with
+// ?night=1 or 0 and from=panel (the bar's button then reads 返回), in a browser whose own preference is the opposite: a
+// picture in the wrong colours shows at once.
 const BOX = ['fresh', 'live', 'live#net', 'live#more', 'available#update', 'checking#update', 'invited#update', 'live-open', 'invited', 'hot',
   'bt-failed', 'pair-waiting', 'pair-confirm', 'ask-remove', 'ask-install', 'reset'];
 if (ONLY !== 'viewer') for (const vp of SHAPES) {
@@ -133,7 +166,7 @@ if (ONLY !== 'viewer') for (const vp of SHAPES) {
       const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, deviceScaleFactor: vp.dsf, locale: 'zh-CN', colorScheme: night ? 'light' : 'dark' });
       const page = await ctx.newPage();
       page.on('pageerror', e => console.log('  pageerror:', e.message));
-      await page.goto(`${box.url}box-${state}.html?night=${night}${pane ? `#${pane}` : ''}`); await page.waitForTimeout(300);
+      await page.goto(`${box.url}box-${state}.html?night=${night}&from=panel${pane ? `#${pane}` : ''}`); await page.waitForTimeout(300);
       await shot(page, `box-${name.replace('#', '-')}-${night ? 'night' : 'day'}`, vp);
       const seen = await page.evaluate(() => {
         const px = sel => { const e = document.querySelector(sel); return e ? Math.round(parseFloat(getComputedStyle(e).fontSize) * 10) / 10 : null; };

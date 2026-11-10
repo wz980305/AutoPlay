@@ -7,7 +7,7 @@ import { suggestedResolution, windowResolution, areaSize, sameStream, frameRateC
 import { TESLA } from './flags';
 import { statusHint } from './status';
 import { t, language, setLanguage, type Key } from './i18n';
-import { boxPageUrl, isNight, parseNightMode } from './night';
+import { boxPageUrl, isNight, panelFromHash, parseNightMode, type BoxLinkFrom } from './night';
 import { reachable, TESLA_HOPS } from './tesla-fullscreen';
 import { hudLines } from './debug-hud';
 import { compatDisplayOn } from './compat-display';
@@ -70,16 +70,20 @@ let sentNight: boolean | null = null;
 
 /** Box page (pairing, network, update), when the device startup announced one: same host, plain HTTP. The link
  *  carries the day/night this page asks CarPlay for, read again at the tap (a schedule may have turned since the page
- *  was drawn), so the box page shows the colours CarPlay does (1.5.0). */
+ *  was drawn), so the box page shows the colours CarPlay does, and where it was tapped - the waiting screen or the
+ *  settings panel - so the box page's 返回 leads back there (1.5.0). */
 const boxPort = Number((window as unknown as { playportBoxSettingsPort?: number }).playportBoxSettingsPort) || 0;
 const nightNow = () => isNight(parseNightMode(nightSelect.value), new Date(), darkQuery.matches);
-if (boxPort) for (const id of ['box-link', 'box-link-panel']) {
-  const link = el<HTMLAnchorElement>(id);
-  const aim = () => { link.href = boxPageUrl(location.hostname, boxPort, nightNow()); };
-  aim(); link.addEventListener('click', aim);
-  link.hidden = false;
-}
+const boxLinks: [HTMLAnchorElement, BoxLinkFrom][] = boxPort ? [[el<HTMLAnchorElement>('box-link'), 'page'], [el<HTMLAnchorElement>('box-link-panel'), 'panel']] : [];
+const aimBoxLinks = () => { for (const [link, from] of boxLinks) link.href = boxPageUrl(location.hostname, boxPort, nightNow(), from); };
+for (const [link] of boxLinks) { link.addEventListener('click', aimBoxLinks); link.hidden = false; }
+/** Day or night for the settings panel and its option sheets (1.5.0): the colours CarPlay is asked for, the same
+ *  answer the links to the box page carry (re-aimed here too, so the two never differ). The waiting screen and
+ *  everything over the picture stay dark (style.css). */
+function applyTheme() { document.documentElement.dataset.theme = nightNow() ? 'dark' : 'light'; aimBoxLinks(); }
+applyTheme();
 function render() {
+  applyTheme();
   setLanguage(language);
   updateFullscreen();
   el<HTMLSelectElement>('language').value = language;
@@ -463,7 +467,7 @@ function pageEvent(ev: number) {
   connection.send({type:'stats',stats:{ev,hidden:document.hidden?1:0,borderless:teslaBorderless()?1:0,width:screen.clientWidth,height:screen.clientHeight,...viewport()}});
 }
 /** Which page build runs (raised with each build tried in the car). */
-const BUILD = 202611101900;
+const BUILD = 202611102100;
 /** What the browser says of the space it gives the page, to find the car's bar over a fullscreen page (2026-10-13):
  *  window, visual viewport (and its offset), screen, available screen, outer window, pixel ratio. */
 function viewport(): Record<string, number> {
@@ -628,10 +632,19 @@ function updateHud() {
 }
 window.setInterval(updateHud, 1000);
 render();fit();if(token) connection.connect();
+// Back from the box page (1.5.0): a visit that began in the settings panel returns to it, at the category it left
+// from, and 完成 then returns to CarPlay - one step at a time, as the way in. The fragment is dropped at once, so a
+// reload shows the picture and not the panel.
+const backTo = panelFromHash(location.hash);
+if (backTo) {
+  try { history.replaceState(null, '', location.pathname + location.search); } catch { /* The fragment stays; it only reopens the panel on a reload. */ }
+  panel.querySelector<HTMLButtonElement>(`[data-settings-page="${backTo}"]`)?.click();
+  openPanel();
+}
 
 nightSelect.onchange = () => { localStorage.setItem('f50-night-mode', nightSelect.value); syncNight(); render(); };
 darkQuery.addEventListener('change', () => { syncNight(); render(); });
-window.setInterval(() => { syncNight(); if (panel.open) render(); }, 30000);
+window.setInterval(() => { syncNight(); applyTheme(); if (panel.open) render(); }, 30000);
 
 // Native <select> lists are drawn by the car browser at the OS size; the rows open the page's own option sheet instead.
 attachPickers(panel, el<HTMLDialogElement>('picker'));

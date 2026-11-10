@@ -162,13 +162,23 @@ assert.equal(isNight('schedule',at(18,29),true),false);assert.equal(isNight('sch
 assert.equal(isNight('schedule',at(0,0),false),true);assert.equal(isNight('schedule',at(6,29),false),true);assert.equal(isNight('schedule',at(6,30),true),false);
 assert.equal(isNight('system',at(12,0),true),true);assert.equal(isNight('system',at(23,0),false),false);
 assert.equal(isNight('day',at(23,0),true),false);assert.equal(isNight('night',at(12,0),false),true);
-{ // 1.5.0: the link to the box page says which colours CarPlay is showing; the box page takes them.
-  const {boxPageUrl}=await load('night');
-  assert.equal(boxPageUrl('car.example.com',18080,true),'http://car.example.com:18080/?night=1');
-  assert.equal(boxPageUrl('100.96.0.1',80,false),'http://100.96.0.1/?night=0');
-  assert.equal(boxPageUrl('[fd00::1]',18080,isNight('schedule',at(19,0),false)),'http://[fd00::1]:18080/?night=1');
+{ // 1.5.0: the link to the box page says which colours CarPlay is showing and where it was tapped; the box page
+  // takes the colours, and its 返回 leads back to the panel (#settings=connection) or to the page.
+  const {boxPageUrl,panelFromHash}=await load('night');
+  assert.equal(boxPageUrl('car.example.com',18080,true,'panel'),'http://car.example.com:18080/?night=1&from=panel');
+  assert.equal(boxPageUrl('100.96.0.1',80,false,'page'),'http://100.96.0.1/?night=0&from=page');
+  assert.equal(boxPageUrl('[fd00::1]',18080,isNight('schedule',at(19,0),false),'page'),'http://[fd00::1]:18080/?night=1&from=page');
+  assert.equal(panelFromHash('#settings=connection'),'connection');assert.equal(panelFromHash('#settings=display'),'display');
+  for(const other of ['','#','#settings','#settings=','#settings=connection&x','#settings=advanced','#net'])assert.equal(panelFromHash(other),null,other);
+  // The panel's day colours are the box page's light set, value for value (a box test compares the two files), and
+  // main.ts sets the theme from the same answer the links carry.
+  const {readFileSync}=await import('node:fs');
+  const css=readFileSync(new URL('./src/style.css',import.meta.url),'utf8'),main=readFileSync(new URL('./src/main.ts',import.meta.url),'utf8');
+  assert.match(css,/:root\[data-theme=light\] dialog \{[^}]*--bg:#F2F2F7;[^}]*--cell:#FFF;[^}]*--label:#000;/);
+  assert.doesNotMatch(css,/:root\[data-theme=light\] (?!dialog)/,'only the dialogs change: the waiting screen and the picture stay dark');
+  assert.match(main,/dataset\.theme = nightNow\(\) \? 'dark' : 'light'; aimBoxLinks\(\);/);
 }
-console.log('Car checks passed: aspect fit, hiccups, decode backlog, night schedule, box page link.');
+console.log('Car checks passed: aspect fit, hiccups, decode backlog, night schedule, box page link and way back, day colours.');
 { // View areas (2026-10-14): a window shape seen before is an area switch, never a reconnect.
   const windowed={width:1280,height:996}, full={width:1920,height:1080};
   const start={width:1280,height:996,hevc:true,fps:30};

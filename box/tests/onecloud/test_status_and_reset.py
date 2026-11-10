@@ -322,12 +322,14 @@ class PageLayoutTests(unittest.TestCase):
         self.assertIn("http://100.96.0.1<wbr>:18080/", html)
 
     def test_the_bars_button_leads_to_the_carplay_page_this_browser_came_from(self):
-        # The CarPlay page keeps its settings per address: back to the one on the name this browser used here.
+        # The CarPlay page keeps its settings per address: back to the one on the name this browser used here. The
+        # button carries both of its names; which one shows, and whether it leads to the settings panel, is decided
+        # in the browser from what the CarPlay page's link said (from=panel / from=page).
         for host, entry in (("mycar.duckdns.org:18080", "https://mycar.duckdns.org:18443/"),
                             ("100.96.0.1:18080", "https://100.96.0.1:18443/"), ("MYCAR.duckdns.org", "https://mycar.duckdns.org:18443/"),
                             ("autoplay.lan:18080", "https://mycar.duckdns.org:18443/"), ("", "https://mycar.duckdns.org:18443/")):
             html = self.page.render("", host)
-            self.assertIn(f'<a class=done href="{entry}">CarPlay 画面</a>', html, host)
+            self.assertIn(f'<a class="done out" href="{entry}"><span class=fwd>CarPlay 画面</span><span class=back>返回</span></a>', html, host)
         # its own address first in the list as well
         net = self.pane(self.page.render("", "100.96.0.1:18080"), "net")
         self.assertLess(net.index("https://100.96.0.1<wbr>:18443/"), net.index("https://mycar.duckdns.org<wbr>:18443/"))
@@ -346,15 +348,43 @@ class PageLayoutTests(unittest.TestCase):
         html = self.page.render("night=1")
         self.assertIn("<title>AutoPlay 盒子</title>", html, "the query is the browser's business; the page is the same")
         head = html.split("</head>", 1)[0]
-        self.assertIn(f"<script>{ui.THEME}</script>", head, "before anything is drawn")
-        for part in ("night=([01])", 'sessionStorage.setItem("autoplay-night"', "history.replaceState", "36e5", '"data-theme"'):
-            self.assertIn(part, ui.THEME)
+        self.assertIn(f"<script>{ui.VISIT}</script>", head, "before anything is drawn")
+        for part in ("night=([01])", "from=(panel|page)", 'sessionStorage.setItem("autoplay-visit"', "history.replaceState", "36e5",
+                     '"data-theme"', '"data-from"'):
+            self.assertIn(part, ui.VISIT)
+        # The way back: 返回 shows for a visit that came from the CarPlay page, and leads to its settings panel when
+        # the visit began there (the CarPlay page opens the panel at 连接 for this fragment).
+        self.assertIn(":root[data-from] .done .back{display:inline}", ui.CSS)
+        self.assertIn(".done .back,:root[data-from] .done .fwd{display:none}", ui.CSS)
+        self.assertIn('getAttribute("data-from")==="panel")out.href=out.href.split("#")[0]+"#settings=connection"', ui.SCRIPT)
         # Both sets of colours: the handed-over theme wins, the browser's preference decides without one.
         self.assertIn(":root{" + ui.LIGHT, ui.CSS)
         self.assertIn("@media (prefers-color-scheme:dark){:root:not([data-theme=light]){" + ui.DARK + "}}", ui.CSS)
         self.assertIn(":root[data-theme=dark]{" + ui.DARK + "}", ui.CSS)
         self.assertIn("--bg:#000;--cell:#1C1C1E", ui.DARK, "the CarPlay page's own colours")
         self.assertIn('<meta name=color-scheme content="light dark">', head)
+
+    def test_the_panel_and_this_page_share_their_colours(self):
+        """The CarPlay page's settings panel and the box page are twins: the same value for every colour they both
+        name, by day and by night. The two style sheets live apart (TypeScript bundle, Python string), so this holds
+        them together."""
+        import settings_ui as ui
+        sheet = Path(__file__).resolve().parents[3] / "receiver/web/src/style.css"
+        if not sheet.exists():
+            self.skipTest("the CarPlay page's sources are not in this tree")
+        css = sheet.read_text()
+
+        def values(block):
+            return dict(re.findall(r"(--[\w-]+)\s*:\s*([^;}]+?)\s*[;}]", block))
+        mine = {"dark": values(ui.DARK + ";"), "light": values(ui.LIGHT + ";")}
+        theirs = {"dark": values(css.split("{", 1)[1].split("}", 1)[0] + ";"),
+                  "light": values(re.search(r":root\[data-theme=light\] dialog \{([^}]*)\}", css).group(1) + ";")}
+        shared = ("--bg", "--cell", "--press", "--sep", "--label", "--secondary", "--tint", "--green", "--red", "--orange", "--fill", "--chev")
+        for theme in ("dark", "light"):
+            for name in shared:
+                self.assertEqual(mine[theme][name].replace(" ", ""), theirs[theme][name].replace(" ", ""), f"{name} by {theme}")
+        self.assertEqual(mine["dark"]["--btn"], theirs["dark"]["--tint-under-white"])
+        self.assertEqual(mine["light"]["--btn"], theirs["light"]["--tint-under-white"])
 
     def test_the_style_sheet_keeps_its_lines_and_carries_no_comments(self):
         import settings_ui as ui

@@ -13,7 +13,7 @@ python3 -m unittest discover -s openwrt/tests      # 安装脚本 90-autoplay-te
 # 接收端：1.3.1 起 GitHub Actions 对每次推送跑 ./gradlew build（编译两个模块并跑全部测试），见下文「接收端」
 
 # 盒子侧：设置页、状态模型、守护（supervision）、升级日志与回滚、证书退避、时钟下限、出厂重置、平台、诊断、装机脚本
-cd box && python3 -m unittest discover -s tests/onecloud        # 268 个（1.5.0：+12，盒子温度与过热提醒、处理器占用、系统更新保留、坐标系迁移、盒子网页的分类/日夜间/无小字；Python 3.11–3.13 下都通过），通过
+cd box && python3 -m unittest discover -s tests/onecloud        # 269 个（1.5.0：+13，盒子温度与过热提醒、处理器占用、系统更新保留、坐标系迁移、盒子网页的分类/日夜间/无小字、与设置面板的颜色逐项相同；Python 3.11–3.13 下都通过），通过
 
 # 蓝牙桥：test_reason、test_relay 等 7 个可直接跑；test_bluez、test_recovery 需要 dbus-daemon 和 dbus-next 0.2.3
 cd box && python3 -m unittest discover -s tests/bluetooth       # 没有 dbus-next 时那两个模块报 import 错误，是环境问题

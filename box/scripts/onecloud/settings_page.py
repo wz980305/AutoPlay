@@ -601,9 +601,9 @@ class SettingsPage:
         marked = ("update",) if found.get("available") and not found.get("error") else ()
         # An upgrade reloads every 3 s; a check from the button every 2 s until its result is in.
         refresh = True if update.running(self.state.parent) else 2 if self.check_running() else False
-        # The bar's button is the panel's 完成 for this page: back to the CarPlay picture.
-        done = ("CarPlay 画面", entries[0]) if entries else None
-        return ui.page(TITLE, ui.alerts(notice) + ui.layout(panes, marked), refresh, done)
+        # The bar's button is this page's way out, as 完成 is the panel's: back to where the visit began on the
+        # CarPlay page (settings_ui.page), at the address this browser knows it by.
+        return ui.page(TITLE, ui.alerts(notice) + ui.layout(panes, marked), refresh, out=entries[0] if entries else None)
 
     def render_reset(self):
         """The factory-reset page: what goes, two typed confirmations (no JS confirm() to bypass)."""

@@ -16,8 +16,19 @@ export function isNight(mode: NightMode, now: Date, prefersDark: boolean): boole
   return minutes >= NIGHT_START || minutes < NIGHT_END;
 }
 
-/** The box page's address as this page links to it (1.5.0): same host, plain HTTP, and the day/night this page asks
- *  CarPlay for at that moment, so that the box page comes up in the colours CarPlay is showing. */
-export function boxPageUrl(hostname: string, port: number, night: boolean): string {
-  return `http://${hostname}${port === 80 ? '' : `:${port}`}/?night=${night ? 1 : 0}`;
+/** The box page's address as this page links to it (1.5.0): same host, plain HTTP, with two things the box page
+ *  cannot know by itself. night: the day/night this page asks CarPlay for at that moment, so the box page comes up in
+ *  the colours CarPlay is showing. from: where the link was - the settings panel or the page itself (the waiting
+ *  screen) - so the box page's 返回 leads back there. */
+export type BoxLinkFrom = 'panel' | 'page';
+export function boxPageUrl(hostname: string, port: number, night: boolean, from: BoxLinkFrom): string {
+  return `http://${hostname}${port === 80 ? '' : `:${port}`}/?night=${night ? 1 : 0}&from=${from}`;
+}
+
+/** The way back (1.5.0): the box page's 返回 opens this page with #settings=<category> when the visit began in the
+ *  settings panel. The category to open the panel at, or null for any other fragment. */
+export type SettingsCategory = 'general' | 'display' | 'connection';
+export function panelFromHash(hash: string): SettingsCategory | null {
+  const match = /^#settings=(general|display|connection)$/.exec(hash);
+  return match ? match[1] as SettingsCategory : null;
 }

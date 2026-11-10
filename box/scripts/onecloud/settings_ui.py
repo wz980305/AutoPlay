@@ -1,16 +1,17 @@
 """HTML for the box page, laid out and drawn as the CarPlay page's "AutoPlay 设置" panel (1.5.0).
 
 People arrive from that panel (连接 → 打开盒子网页) in the Tesla's browser (773x601 or 1256x706 CSS px at DPR 1.53), or
-from a phone. So the page is the panel's twin: a title bar with one button (back to the CarPlay picture, where the
-panel has 完成), the categories on the left with the chosen one filled in the tint, one column of grouped rows on
+from a phone. So the page is the panel's twin: a title bar with one button (返回, back to where the visit began - the
+panel or the waiting screen - where the panel itself has 完成; "CarPlay 画面" for a browser that came by itself), the
+categories on the left with the chosen one filled in the tint, one column of grouped rows on
 the right; under 760 px the categories become a row of buttons above it, as the panel does. Rows are the panel's
 (receiver/web/src/style.css): a white glyph on a coloured tile, the label, the value in grey, a chevron; no line of
 explanation under a row or a group unless it says what is happening right now. Sizes are the panel's too: one rem is
 clamp(20px, 2.78vmin, 24px), rows 3.6rem, tiles 2rem; phones keep iOS's 17 px.
 
-The panel is always dark; this page has both sets of colours and shows the one CarPlay shows: the CarPlay page links
-here with ?night=1 or 0 (the day/night it asks the iPhone for), a browser that came another way follows its own
-dark/light setting. The one element of its own is the connection chain (Wi-Fi - box - iPhone). Self-contained: no
+Panel and page have the same two sets of colours and show the one CarPlay shows: the CarPlay page links here with
+?night=1 or 0 (the day/night it asks the iPhone for, which also colours its panel), a browser that came another way
+follows its own dark/light setting. The one element of its own is the connection chain (Wi-Fi - box - iPhone). Self-contained: no
 web fonts or external files (the car may be offline).
 """
 import re
@@ -48,6 +49,8 @@ h1{font-size:1.6rem;line-height:1.3;font-weight:600;letter-spacing:normal;margin
 .done{flex:none;display:inline-flex;align-items:center;justify-content:center;min-height:var(--hit2);min-width:var(--hit);padding:var(--s1) var(--s3);
 border-radius:var(--radius);background:var(--cell);color:var(--label);font-weight:600;text-decoration:none;white-space:nowrap}
 .done:active{opacity:.5}
+/* The way out says where it leads: back, when the visit came from the CarPlay page (data-from, set by VISIT below). */
+.done .back,:root[data-from] .done .fwd{display:none} :root[data-from] .done .back{display:inline}
 
 /* Alerts: only states the owner can act on, and errors, under the title bar on every category (STATUS-MODEL.md). */
 .alerts{max-width:1440px;margin:0 auto;padding:var(--s3) max(var(--s4),env(safe-area-inset-right)) 0 max(var(--s4),env(safe-area-inset-left))}
@@ -172,23 +175,32 @@ label.cell{flex-direction:column;align-items:stretch;gap:.5rem} label.cell input
 # every page, and a test could "find" a sentence that only a comment said).
 CSS = re.sub(r"\n\s*\n+", "\n", re.sub(r"/\*.*?\*/", "", STYLE.replace("@LIGHT@", LIGHT).replace("@DARK@", DARK), flags=re.S))
 
-# Day or night as CarPlay has it (1.5.0). The CarPlay page links here with ?night=1 or 0: what its 夜间模式 asks the
-# iPhone for at that moment. This page takes those colours, keeps them for the visit (the tab's session storage: a
-# button's redirect and a page that reloads itself carry no query) and drops the query from the address, so a
-# bookmark or a reload does not pin yesterday's answer. After an hour without a new answer, or with none at all (a
-# phone that opened the page itself), the browser's own dark/light setting decides, as the style sheet has it. In the
-# head, before anything is drawn.
-THEME = ('(function(){var d=document.documentElement,n=Date.now(),m=/[?&]night=([01])(?=&|$)/.exec(location.search),v=m&&m[1]+n;'
-         'try{if(m){sessionStorage.setItem("autoplay-night",v);history.replaceState(null,"",location.pathname+'
-         'location.search.replace(/([?&])night=[01](&|$)/,function(a,b,c){return c?b:""})+location.hash)}'
-         'v=sessionStorage.getItem("autoplay-night")}catch(e){}'
-         'if(v&&n-v.slice(1)<36e5)d.setAttribute("data-theme",v.charAt(0)==="1"?"dark":"light")})()')
+# What the CarPlay page hands over with its link (1.5.0): ?night=1 or 0, what its 夜间模式 asks the iPhone for at that
+# moment, and from=panel or page, where the link was tapped (the settings panel or the waiting screen). This page
+# takes the colours, remembers both for the visit (the tab's session storage: a button's redirect and a page that
+# reloads itself carry no query) and drops them from the address, so a bookmark or a reload does not pin yesterday's
+# answer. After an hour without a new one, or with none at all (a phone that opened the page itself), the browser's
+# own dark/light setting decides, as the style sheet has it, and the title bar's button leads forward to the CarPlay
+# picture instead of back. In the head, before anything is drawn.
+VISIT = ('(function(){var d=document.documentElement,q=location.search,n=Date.now(),'
+         'a=/[?&]night=([01])(?=&|$)/.exec(q),f=/[?&]from=(panel|page)(?=&|$)/.exec(q),v=a?a[1]+"|"+(f?f[1]:"")+"|"+n:null;'
+         'try{if(a){sessionStorage.setItem("autoplay-visit",v);history.replaceState(null,"",location.pathname+'
+         'q.replace(/([?&])(night=[01]|from=(panel|page))(?=&|$)/g,function(m,s){return s==="?"?"?":""})'
+         '.replace(/^\\?&/,"?").replace(/^\\?$/,"")+location.hash)}'
+         'v=sessionStorage.getItem("autoplay-visit")}catch(e){}'
+         'v=v&&v.split("|");if(v&&n-v[2]<36e5){d.setAttribute("data-theme",v[0]==="1"?"dark":"light");'
+         'if(v[1])d.setAttribute("data-from",v[1])}})()')
 
-# Two conveniences; the page works without them. A row unfolded (details) near the bottom of a short window would open
-# below the fold: scroll it into view, whole when it fits, else from its title (toggle does not bubble, hence the
-# capture). And a category is chosen without adding to the browser's history, so "back" leaves the page instead of
-# walking through the categories looked at; the chosen one is also marked for a screen reader.
-SCRIPT = ('<script>(function(){document.addEventListener("toggle",function(e){var d=e.target;if(!d.open||d.tagName!=="DETAILS")return;'
+# Three conveniences; the page works without them. The way back is aimed (below). A row unfolded (details) near the
+# bottom of a short window would open below the fold: scroll it into view, whole when it fits, else from its title
+# (toggle does not bubble, hence the capture). And a category is chosen without adding to the browser's history, so
+# "back" leaves the page instead of walking through the categories looked at; the chosen one is also marked for a
+# screen reader.
+SCRIPT = ('<script>(function(){var out=document.querySelector("a.done.out");'
+          # A visit that began in the settings panel goes back to it (the CarPlay page opens the panel at 连接 for this
+          # fragment); one that began on the waiting screen, to the page as it is.
+          'if(out&&document.documentElement.getAttribute("data-from")==="panel")out.href=out.href.split("#")[0]+"#settings=connection";'
+          'document.addEventListener("toggle",function(e){var d=e.target;if(!d.open||d.tagName!=="DETAILS")return;'
           'var r=d.getBoundingClientRect();if(r.bottom<=innerHeight)return;'
           'd.scrollIntoView({block:r.height>innerHeight?"start":"end",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"})},true);'
           'var nav=document.querySelector(".nav");if(!nav)return;var links=nav.querySelectorAll("a");'
@@ -225,16 +237,20 @@ def url(address):
     return re.sub(r"(:\d+/?)$", r"<wbr>\1", escape(address))
 
 
-def page(title, body, refresh=False, done=None):
+def page(title, body, refresh=False, done=None, out=None):
     """The title bar and what is under it. refresh: True reloads every 3 s, a number every that many seconds;
-    done: (label, address) of the bar's one button."""
+    done: (label, address) of the bar's one button; out: instead of done, the CarPlay page's address - the button is
+    then the way out of the box page: 返回 for a visit that came from the CarPlay page (to the settings panel when it
+    began there, see SCRIPT), "CarPlay 画面" for a browser that came by itself."""
     body = keep_words(body)
     meta = f'<meta http-equiv=refresh content={3 if refresh is True else refresh}>' if refresh else ''
     button = f'<a class=done href="{escape(done[1])}">{escape(done[0])}</a>' if done else ''
+    if out:
+        button = f'<a class="done out" href="{escape(out)}"><span class=fwd>CarPlay 画面</span><span class=back>返回</span></a>'
     return (f'<!doctype html><html lang=zh-CN><head><meta charset=utf-8>'
             f'<meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
             f'<meta name=color-scheme content="light dark">{meta}'
-            f'<title>{escape(title)}</title><script>{THEME}</script><style>{CSS}</style></head>'
+            f'<title>{escape(title)}</title><script>{VISIT}</script><style>{CSS}</style></head>'
             f'<body><header><div><h1>{escape(title)}</h1>{button}</div></header>{body}{SCRIPT}</body></html>')
 
 
