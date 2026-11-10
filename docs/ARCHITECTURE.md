@@ -90,7 +90,7 @@ F50 不解码、不转码，只解密、重封装、再加密。每帧在 JVM �
 | `box-restarting` | 等盒子应答的轮询 | "盒子正在重启/更新，页面将自动刷新" + 已等待 | — |
 | `overheating` | 状态通道 thermal | "盒子过热，已降低画质 / 已暂停" | — |
 | `error` | `{title, action, detail}` | 标题 + 动作 ≥22px，64px 按钮，详情折叠 | 重试 / 关闭 |
-| `night`（修饰） | 夜间模式 | 界面变暗、隐藏二维码、可选画面遮罩 | 设置里切换 |
+| `night`（修饰） | 「夜间模式」此刻的结果（定时 18:30–06:30 / 跟随系统 / 始终白天 / 始终夜间） | CarPlay 的深浅色随之切换（`docs/TESLA.md` §5）；1.5.0 起等待画面、设置面板和盒子设置页也分日间、夜间两套颜色（§4.3），画面四周和画面上的提示始终深色 | 设置里切换 |
 
 0.1.0 已实现的：`recovering`（保留画面 + 遮罩 + 常驻提示）、`renegotiating`、`live-muted`（整宽底部解锁条，只在 AudioContext 挂起且确实收到页面要播的流时显示）、`connecting-box`/`box-unreachable`/`waiting-iphone`/`starting` 的提示语由 `src/status.ts` 按状态派生（含已等待秒数、盒子失联时隐藏"添加 iPhone"）、`unsupported` 的驾驶者可读双语检测页。还没有的：`busy`、`box-restarting`、`overheating`、`paused-by-box` 的显示，以及从盒子的 `status.json` 派生 `waiting-iphone` 的原因——这是下一步（ROADMAP 第 2–3 周）。`mic-blocked` 在特斯拉专属形态下不存在（不提供麦克风）。
 
@@ -115,6 +115,16 @@ F50 不解码、不转码，只解密、重封装、再加密。每帧在 JVM �
 
 `tools/f50/harden.sh` 装的 `autoplay-tune` 按同一个目录约定使用 `/var/run/autoplay/session` 作为会话标志；谁来写这个文件（`phone.state == live` 时）是 WP2 剩下的一小项。
 
+### 4.3 两张页面的日间/夜间与往返（1.5.0，ADR-20）
+
+投屏页按「夜间模式」算出此刻是日间还是夜间（`receiver/web/src/night.ts` 的 `isNight`），用在三处：告诉 CarPlay（`{type:'night'}`）；给自己的界面换色（`<html data-theme>`；等待画面在脚本运行之前就画出来，所以 `index.html` 头部有几行按同一规则先定好，`check-car.mjs` 把它和 `isNight` 逐种情况对照）；写进去盒子设置页的链接。
+
+- **去**：`http://<盒子>:18080/?night=1|0&from=panel|page`（`boxPageUrl`）。盒子设置页头部的脚本把这两项记进 `sessionStorage`（一小时内有效）并从地址里去掉，据此设 `data-theme` 和 `data-from`；服务器不读这两个参数。没有它们时（手机直接打开、书签）跟随浏览器的 `prefers-color-scheme`。
+- **回**：有 `data-from` 时标题栏的按钮是「返回」。从设置面板来的回到 `<投屏页地址>#settings=connection`，投屏页见到这个片段就打开面板的「连接」并把片段去掉（`panelFromHash`），再点「完成」回到 CarPlay；从等待画面来的回到等待画面；直接打开的没有可退回的地方，按钮是「CarPlay 画面」。投屏页地址取这台浏览器来时用的那一个（按请求的 `Host` 在 `entries` 里选）。
+- **颜色**：两边的日间、夜间配色是同一组值，各写在自己的样式表里（`receiver/web/src/style.css`、`box/scripts/onecloud/settings_ui.py`），盒子侧有一个测试逐项比较。
+
+盒子设置页的分类用地址里的 `#…` 和 CSS `:target` 切换，不依赖脚本。界面上的取舍见 `docs/UI-1.5.0.md`。
+
 ## 5. 存储布局
 
 | 路径 | 内容 | 介质 |
@@ -129,14 +139,16 @@ F50 不解码、不转码，只解密、重封装、再加密。每帧在 JVM �
 
 常量（不是配置）：LAN 100.96.0.1/24（uci-defaults `90-autoplay-tesla` 安装时写一次）、设置页 18080、联网检测常驻应答、音乐/导航播报/通话/Siri 全部走车载蓝牙（1.3.0 起没有开关）、第一个 5 GHz 热点交给 iPhone、名字 = 自己的域名（DuckDNS 或 DNSPod）或 `autoplay.lan`。
 
-## 6. 这份架构里还没有验证的假设（截至 1.4.0）
+## 6. 这份架构里还没有验证的假设（截至 1.5.0）
 
 已验证（2026-11-02，1.0.0）：WebCodecs → canvas 的画面、触摸回传、蓝牙 iAP2 引导、Let's Encrypt 证书在特斯拉浏览器里无警告、热点只在 149–165 信道可见。仍未验证：
 
 - 特斯拉**行驶中** canvas 不受 `<video>` 限制的波及（停车状态已看到画面；多个项目报告行车可用，无官方说明）。
 - 特斯拉浏览器的真实 Chromium 版本、UA、DPR、两种窗口形状的精确尺寸（探测页还没在车上跑，`docs/TESLA.md` §7）。
 - 画布不再持有焦点之后，浏览器被拉回时车机键盘是否还会出现（1.3.0，台架上无法复现）。
-- 车辆定位（1.4.0）：国行特斯拉浏览器坐标的坐标系（WGS-84 还是 GCJ-02，查不到，设置里停车对照一次指南针选定）；行驶中浏览器多久给一个新位置、导航时会不会冻住（冻住时盒子停发，iPhone 用自己的）。
+- 车辆定位（1.4.0）：行驶中浏览器多久给一个新位置、导航时会不会冻住（冻住时盒子停发，iPhone 用自己的）。坐标系有了一次实测（2026-11-10，国行 2022 款 Model 3、AMD 车机：GCJ-02），1.5.0 起默认「自动」（ADR-19）；别的车型、固件是否相同未知，不同时手动选。
+- 1.5.0 的日间/夜间配色和两张页面之间的往返（§4.3）在特斯拉浏览器里的表现：只在台式机的 Chromium 里按车机的窗口尺寸核对过；用到的 `sessionStorage`、`history.replaceState`、CSS `:target` 都是常规特性。
+- mu300-linux 系统更新后经 `mu300-user-packages keep` 装回 AutoPlay（1.5.0）：只对真实的发布用替身工具跑通，没有在真机上跑过（`docs/RELEASE.md`）。
 - HTTP 页面下主线程 `MediaStreamTrackProcessor` 是否可用（决定 C′ 档是否值得做，进而决定证书方案能否省掉）。
 - 方向盘按键是否交给网页（车载蓝牙模式下不需要）。
 - CPU0 深度睡眠、RPS、限频对延迟和温度的实际影响——全部是别的板子或推算的数字。

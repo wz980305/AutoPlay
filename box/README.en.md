@@ -26,7 +26,7 @@ The install script (uci-defaults `90-autoplay-tesla`) moves the LAN from `192.16
 2. The first time, open the settings page at `http://100.96.0.1:18080/`, tap "Add iPhone", tap the box's name in the iPhone's Settings → Bluetooth, and compare the six-digit code on both sides. Afterwards the iPhone is bootstrapped onto the hotspot over Bluetooth iAP2 whenever it comes near.
 3. Open `https://<your domain>:18443/` in the car's browser (a DuckDNS name or your own DNSPod-hosted domain; without one it is `https://autoplay.lan:18443/` with a certificate warning).
 
-The settings page shows the hotspot–box–iPhone chain, adds and removes iPhones, shows certificate expiry, offers a diagnostics download and a factory reset; `http://100.96.0.2/` from the car or a phone redirects to it. LuCI's Services → AutoPlay has four tabs: Network, iPhone, Own address (DuckDNS / DNSPod), Program update.
+The settings page (titled "AutoPlay 盒子") has looked like the CarPlay page's settings panel since 1.5.0, with four categories: *iPhone* (the hotspot–box–iPhone chain, adding and removing iPhones), *网络* (the Wi-Fi handed to the iPhone, the addresses the car opens, certificate expiry), *更新* (checking for and installing a new version) and *高级* (the box's temperature, a diagnostics download, a factory reset). Its colours follow CarPlay's day or night (`../docs/UI-1.5.0.md`). `http://100.96.0.2/` from the car or a phone redirects to it. LuCI's Services → AutoPlay has four tabs: Network, iPhone, Own address (DuckDNS / DNSPod), Program update.
 
 `/etc/config/autoplay` has eleven options: on/off, viewer port, idle-release seconds, DNS provider, DuckDNS name and token, own domain plus DNSPod ID and token, update check, update mirror. Sound has no option: every sound plays on the Tesla's Bluetooth (the `audio_route_navigation` key of 1.1.0–1.2.0 is removed on upgrade, `docs/AUDIO.md`). The network stays OpenWrt's.
 
@@ -67,7 +67,7 @@ python3 -m unittest discover -s tests/bluetooth     # test_bluez / test_recovery
 - `linux/bt-bridge/` the iAP2 RFCOMM bridge over BlueZ D-Bus ([README](linux/bt-bridge/README.md))
 - `scripts/build-bundle.sh` builds the bundle; `scripts/scan-sensitive.py` scans for personal and secret material before publishing
 - `docs/` trim log, status model, test baseline
-- `tools/render_settings_states.py` renders the settings page's eight states to static HTML (for `receiver/web/scripts/ui-shots.mjs`)
+- `tools/render_settings_states.py` renders the settings page's 13 states to static HTML (for `receiver/web/scripts/ui-shots.mjs`)
 
 ## License
 

@@ -45,7 +45,7 @@ AutoPlay 的决定（DECISIONS.md）：**保留跳转代码，默认关闭**。�
 
 ## 5. 深浅色
 
-iOS 27 用 `uiAppearanceUpdate` + `mapAppearanceUpdate`（`/info` 要声明 `enablesUIAppearance`/`enablesMapAppearance`），iOS 26 用 `setNightMode`；上游仍带着四个 DiPlay 的 `*AppearanceMode=0` 键把"自动"钉成了浅色（dashplay-tesla 分析 §三第 2 项）。特斯拉浏览器的 `prefers-color-scheme` 行为未知，探测页实时显示它。
+iOS 27 用 `uiAppearanceUpdate` + `mapAppearanceUpdate`（`/info` 要声明 `enablesUIAppearance`/`enablesMapAppearance`），iOS 26 用 `setNightMode`；上游仍带着四个 DiPlay 的 `*AppearanceMode=0` 键把"自动"钉成了浅色（dashplay-tesla 分析 §三第 2 项）。特斯拉浏览器的 `prefers-color-scheme` 行为未知，探测页实时显示它。1.5.0 起投屏页自己的界面（等待画面、设置面板）和盒子设置页也分日间、夜间，取「夜间模式」此刻的结果；四种模式里只有「跟随系统」用到 `prefers-color-scheme`，默认的「定时」（18:30–06:30）不依赖它。不经投屏页、直接打开盒子设置页时用的也是 `prefers-color-scheme`（`docs/UI-1.5.0.md`）。
 
 ## 6. 车上的设置清单
 

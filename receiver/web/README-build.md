@@ -38,17 +38,25 @@ copy with a symlink (node_modules/ is gitignored):
 mkdir -p node_modules && ln -sfn /opt/npm-tools/node_modules/typescript node_modules/typescript
 ```
 
-## Since then (1.1.0 / 1.2.0 / 1.3.0)
+## Since then (1.1.0 – 1.5.0)
 
 - `npm run build:offline` = `tsc --noEmit -p tsconfig.offline.json && node scripts/build-esbuild.mjs`.
-- `npm test` runs four scripts: `check.mjs`, `check-car.mjs`, `check-browser.mjs`, `check-runtime.mjs` (`check-audio.mjs` went with the page's audio in 1.3.0).
+- `npm test` runs five scripts: `check.mjs`, `check-car.mjs`, `check-browser.mjs`, `check-runtime.mjs` and, since 1.4.0, `check-location.mjs` (`check-audio.mjs` went with the page's audio in 1.3.0).
 - 1.1.0 deleted the MSE music path (`music-output.ts`, `aac-mp4.ts`); 1.3.0 deleted the rest of the page's audio (`audio.ts`, `audio-timing.ts`, the sound flags): `flags.ts` only has `TESLA` left (`../../docs/AUDIO.md`).
 - 1.2.0 added `src/picker.ts` (the in-page option sheet that replaces native `<select>` lists) and
   `scripts/ui-shots.mjs`, which screenshots the viewer and the box page at the Tesla browser's window shapes
   (needs `playwright-core` and a Chromium: `CHROME=/path/to/chromium node scripts/ui-shots.mjs out/ui-shots`;
   `../../docs/UI-1.2.0.md`, `../../docs/UI-1.3.0.md`). `scripts/benchmark-media.mjs` is the media micro-benchmark from 0.1.1.
-- Sizes are larger than the numbers below (`index.html` 12.7 KB, `style.css` 20 KB source); those are the
-  2026-10-26 snapshot.
+- 1.4.0 added `src/location.ts` (the car's position, once a second while the page is visible, to the box;
+  `../../docs/LOCATION.md`); 1.4.1 added `src/ask-box.ts` (deadlines on the page's requests to the box).
+- 1.5.0 gave the page's own screens day and night colours (`../../docs/UI-1.5.0.md`). `src/night.ts` decides which
+  (`isNight`) and builds the link to the box page (`boxPageUrl`; `panelFromHash` reads the way back). A few inline
+  lines in the `<head>` of `index.html` apply the same rule before the bundle runs, and `check-car.mjs` runs them
+  against `isNight()`. The day palette is the `:root[data-theme=light]` block in `src/style.css`; a test in
+  `box/tests/onecloud` compares it value by value with the box page's. `ui-shots.mjs` takes both pages by night and
+  by day; `BOX_STATES=<dir>` points it at the box page's rendered states.
+- Sizes are larger than the numbers below (`index.html` 14.5 KB, `style.css` 20.4 KB source as of 1.5.0); those are
+  the 2026-10-26 snapshot.
 
 ## State at the end of the trim (2026-10-26, branch `receiver-trim`)
 

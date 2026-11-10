@@ -23,7 +23,7 @@ cd receiver
 ./gradlew :server:installDist   # server/build/install/server/{bin,lib} → /opt/autoplay/playport/lib on the box
 ```
 
-The viewer page is built separately (`web/README-build.md`): `npm ci && npm run build`, or `npm run build:offline` with a preinstalled esbuild; `npm test` runs its four check scripts.
+The viewer page is built separately (`web/README-build.md`): `npm ci && npm run build`, or `npm run build:offline` with a preinstalled esbuild; `npm test` runs its five check scripts.
 
 ## Running
 
@@ -65,7 +65,7 @@ docs/       TRIM-LOG.md, UNVERIFIED-KOTLIN.md
 
 ## Status
 
-1.0.0 ran in a 2022 Tesla Model 3 (AMD MCU) with an iPhone 15 Pro on iOS 27.2 on 2026-11-02. The receiver runs on Linux/JVM only; the macOS support of upstream PlayPort was removed. Kotlin changes since then are uncompiled (`docs/UNVERIFIED-KOTLIN.md`).
+1.0.0 ran in a 2022 Tesla Model 3 (AMD MCU) with an iPhone 15 Pro on iOS 27.2 on 2026-11-02. The receiver runs on Linux/JVM only; the macOS support of upstream PlayPort was removed. Since 1.3.1 every push is compiled and tested on GitHub Actions (JDK 21); the Kotlin written without a compiler between 1.1.0 and 1.3.0 passed there on the first run, and `docs/UNVERIFIED-KOTLIN.md` is kept as the record.
 
 ## Identity, license, credits
 

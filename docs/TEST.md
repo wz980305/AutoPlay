@@ -19,7 +19,7 @@ cd box && python3 -m unittest discover -s tests/onecloud        # 269 个（1.5.
 cd box && python3 -m unittest discover -s tests/bluetooth       # 没有 dbus-next 时那两个模块报 import 错误，是环境问题
 ```
 
-测试身份全是合成数据。裁剪前后的基线在 `box/docs/TEST-BASELINE.md`（375 → 225 是删掉的 Debian/N1/有线/STA 测试减去新模块的测试；1.2.0 为 263，删除上游刷机脚本及其 4 个测试文件后为 238，1.3.0 起仍为 238，1.4.0 为 239，1.4.1 为 243，1.4.2 为 249，1.4.3 为 256，1.5.0 为 261）。
+测试身份全是合成数据。裁剪前后的基线在 `box/docs/TEST-BASELINE.md`（375 → 225 是删掉的 Debian/N1/有线/STA 测试减去新模块的测试；1.2.0 为 263，删除上游刷机脚本及其 4 个测试文件后为 238，1.3.0 起仍为 238，1.4.0 为 239，1.4.1 为 243，1.4.2 为 249，1.4.3 为 256，1.5.0 为 269）。
 
 ### 投屏页（无浏览器）
 

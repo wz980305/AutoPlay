@@ -61,7 +61,7 @@
 cd receiver/web && npm run build:offline && npm test
 python3 ../../box/tools/render_settings_states.py out/box-states          # 13 个状态
 CHROME=/path/to/chromium node scripts/ui-shots.mjs out/ui-1.5.0 box       # 5 形状 × 16 张，窗口和手机两种形状各拍夜间、日间
-cd ../../box && python3 -m unittest discover -s tests/onecloud             # 268
+cd ../../box && python3 -m unittest discover -s tests/onecloud             # 269
 ```
 
 `ui-shots.mjs` 按面板链接的方式打开盒子网页的每一张（`?night=1|0&from=panel`），并把浏览器自己的偏好设成相反的，颜色取错了一眼可见；它同时核对有无横向溢出、查询串是否已从地址中去掉。投屏页那一半固定在「始终夜间」拍原来的一套，另在窗口和无边框两种形状下以「始终白天」拍等待画面、面板、弹层和面板里的提示，最后在弹层里选「始终夜间」确认当场变深。台架上量到的：773 × 601 下标题 32 px、行标签 24 px、行高 72 px、分类 220 × 72 px，与面板相同。另用真实的页面服务（假状态）在浏览器里点过一遍：切换分类不增加历史记录、切换后回到页顶、检查更新期间自动刷新留在「更新」、邀请的结果出现在 iPhone 分组下、进出恢复出厂设置颜色不变。整个来回也走过：面板「连接」→ 打开盒子网页（按钮是「返回」，按过别的按钮后仍是）→ 返回（面板开在「连接」，地址里没有片段）→ 完成 → 刷新（没有面板）；从等待画面进来再返回（没有面板）；夜间一遍；不带参数直接打开（按钮是「CarPlay 画面」）。
