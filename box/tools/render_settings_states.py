@@ -1,12 +1,14 @@
-"""Render the box settings page (settings_page.SettingsPage) in its states as static HTML, for screenshots and eyeballing.
+"""Render the box page (settings_page.SettingsPage) in its states as static HTML, for screenshots and eyeballing.
 
     python3 box/tools/render_settings_states.py <output dir>
 
-Writes box-<state>.html for: fresh (no identity, certificate waiting for a route), live (two phones, one in use),
-live-open (a phone's row unfolded), pair-waiting, pair-confirm (passkey), bt-failed, ask-remove and ask-install (the
-1.2.0 confirmation screens), and since 1.4.1 checking (a check from the button running in place), invited (an action's
-result as the iPhone group's footer) and up-to-date. receiver/web/scripts/ui-shots.mjs photographs them at the Tesla window shapes.
-No device, D-Bus or network is touched: the page is given fake status and pairing data.
+Writes box-<state>.html for: fresh (no identity, no iPhone yet), live (two phones, one in use), live-open (a phone's
+row unfolded), pair-waiting, pair-confirm (passkey), bt-failed, ask-remove and ask-install (the confirmation
+screens), checking (a check from the button running in place), invited (an action's result as the iPhone group's
+footer), hot (slowed for heat), available (an update to install) and reset (the factory-reset page). Since 1.5.0 the
+page has categories: open a file with #net, #update or #more for the other three, and with ?night=1 or ?night=0 for
+the colours the CarPlay page would hand over. receiver/web/scripts/ui-shots.mjs photographs them at the Tesla window
+shapes. No device, D-Bus or network is touched: the page is given fake status and pairing data.
 """
 import json
 import sys
@@ -28,6 +30,7 @@ root = Path(tmp.name)
 state = root / "state"
 (state / "receiver").mkdir(parents=True)
 (root / "identity/offline-mfi").mkdir(parents=True)
+(root / "version.txt").write_text("1.5.0\n")   # what a release build carries (update.bundled_version)
 
 BASE = dict(mode="openwrt", ssid="AutoPlay-5G", home="http://100.96.0.1:18080/", identity=True,
             entries=["https://car.example.com:18443/", "https://100.96.0.1:18443/"], name="car.example.com",
@@ -55,17 +58,18 @@ def make(fields, devices=None, presence=None, pair=None, cert=None, query="", up
         check.write_text(json.dumps(update_check))
     try:
         with patch.object(own_domain, "message", lambda s, n: "证书有效期至 2027-01-28"):
-            return page.render(query)
+            return page.render_reset() if query == "reset" else page.render(query, "car.example.com:18080")
     finally:
         if update_check is not None:
             check.unlink()
 
 
 def unfold(html, index):
-    """Open the index-th <details> of a rendered page (a phone's actions)."""
+    """Open the index-th <details> of a rendered page (the actions of a phone that is not in use)."""
     at = -1
     for _ in range(index + 1):
         at = html.find("<details>", at + 1)
+        assert at >= 0, "no such row to unfold"
     return html[:at] + "<details open>" + html[at + len("<details>"):]
 
 
@@ -91,13 +95,19 @@ ONE = {"02:00:00:00:00:01": "小王的 iPhone"}
 states["checking"] = make({}, devices=ONE, presence={"active": "02:00:00:00:00:01"}, cert=LIVE, checking=True)
 states["invited"] = make({}, devices=PHONES, presence={"last_phone": "02:00:00:00:00:02"}, cert=LIVE,
                          query="m=" + "已邀请，1 分钟内有效。请保持 iPhone 的蓝牙打开。" + "&at=phones",
-                         update_check={"available": False, "online": True, "latest": "1.4.1", "current": "1.4.1",
+                         update_check={"available": False, "online": True, "latest": "1.5.0", "current": "1.5.0",
                                        "checked_at": 1_793_500_000})
 states["live-open"] = unfold(make({}, devices=PHONES, presence={"active": "02:00:00:00:00:01", "last_phone": "02:00:00:00:00:02"},
-                                  cert=LIVE), 1)
+                                  cert=LIVE), 0)
 # 1.5.0: the box in a parked car in the sun, the kernel holding the processor back.
 states["hot"] = make({}, devices=ONE, presence={"active": "02:00:00:00:00:01"}, cert=LIVE,
                      thermal=({"soc": 74, "nr": 61, "chg": 52}, {"cpufreq-0": "2/9", "cpufreq-1": "3/9"}))
+NOTES = ("车辆定位的坐标系新增「自动」并设为默认：在中国大陆自动按 GCJ-02 换算。盒子网页重新排版，和投屏页的\n"
+         "「AutoPlay 设置」一个样子；过热降速时提醒。\n\n- 细节……")
+states["available"] = make({}, devices=PHONES, presence={"last_phone": "02:00:00:00:00:02"}, cert=LIVE,
+                           update_check={"available": True, "online": True, "latest": "1.5.1", "current": "1.5.0",
+                                         "checked_at": 1_793_500_000, "notes": NOTES})
+states["reset"] = make({}, query="reset")
 for name, html in states.items():
     (OUT / f"box-{name}.html").write_text(html)
     print(f"wrote {OUT / f'box-{name}.html'} ({len(html)} bytes)")

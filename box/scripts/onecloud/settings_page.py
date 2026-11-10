@@ -1,10 +1,11 @@
-"""Plain-HTTP settings page on the settings port (18080): iPhones, status, program update, diagnostics.
+"""The box page on the settings port (18080, plain HTTP): iPhones, status, program update, diagnostics.
 
 The router (OpenWrt, LuCI) owns the network and the uci settings; this page adds and removes iPhones, shows
 what the box is doing and starts an update. It is also the always-up page while the receiver is not (identity
 missing, Wi-Fi waiting, Bluetooth down), and in Tesla mode the responder for the car's connectivity checks
 (tesla_checks.py, behind tesla_openwrt's port-80 redirect). Only clients on the Wi-Fi handed to the iPhone may
-use it. Markup lives in settings_ui.py; this module holds the behaviour.
+use it. Markup lives in settings_ui.py; this module holds the behaviour. Since 1.5.0 the page is laid out as the
+CarPlay page's "AutoPlay 设置" panel: categories (iPhone, 网络, 更新, 高级) and one column of groups.
 
 The Debian first-run wizard, hotspot/car/internet forms, remote debugging and DuckDNS form of DashPlay are gone
 (code_inventory_trimming.md 2.2): the F50 is the only target.
@@ -73,6 +74,10 @@ def host_allowed(host, allowed_networks, names=()):
         return False
     return address.is_loopback or address == state_files.SHARED_LAN.ip or any(address in net for net in allowed_networks)
 
+
+TITLE = "AutoPlay 盒子"   # what the CarPlay page's link calls it (打开盒子网页); "AutoPlay 设置" is that page's own panel
+# Which category a button's answer is shown on: the redirect after a POST carries it as the address's fragment.
+PANE_AFTER = {"/update": "#update"}
 
 # The longest a check started from the page shows as running (update.check tries GitHub, then the mirror).
 CHECK_SHOWN_FOR = 90
@@ -153,7 +158,7 @@ class SettingsPage:
                     return self._send(200, page.render_reset())
                 if self.path.split("?")[0] != "/":
                     return self._send(404, "not found")
-                self._send(200, page.render(self.path.partition("?")[2]))
+                self._send(200, page.render(self.path.partition("?")[2], self.headers.get("Host", "")))
 
             def do_POST(self):
                 if not self._allowed():
@@ -181,7 +186,7 @@ class SettingsPage:
                     result = "错误：" + str(error)
                 # A message shows as a banner; a dict asks the page for a confirmation screen (ask=...).
                 params = result if isinstance(result, dict) else {"m": result}
-                self._send(303, "", extra={"Location": "/?" + urllib.parse.urlencode(params)})
+                self._send(303, "", extra={"Location": "/?" + urllib.parse.urlencode(params) + PANE_AFTER.get(self.path, "")})
 
         self.server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
         threading.Thread(target=self.server.serve_forever, name="settings-page", daemon=True).start()
@@ -317,7 +322,8 @@ class SettingsPage:
         """Program update (update.py), as iOS's Software Update: this box's version, what the last check found, the
         buttons. A check from the button runs in place ("checking", the page refreshing) instead of a banner asking
         to reload (1.4.1). The update itself runs apart from this service, which it restarts.
-        Returns (cells, footer)."""
+        Returns (cells, footer). The footer speaks only while something is happening or was refused (1.5.0: the
+        standing line "每天自动检查一次，不会自动安装。" is gone, as every line of that kind on the CarPlay page's panel)."""
         found = update.read(self.state / "update-check.json")
         progress = update.read(self.state / "update-status.json")
         if update.running(self.state.parent):
@@ -325,14 +331,15 @@ class SettingsPage:
                     f'<span>{escape(progress.get("message", ""))}</span></span></div>',
                     "约 2–5 分钟，期间 CarPlay 断开；页面会自己刷新。")
         version = update.bundled_version(self.state.parent)
-        cells = (f'<div class=cell>{ui.tile("gray", "box")}<span class=main><b>本机程序</b></span>'
-                 f'<span class=value>{escape(version)}</span></div>' if version else "")
-        foot = escape(note) if note else "每天自动检查一次，不会自动安装。"
+        mine = (f'<div class=cell>{ui.tile("gray", "box")}<span class=main><b>本机程序</b></span>'
+                f'<span class=value>{escape(version)}</span></div>' if version else "")
+        foot = escape(note)
         check = (f'<form method=post action=/update>{ui.hidden(nonce)}<button class="cell action" name=action '
                  'value=check>检查更新</button></form>')
         if self.check_running():
-            return cells + ('<div class=cell aria-busy=true><span class=spin></span><span class=main><b>正在检查更新…</b>'
-                            '</span></div>'), foot
+            return mine + ('<div class=cell aria-busy=true><span class=spin></span><span class=main><b>正在检查更新…</b>'
+                           '</span></div>'), foot
+        cells = ""
         # A failure no longer matters once a later check finds the box up to date (updated by hand, say).
         settled = progress.get("phase") == "failed" and found.get("latest") and not found.get("available") \
             and not found.get("error") and found.get("checked_at", 0) > progress.get("at", 0)
@@ -342,37 +349,48 @@ class SettingsPage:
                       f'<span class=main><b>{"上次升级" if done else "上次升级没有完成"}</b>'
                       f'<span>{escape(progress.get("message", ""))}</span></span></div>')
         if found.get("error"):
-            cells += (f'<div class=cell>{ui.tile("orange", "alert")}<span class=main><b>检查更新没有成功</b>'
-                      f'<span>{escape(found["error"])}</span></span></div>')
+            cells = mine + cells + (f'<div class=cell>{ui.tile("orange", "alert")}<span class=main><b>检查更新没有成功</b>'
+                                    f'<span>{escape(found["error"])}</span></span></div>')
         elif found.get("available"):
             notes = escape(release_summary(found.get("notes", ""))).replace("\n", "<br>")
             more = f"https://github.com/{update.OWNER}/{update.REPO}/releases/tag/v{found['latest']}"
-            # The notes get the row's whole width, "当前" its own line above them (as iOS's Software Update); of a
-            # page-long CHANGELOG section only the opening paragraph, four lines at most, the rest a tap away (1.4.1).
-            cells += (f'<div class=cell>{ui.tile("red", "download")}<span class=main><b>有新版本 {escape(found["latest"])}</b>'
-                      f'<span>当前 {escape(found.get("current") or "较旧版本")}</span>'
-                      f'{f"<span class=clamp>{notes}</span>" if notes else ""}'
-                      f'<span><a class=more href="{escape(more)}">完整更新说明</a></span></span></div>')
+            # This box's version is the row above; of a page-long CHANGELOG section only the opening paragraph, four
+            # lines at most, the rest a tap away (1.4.1).
+            current = mine or (f'<div class=cell>{ui.tile("gray", "box")}<span class=main><b>本机程序</b></span>'
+                               f'<span class=value>{escape(found["current"])}</span></div>' if found.get("current") else "")
+            cells = current + cells + (
+                f'<div class="cell tall">{ui.tile("red", "download")}<span class=main><b>有新版本 {escape(found["latest"])}</b>'
+                f'{f"<span class=clamp>{notes}</span>" if notes else ""}'
+                f'<span><a class=more href="{escape(more)}">完整更新说明</a></span></span></div>')
             if found.get("online"):
                 cells += (f'<form method=post action=/update>{ui.hidden(nonce)}<button class="cell action" name=action '
                           'value=install>立即升级</button></form>')
             else:
-                foot = f'{escape(found.get("reason") or "这一版改了系统")}，需要按发布说明手动升级。'
+                foot = foot or f'{escape(found.get("reason") or "这一版改了系统")}，需要按发布说明手动升级。'
         elif found.get("latest"):
+            # One row says both: this box's version and that there is none newer.
             cells += (f'<div class=cell>{ui.tile("green", "check")}<span class=main><b>已是最新</b></span>'
-                      f'<span class=value>{escape(found["latest"])}</span></div>')
-        # No "last checked" / "never checked" line under the button (1.3.2): the result cells above say what matters.
+                      f'<span class=value>{escape(version or found["latest"])}</span></div>')
+        else:
+            cells = mine + cells
         return cells + check, foot
 
     def ddns_block(self):
-        """The own DuckDNS name: LuCI sets it; this page only tells how it is going."""
+        """The own DuckDNS name: LuCI sets it; this page only tells how it is going. Two rows: the name, and its
+        certificate - a date when there is one, otherwise what is happening, in the row's second line."""
         name = self.status().get("own_name")
         if not name:
             return ""
-        # The name is the row's label, its certificate the line under it (1.4.1): as label + value + line the three
-        # fought for a phone's width and the name was cut to "car.example.c…".
-        return (f'<div class=cell>{ui.tile("blue", "globe")}<span class=main><b>{escape(name)}</b>'
-                f'<span>{escape(own_domain.message(self.state, name))}</span></span></div>')
+        line = own_domain.message(self.state, name)
+        valid = re.fullmatch(r"证书有效期至 (\d{4}-\d\d-\d\d)", line)
+        if valid:
+            certificate = (f'<div class=cell>{ui.tile("green", "lock")}<span class=main><b>证书</b></span>'
+                           f'<span class=value>至 {valid.group(1)}</span></div>')
+        else:
+            certificate = (f'<div class=cell>{ui.tile("orange", "lock")}<span class=main><b>证书</b>'
+                           f'<span>{escape(line)}</span></span></div>')
+        return (f'<div class=cell>{ui.tile("blue", "globe")}<span class=main><b>{escape(name)}</b></span></div>'
+                + certificate)
 
     def phone_node(self, devices, active, phase):
         if active and active in devices:
@@ -401,7 +419,7 @@ class SettingsPage:
 
     def phones_block(self, nonce, note=""):
         """The pairing flow while it runs (its own screen); otherwise the iPhone group: the phones, then "添加 iPhone" as
-        the group's last row, and one footer line saying what is going on. Returns (html, refresh, devices)."""
+        the group's last row, and a footer line only while something is going on. Returns (html, refresh, devices)."""
         pair = self.pairing.status()
         panel, refresh = ui.pairing_panel(pair, nonce)
         presence = self.pairing.presence()
@@ -420,22 +438,23 @@ class SettingsPage:
             foot = "蓝牙就绪后才能添加或接入 iPhone。"
         elif connecting:
             foot = "配对完成，iPhone 正在连上 Wi-Fi 并打开 CarPlay。"
-        elif note:
-            foot = note
-        elif devices:
-            # Pairing is done on another screen (the head unit): the iPhone stays on its Bluetooth page (S5).
-            foot = "添加 iPhone 时，请在车机或另一台设备上操作。"
         else:
-            foot = "配对一次后，iPhone 连上这个 Wi-Fi 就会自动接入。"
+            # Nothing going on: no line (1.5.0). The steps of adding an iPhone are on the screen that adds it.
+            foot = note
         return ui.group("iPhone", rows + add, escape(foot)), connecting, devices
 
-    def entries_block(self, status, refresh):
-        entries = "".join(f'<div class=cell>{ui.tile("green", "screen")}<span class=main><b>{ui.url(u)}</b></span></div>'
-                          for u in status.get("entries", []) if u.startswith("https"))
-        if not entries or refresh:
+    def entries(self, status, host=""):
+        """The CarPlay page's addresses, the one on the name this browser used for this page first: it is where the
+        title bar's button leads, and the page its settings are kept under."""
+        found = [u for u in status.get("entries", []) if u.startswith("https")]
+        name = (host or "").rsplit(":", 1)[0].strip("[]").lower()
+        return sorted(found, key=lambda u: (urllib.parse.urlsplit(u).hostname or "").lower() != name)
+
+    def entries_block(self, entries):
+        if not entries:
             return ""
-        foot = f"车机连上「{escape(status.get('ssid', ''))}」后，在浏览器打开上面的地址。"
-        return ui.group("CarPlay 画面", entries, foot)
+        return ui.group("在车机浏览器打开", "".join(
+            f'<div class=cell>{ui.tile("green", "screen")}<span class=main><b>{ui.url(u)}</b></span></div>' for u in entries))
 
     def network_block(self):
         status = self.status()
@@ -445,9 +464,9 @@ class SettingsPage:
             host = urllib.parse.urlsplit(status.get("home", "")).hostname
             admin = f"http://{host}{admin}" if host else admin
         # No line under the link (1.4.1): AutoPlay follows whatever is changed there by itself.
-        return (f'<div class=cell>{ui.tile("blue", "wifi")}<span class=main><b>交给 iPhone 的 Wi-Fi</b></span>'
+        return (f'<div class=cell>{ui.tile("blue", "wifi")}<span class=main><b>名称</b></span>'
                 f'<span class=value>{escape(status.get("ssid", "") or "等待 Wi-Fi")}</span></div>'
-                f'<a class=cell href="{escape(admin)}">{ui.tile("gray", "settings")}<span class=main><b>在 OpenWrt 后台设置 Wi-Fi</b>'
+                f'<a class=cell href="{escape(admin)}">{ui.tile("gray", "settings")}<span class=main><b>在 OpenWrt 后台设置</b>'
                 '</span><span class=chev></span></a>')
 
     def notices(self):
@@ -517,7 +536,7 @@ class SettingsPage:
             if not name:
                 return None
             return (f'<p class=group-title>从盒子上删除这部 iPhone？</p>'
-                    f'<div class=group><div class=cell><span class=main><b>{escape(name)}</b>'
+                    f'<div class=group><div class=cell>{ui.tile("gray", "phone")}<span class=main><b>{escape(name)}</b>'
                     f'<span>蓝牙 …{escape(phone[-5:])}</span></span></div></div>'
                     f'<form method=post action=/pair>{ui.hidden(nonce, phone=phone, confirmed="1")}<div class=pair>'
                     '<a class="btn plain" href="/">取消</a>'
@@ -528,14 +547,15 @@ class SettingsPage:
             if not found.get("available") or not found.get("online"):
                 return None
             return (f'<p class=group-title>现在升级到 {escape(found.get("latest", ""))}？</p>'
-                    '<div class=group><div class=cell><span class=main><b>约 2–5 分钟，期间 CarPlay 会断开</b>'
+                    f'<div class=group><div class=cell>{ui.tile("red", "download")}<span class=main><b>约 2–5 分钟，期间 CarPlay 会断开</b>'
                     '<span>会先备份配对和设置；新版本起不来会自动退回。</span></span></div></div>'
                     f'<form method=post action=/update>{ui.hidden(nonce, confirmed="1")}<div class=pair>'
-                    '<a class="btn plain" href="/">取消</a>'
+                    '<a class="btn plain" href="/#update">取消</a>'
                     '<button class=btn name=action value=install>立即升级</button></div></form>')
         return None
 
-    def render(self, query):
+    def render(self, query, host=""):
+        """host: the request's Host header, which says under which of its names this browser knows the box."""
         params = urllib.parse.parse_qs(query)
         message, at = params.get("m", [""])[0], params.get("at", [""])[0]
         # An action's result is said in its own group (at=phones / at=update); only an error, or a result with no
@@ -547,56 +567,56 @@ class SettingsPage:
         if ask:
             screen = self.confirm_screen(ask, params, nonce)
             if screen:
-                return ui.page("AutoPlay 设置", f'<h1 class=span>AutoPlay 设置</h1>{notice}<div class=span>{screen}</div>', wide=True)
+                return ui.page(TITLE, ui.flow(notice + screen))
         status = self.status()
         block, refresh, devices = self.phones_block(nonce, message if placed and at == "phones" else "")
+        if refresh:
+            # Pairing in progress (1.2.0): the passkey and its buttons are the whole page. In the Tesla's windowed
+            # browser (773x601 CSS px) they sat below the Wi-Fi group, off the screen. No categories and no chain
+            # here: the panel says itself what is happening.
+            return ui.page(TITLE, ui.flow(notice + block), refresh)
         presence = self.pairing.presence()
         phase = self.pairing.status().get("phase", "closed")
+        entries = self.entries(status, host)
         reach = self.ddns_block()
         hottest, slowed = self.heat()
         heat = "" if hottest is None else (
             f'<div class=cell>{ui.tile("orange" if slowed else "gray", "heat")}<span class=main><b>盒子温度</b>'
             + ("<span>过热，正在降速</span>" if slowed else "") + f'</span><span class=value>{hottest} °C</span></div>')
         advanced = (heat + f'<a class=cell href="/diag.txt">{ui.tile("gray", "doc")}<span class=main><b>下载诊断记录</b></span>'
-                    '<span class=chev></span></a><a class="cell destructive" href="/reset">恢复出厂设置…</a>')
-        intro = ui.other_screen(self.home()) if not devices and not refresh else ""
-        if refresh:
-            # Pairing in progress (1.2.0): the passkey and its buttons are the whole page, right under the chain. In
-            # the Tesla's windowed browser (773x601 CSS px) they sat below the Wi-Fi group, off the screen, and the
-            # panel's own title nested inside an "iPhone" card.
-            # No chain here: its 250 px would push the passkey's buttons off a 601 px window; the panel says itself
-            # what is happening ("正在添加" is the chain's only news during pairing).
-            body = f'<h1 class=span>AutoPlay 设置</h1>{notice}<div class=span>{block}</div>'
-            return ui.page("AutoPlay 设置", body, refresh, wide=True)
+                    f'<span class=chev></span></a><a class=cell href="/reset">{ui.tile("red", "reset")}<span class=main>'
+                    '<b>恢复出厂设置</b></span><span class=chev></span></a>')
         updates, update_foot = self.update_block(nonce, message if placed and at == "update" else "")
-        # Two columns from 1100 CSS px (the Tesla's borderless window): what is used every day on the left (the
-        # address to open, the iPhones), the network and the box's upkeep on the right, so neither runs far below
-        # the other (1.4.1: the left had three groups and the right half its height). One column in the same order.
-        body = (f'<h1 class=span>AutoPlay 设置</h1>{notice}{self.chain(devices, presence, phase)}<div>'
-                + self.entries_block(status, refresh)
-                + intro + block + '</div><div>'
-                + ui.group("网络", self.network_block())
-                + (ui.group("自己的网址", reach) if reach else "")
-                + ui.group("程序更新", updates, update_foot)
-                + ui.group("高级", advanced)
-                + '</div>')
+        # The categories of the CarPlay page's panel, for the box (1.5.0): what is used every day first (the chain and
+        # the iPhones), then the network, the program's update, and what is rarely needed. One column in every window,
+        # so no group stands beside an empty half (until 1.4.3 two columns, the right one twice the left's height).
+        panes = {
+            "iphone": self.chain(devices, presence, phase) + block + ("" if devices else ui.other_screen(self.home())),
+            "net": (ui.group("交给 iPhone 的 Wi-Fi", self.network_block()) + self.entries_block(entries)
+                    + (ui.group("自己的网址", reach) if reach else "")),
+            "update": ui.group("程序更新", updates, update_foot),
+            "more": ui.group("高级", advanced),
+        }
+        found = update.read(self.state / "update-check.json")
+        marked = ("update",) if found.get("available") and not found.get("error") else ()
         # An upgrade reloads every 3 s; a check from the button every 2 s until its result is in.
         refresh = True if update.running(self.state.parent) else 2 if self.check_running() else False
-        return ui.page("AutoPlay 设置", body, refresh, wide=True)
+        # The bar's button is the panel's 完成 for this page: back to the CarPlay picture.
+        done = ("CarPlay 画面", entries[0]) if entries else None
+        return ui.page(TITLE, ui.alerts(notice) + ui.layout(panes, marked), refresh, done)
 
     def render_reset(self):
         """The factory-reset page: what goes, two typed confirmations (no JS confirm() to bypass)."""
         nonce = self.pairing.nonce
-        body = (f'<a class=back href="/">‹ AutoPlay 设置</a><h1>恢复出厂设置</h1>'
-                '<p class=sub>删除这台盒子上所有属于你的数据，然后以出厂状态重新启动。</p>'
+        body = ('<p class=sub>删除这台盒子上所有属于你的数据，然后以出厂状态重新启动。</p>'
                 + ui.group("会被删除", '<div class=cell><span class=main><b>已添加的 iPhone</b><span>蓝牙配对、CarPlay 配对记录、上次使用的记录</span></span></div>'
                            '<div class=cell><span class=main><b>证书与密钥</b><span>正式证书、DuckDNS 申请账户、网页访问令牌</span></span></div>'
                            '<div class=cell><span class=main><b>设置与记录</b><span>自己的网址、画面端口、诊断记录和日志；OpenWrt 的 Wi-Fi 不变</span></span></div>')
                 + f'<form method=post action=/reset>{ui.hidden(nonce)}'
                 + ui.group("确认", f'<label class=cell><span class=main><b>输入「{factory_reset.RESET_CONFIRMATION}」</b></span>'
-                           '<input type=text name=confirm autocomplete=off autocapitalize=off style="text-align:right" required></label>'
-                           f'<label class=cell><span class=main><b>同时删除 CarPlay 认证文件</b><span>只有在转让或出售盒子时才需要；输入「{factory_reset.IDENTITY_CONFIRMATION}」</span></span>'
-                           '<input type=text name=identity autocomplete=off autocapitalize=off style="text-align:right"></label>',
+                           '<input type=text name=confirm autocomplete=off autocapitalize=off placeholder="在此输入" required></label>'
+                           f'<label class=cell><span class=main><b>同时删除认证文件</b><span>只有在转让或出售盒子时才需要；输入「{factory_reset.IDENTITY_CONFIRMATION}」</span></span>'
+                           '<input type=text name=identity autocomplete=off autocapitalize=off placeholder="可不填"></label>',
                            "不删认证文件的话，重置后只需重新添加 iPhone。")
                 + '<button class="btn destructive">恢复出厂设置</button></form>')
-        return ui.page("恢复出厂设置", body)
+        return ui.page("恢复出厂设置", ui.flow(body), done=("取消", "/#more"))

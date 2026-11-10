@@ -7,7 +7,7 @@ import { suggestedResolution, windowResolution, areaSize, sameStream, frameRateC
 import { TESLA } from './flags';
 import { statusHint } from './status';
 import { t, language, setLanguage, type Key } from './i18n';
-import { isNight, parseNightMode } from './night';
+import { boxPageUrl, isNight, parseNightMode } from './night';
 import { reachable, TESLA_HOPS } from './tesla-fullscreen';
 import { hudLines } from './debug-hud';
 import { compatDisplayOn } from './compat-display';
@@ -68,11 +68,15 @@ nightSelect.value = parseNightMode(localStorage.getItem('f50-night-mode'));
 const darkQuery = matchMedia('(prefers-color-scheme: dark)');
 let sentNight: boolean | null = null;
 
-/** Box settings page (pairing, hotspot), when the device startup announced one: same host, plain HTTP. */
+/** Box page (pairing, network, update), when the device startup announced one: same host, plain HTTP. The link
+ *  carries the day/night this page asks CarPlay for, read again at the tap (a schedule may have turned since the page
+ *  was drawn), so the box page shows the colours CarPlay does (1.5.0). */
 const boxPort = Number((window as unknown as { playportBoxSettingsPort?: number }).playportBoxSettingsPort) || 0;
+const nightNow = () => isNight(parseNightMode(nightSelect.value), new Date(), darkQuery.matches);
 if (boxPort) for (const id of ['box-link', 'box-link-panel']) {
   const link = el<HTMLAnchorElement>(id);
-  link.href = `http://${location.hostname}${boxPort === 80 ? '' : `:${boxPort}`}/`;
+  const aim = () => { link.href = boxPageUrl(location.hostname, boxPort, nightNow()); };
+  aim(); link.addEventListener('click', aim);
   link.hidden = false;
 }
 function render() {
@@ -183,7 +187,7 @@ const input = new InputController(canvas, send); input.attach();
 /** Sends CarPlay day/night only on change; a new session (sentNight reset) always gets the current value. */
 function syncNight() {
   if (!active) return;
-  const night = isNight(parseNightMode(nightSelect.value), new Date(), darkQuery.matches);
+  const night = nightNow();
   if (night === sentNight) return;
   sentNight = night; send({ type:'night', night });
 }
@@ -459,7 +463,7 @@ function pageEvent(ev: number) {
   connection.send({type:'stats',stats:{ev,hidden:document.hidden?1:0,borderless:teslaBorderless()?1:0,width:screen.clientWidth,height:screen.clientHeight,...viewport()}});
 }
 /** Which page build runs (raised with each build tried in the car). */
-const BUILD = 202611101700;
+const BUILD = 202611101900;
 /** What the browser says of the space it gives the page, to find the car's bar over a fullscreen page (2026-10-13):
  *  window, visual viewport (and its offset), screen, available screen, outer window, pixel ratio. */
 function viewport(): Record<string, number> {

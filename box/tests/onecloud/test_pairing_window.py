@@ -56,14 +56,24 @@ class PairingTests(unittest.TestCase):
     def test_idle_page_offers_paired_phones_but_hides_them_while_busy(self):
         with patch.object(self.window,'devices',return_value={'02:00:00:00:00:01':'A','02:00:00:00:00:02':'<B>'}):
             page=self.page.render('')
-            self.assertIn('<b>&lt;B&gt;</b><span>蓝牙 …00:02</span>',page)
+            self.assertIn('<b>&lt;B&gt;</b></span>',page)
+            self.assertNotIn('蓝牙 …',page)   # 1.5.0: a row is the name; the address only tells two of one name apart
             self.assertEqual(page.count('value=use'),2)
             save_json(self.root/'state/receiver/phone-presence.json',{'active':'02:00:00:00:00:01','last_phone':'02:00:00:00:00:01'})
             page=self.page.render('')
-        self.assertIn('<b>A</b><span>蓝牙 …00:01</span></span><span class=value>正在使用</span>',page)
+        # 1.5.0: the iPhone in use is a plain row (nothing can be done to it until it disconnects), the other unfolds
+        self.assertIn('<b>A</b></span><span class=value>正在使用</span></div>',page)
+        self.assertEqual(page.count('<details>'),1)
         self.assertEqual(page.count('value=remove'),1)
         self.assertNotIn('confirm(',page)   # 1.2.0: the question is a screen of the page (settings_page.confirm_screen)
         self.assertNotIn('value=use',page)
+
+    def test_two_phones_of_one_name_show_the_end_of_their_addresses(self):
+        with patch.object(self.window,'devices',return_value={'02:00:00:00:00:01':'iPhone','02:00:00:00:00:02':'iPhone','02:00:00:00:00:03':'C'}):
+            page=self.page.render('')
+        self.assertIn('<b>iPhone</b><span>蓝牙 …00:01</span>',page)
+        self.assertIn('<b>iPhone</b><span>蓝牙 …00:02</span>',page)
+        self.assertIn('<b>C</b></span>',page)
 
     def test_pick_only_listed_phone_while_idle_and_waiting(self):
         self.window.process=Mock();self.window.process.poll.return_value=None
@@ -79,7 +89,7 @@ class PairingTests(unittest.TestCase):
         self.window.process=Mock();self.window.process.poll.return_value=None
         save_json(self.window.status_file,{'phase':'waiting','found':[{'address':'02:00:00:00:00:02','name':'<i>B</i>'}],'error':'x'})
         page=self.page.render('')
-        self.assertIn('<b>&lt;i&gt;B&lt;/i&gt;</b><span>蓝牙 …00:02</span>',page)
+        self.assertIn('<b>&lt;i&gt;B&lt;/i&gt;</b></span>',page)
         self.assertIn('value=pick',page)
         self.assertIn('http-equiv=refresh',page)
         self.assertNotIn('<i>B</i>',page)

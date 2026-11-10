@@ -162,7 +162,13 @@ assert.equal(isNight('schedule',at(18,29),true),false);assert.equal(isNight('sch
 assert.equal(isNight('schedule',at(0,0),false),true);assert.equal(isNight('schedule',at(6,29),false),true);assert.equal(isNight('schedule',at(6,30),true),false);
 assert.equal(isNight('system',at(12,0),true),true);assert.equal(isNight('system',at(23,0),false),false);
 assert.equal(isNight('day',at(23,0),true),false);assert.equal(isNight('night',at(12,0),false),true);
-console.log('Car checks passed: aspect fit, hiccups, decode backlog, night schedule.');
+{ // 1.5.0: the link to the box page says which colours CarPlay is showing; the box page takes them.
+  const {boxPageUrl}=await load('night');
+  assert.equal(boxPageUrl('car.example.com',18080,true),'http://car.example.com:18080/?night=1');
+  assert.equal(boxPageUrl('100.96.0.1',80,false),'http://100.96.0.1/?night=0');
+  assert.equal(boxPageUrl('[fd00::1]',18080,isNight('schedule',at(19,0),false)),'http://[fd00::1]:18080/?night=1');
+}
+console.log('Car checks passed: aspect fit, hiccups, decode backlog, night schedule, box page link.');
 { // View areas (2026-10-14): a window shape seen before is an area switch, never a reconnect.
   const windowed={width:1280,height:996}, full={width:1920,height:1080};
   const start={width:1280,height:996,hevc:true,fps:30};

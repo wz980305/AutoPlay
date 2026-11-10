@@ -1,5 +1,6 @@
-// Screenshots of the CarPlay page (dist/) and the box settings page at the Tesla browser's window shapes (1.2.0,
-// docs/UI-1.2.0.md; 1.3.0, docs/UI-1.3.0.md). Everything is served and mocked locally: no box, iPhone or car is needed.
+// Screenshots of the CarPlay page (dist/) and the box page at the Tesla browser's window shapes (1.2.0,
+// docs/UI-1.2.0.md; 1.3.0, docs/UI-1.3.0.md; 1.5.0, docs/UI-1.5.0.md). Everything is served and mocked locally: no box,
+// iPhone or car is needed.
 //
 //   npm run build:offline                                   # dist/
 //   python3 ../../box/tools/render_settings_states.py out/box-states
@@ -119,22 +120,29 @@ if (ONLY !== 'box') {   // English labels (the longest strings) at the windowed 
   await page.click('#settings-display details > summary'); await page.waitForTimeout(700); await shot(page, 'viewer-settings-display-advanced-en', vp);
   await ctx.close();
 }
+// The box page (1.5.0: the panel's twin). A name is a state of render_settings_states.py, with #net, #update or #more
+// for a category other than the first. Each is opened as the CarPlay page links to it, with ?night=1 or 0, in a
+// browser whose own preference is the opposite: a picture in the wrong colours shows at once.
+const BOX = ['fresh', 'live', 'live#net', 'live#more', 'available#update', 'checking#update', 'invited#update', 'live-open', 'invited', 'hot',
+  'bt-failed', 'pair-waiting', 'pair-confirm', 'ask-remove', 'ask-install', 'reset'];
 if (ONLY !== 'viewer') for (const vp of SHAPES) {
   console.log(`box ${vp.tag} ${vp.w}x${vp.h}@${vp.dsf}`);
-  for (const state of ['fresh', 'live', 'live-open', 'pair-waiting', 'pair-confirm', 'bt-failed', 'ask-remove', 'ask-install', 'checking', 'invited', 'hot']) {
-    for (const scheme of (vp.tag === 'tesla-window' || vp.tag === 'phone' ? ['dark', 'light'] : ['dark'])) {
-      const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, deviceScaleFactor: vp.dsf, locale: 'zh-CN', colorScheme: scheme });
+  for (const name of BOX) {
+    const [state, pane] = name.split('#');
+    for (const night of (vp.tag === 'tesla-window' || vp.tag === 'phone' ? [1, 0] : [1])) {
+      const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, deviceScaleFactor: vp.dsf, locale: 'zh-CN', colorScheme: night ? 'light' : 'dark' });
       const page = await ctx.newPage();
       page.on('pageerror', e => console.log('  pageerror:', e.message));
-      await page.goto(`${box.url}box-${state}.html`); await page.waitForTimeout(300);
-      await shot(page, `box-${state}-${scheme}`, vp);
-      if (state === 'live' && scheme === 'dark') {
-        console.log('   ', JSON.stringify(await page.evaluate(() => {
-          const px = sel => { const e = document.querySelector(sel); return e ? Math.round(parseFloat(getComputedStyle(e).fontSize) * 10) / 10 : null; };
-          const rect = sel => { const e = document.querySelector(sel); if (!e) return null; const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; };
-          return { h1: px('h1'), label: px('.cell .main b'), hint: px('.cell .main span'), cell: rect('.cell'), btn: rect('.btn'), docW: document.documentElement.scrollWidth, winW: innerWidth };
-        })));
-      }
+      await page.goto(`${box.url}box-${state}.html?night=${night}${pane ? `#${pane}` : ''}`); await page.waitForTimeout(300);
+      await shot(page, `box-${name.replace('#', '-')}-${night ? 'night' : 'day'}`, vp);
+      const seen = await page.evaluate(() => {
+        const px = sel => { const e = document.querySelector(sel); return e ? Math.round(parseFloat(getComputedStyle(e).fontSize) * 10) / 10 : null; };
+        const rect = sel => { const e = document.querySelector(sel); if (!e) return null; const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; };
+        return { h1: px('h1'), label: px('.pane.first .cell .main b'), cell: rect('.pane.first .cell'), nav: rect('.nav a'), theme: document.documentElement.dataset.theme, bg: getComputedStyle(document.body).backgroundColor,
+          docW: document.documentElement.scrollWidth, winW: innerWidth, y: scrollY, query: location.search };
+      });
+      if (seen.docW > seen.winW || seen.theme !== (night ? 'dark' : 'light') || seen.query || (seen.y && state !== 'live-open')) console.log('  WRONG', name, JSON.stringify(seen));
+      if (name === 'live' && night) console.log('   ', JSON.stringify(seen));
       await ctx.close();
     }
   }

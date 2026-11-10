@@ -1,6 +1,7 @@
 """The status model (docs/STATUS-MODEL.md), the settings page's banners from it, its Host check and its
 factory-reset page."""
 import json
+import re
 import urllib.parse
 import os
 from pathlib import Path
@@ -158,12 +159,12 @@ class PageBannerTests(unittest.TestCase):
         html = self.page.render(urllib.parse.urlencode(reply))
         self.assertIn(f'<p class=foot>{reply["m"]}</p>', html)
         self.assertNotIn('class="banner', html)
-        self.assertNotIn("添加 iPhone 时，请在车机", html, "the note replaces the usual line once")
-        self.assertIn("添加 iPhone 时，请在车机", self.page.render(""))
+        # 1.5.0: with nothing going on the group has no line at all (until 1.4.3 "添加 iPhone 时，请在车机或…")
+        self.assertNotIn("<p class=foot>", self.page.render(""))
         self.page.pairing.stop = lambda: None
         self.assertEqual(self.page.apply("/pair", {"nonce": nonce, "action": "cancel"}), "")
         html = self.page.render(urllib.parse.urlencode({"m": "错误：页面已过期，请刷新后重试。", "at": "phones"}))
-        self.assertIn('class="banner bad span"', html)
+        self.assertIn('class="banner bad"', html)
         self.assertIn("页面已过期", html)
 
     def test_rows_carry_icons_and_no_lines_under_links(self):
@@ -262,6 +263,134 @@ class PageBannerTests(unittest.TestCase):
             html = page.render_reset()
             self.assertIn("恢复出厂设置", html)
             self.assertIn("删除认证文件", html)
+
+
+class PageLayoutTests(unittest.TestCase):
+    """1.5.0: the box page is laid out as the CarPlay page's "AutoPlay 设置" panel - a title bar, categories, one
+    column of groups - and shows the colours CarPlay shows."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
+        self.state = Path(tmp.name) / "state"; self.state.mkdir()
+        self.status = Status(clock=lambda: 1, mode="openwrt", ssid="Car-5G", home="http://100.96.0.1:18080/", identity=True,
+                             entries=["https://mycar.duckdns.org:18443/", "https://100.96.0.1:18443/"],
+                             name="mycar.duckdns.org", own_name="mycar.duckdns.org")
+        self.page = SettingsPage(self.state, self.status.snapshot, lambda reason: None, lambda: [],
+                                 thermal=lambda: ({"soc": 58}, {}))
+        self.page.pairing.devices = lambda: {"02:00:00:00:00:01": "小王的 iPhone"}
+
+    def pane(self, html, key):
+        """One category's page: from its opening tag to the next one's (or to the list of categories)."""
+        start = html.index(f"id={key} ")
+        ends = [at for at in (html.find('<section class="pane', start), html.find("<nav", start)) if at > 0]
+        return html[start:min(ends)]
+
+    def test_categories_and_what_each_holds(self):
+        html = self.page.render("")
+        self.assertIn("<title>AutoPlay 盒子</title>", html)
+        self.assertIn("<h1>AutoPlay 盒子</h1>", html)
+        self.assertEqual(re.findall(r'<a href="#(\w+)"[^>]*>([^<]+)', html.split("<nav", 1)[1]),
+                         [("iphone", "iPhone"), ("net", "网络"), ("update", "更新"), ("more", "高级")])
+        shown = html.replace("\u2011", "-").replace("<wbr>", "")
+        for key, texts in {"iphone": ('class=chain', "小王的 iPhone", "添加 iPhone"),
+                           "net": ("交给 iPhone 的 Wi-Fi", "Car-5G", "在 OpenWrt 后台设置", "在车机浏览器打开",
+                                   "https://mycar.duckdns.org:18443/", "https://100.96.0.1:18443/", "自己的网址", "证书"),
+                           "update": ("程序更新", "检查更新"),
+                           "more": ("盒子温度", "58 °C", "下载诊断记录", 'href="/reset"', "恢复出厂设置")}.items():
+            pane = self.pane(shown, key)
+            for text in texts:
+                self.assertIn(text, pane, f"{text} belongs under {key}")
+        self.assertNotIn("添加 iPhone", self.pane(shown, "net"))
+        # No fragment shows the first category: its page comes after the others (the style sheet hides it when one
+        # of them is the address's target), and the list of categories after all pages.
+        order = [html.index(f"id={key} ") for key in ("net", "update", "more", "iphone")]
+        self.assertEqual(order, sorted(order))
+        self.assertIn('<section class="pane first" id=iphone ', html)
+        self.assertGreater(html.index("<nav"), order[-1])
+
+    def test_no_standing_lines_of_explanation(self):
+        # Asked for in the car (2026-11-10): as on the CarPlay page's panel, a row says its name and its value.
+        html = self.page.render("")
+        self.assertNotIn("<p class=foot>", html)
+        for gone in ("每天自动检查一次", "车机连上", "配对一次后", "添加 iPhone 时，请在车机", "蓝牙 …", "正在使用。它断开后"):
+            self.assertNotIn(gone, html)
+        # Until the first iPhone is added, where to add it from is a group of its own; afterwards it is gone.
+        self.assertNotIn("http://100.96.0.1<wbr>:18080/", html)
+        self.page.pairing.devices = lambda: {}
+        html = self.page.render("")
+        self.assertIn("请在车机或另一台设备上打开", html)
+        self.assertIn("http://100.96.0.1<wbr>:18080/", html)
+
+    def test_the_bars_button_leads_to_the_carplay_page_this_browser_came_from(self):
+        # The CarPlay page keeps its settings per address: back to the one on the name this browser used here.
+        for host, entry in (("mycar.duckdns.org:18080", "https://mycar.duckdns.org:18443/"),
+                            ("100.96.0.1:18080", "https://100.96.0.1:18443/"), ("MYCAR.duckdns.org", "https://mycar.duckdns.org:18443/"),
+                            ("autoplay.lan:18080", "https://mycar.duckdns.org:18443/"), ("", "https://mycar.duckdns.org:18443/")):
+            html = self.page.render("", host)
+            self.assertIn(f'<a class=done href="{entry}">CarPlay 画面</a>', html, host)
+        # its own address first in the list as well
+        net = self.pane(self.page.render("", "100.96.0.1:18080"), "net")
+        self.assertLess(net.index("https://100.96.0.1<wbr>:18443/"), net.index("https://mycar.duckdns.org<wbr>:18443/"))
+        self.status.update(entries=[])
+        self.assertNotIn("class=done", self.page.render(""), "no CarPlay page yet (the Wi-Fi is not up), no button")
+        # A task's screen has no way out but its own buttons; the reset page's is "cancel".
+        self.status.update(entries=["https://100.96.0.1:18443/"])
+        self.page.pairing.status = lambda: {"phase": "confirm", "name": "iPhone", "passkey": "123456", "request_id": "r"}
+        html = self.page.render("")
+        self.assertNotIn("class=done", html)
+        self.assertNotIn("<nav", html)
+        self.assertIn('<a class=done href="/#more">取消</a>', self.page.render_reset())
+
+    def test_colours_follow_carplay_or_the_browser(self):
+        import settings_ui as ui
+        html = self.page.render("night=1")
+        self.assertIn("<title>AutoPlay 盒子</title>", html, "the query is the browser's business; the page is the same")
+        head = html.split("</head>", 1)[0]
+        self.assertIn(f"<script>{ui.THEME}</script>", head, "before anything is drawn")
+        for part in ("night=([01])", 'sessionStorage.setItem("autoplay-night"', "history.replaceState", "36e5", '"data-theme"'):
+            self.assertIn(part, ui.THEME)
+        # Both sets of colours: the handed-over theme wins, the browser's preference decides without one.
+        self.assertIn(":root{" + ui.LIGHT, ui.CSS)
+        self.assertIn("@media (prefers-color-scheme:dark){:root:not([data-theme=light]){" + ui.DARK + "}}", ui.CSS)
+        self.assertIn(":root[data-theme=dark]{" + ui.DARK + "}", ui.CSS)
+        self.assertIn("--bg:#000;--cell:#1C1C1E", ui.DARK, "the CarPlay page's own colours")
+        self.assertIn('<meta name=color-scheme content="light dark">', head)
+
+    def test_the_style_sheet_keeps_its_lines_and_carries_no_comments(self):
+        import settings_ui as ui
+        self.assertNotIn("/*", ui.CSS)
+        self.assertNotIn("@LIGHT@", ui.CSS); self.assertNotIn("@DARK@", ui.CSS)
+        # .cell clears its border with the same weight as the rule that draws the line between rows: the line's rule
+        # has to come later, or rows that are .cell lose it (seen while building 1.5.0).
+        self.assertGreater(ui.CSS.index(".group>*+*"), ui.CSS.index("background:none;border:0;border-radius:0"))
+        # The chosen category: the first without a fragment, the target's otherwise.
+        for rule in (".pane.first,.pane:target{display:block}", ".pane:target~.pane.first{display:none}",
+                     '#net:target~.nav a[href="#net"]', "scroll-margin-top:100vh"):
+            self.assertIn(rule, ui.CSS)
+
+    def test_a_buttons_answer_comes_back_on_its_category(self):
+        import http.client
+        self.page.start(0)   # any free port; a request from the loopback is the box's own
+        self.addCleanup(self.page.stop)
+        port = self.page.server.server_address[1]
+
+        def post(path, **form):
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            connection.request("POST", path, urllib.parse.urlencode({"nonce": self.page.pairing.nonce, **form}),
+                               {"Content-Type": "application/x-www-form-urlencoded", "Host": f"127.0.0.1:{port}"})
+            reply = connection.getresponse(); reply.read(); connection.close()
+            return reply.status, reply.getheader("Location")
+
+        with patch("settings_page.update.check"):
+            self.assertEqual(post("/update", action="check"), (303, "/?m=#update"))
+        self.assertEqual(post("/update", action="install"), (303, "/?ask=install#update"))
+        self.page.pairing.stop = lambda: None
+        self.assertEqual(post("/pair", action="cancel"), (303, "/?m="), "the first category needs no fragment")
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        connection.request("GET", "/?night=0", headers={"Host": f"127.0.0.1:{port}"})
+        reply = connection.getresponse(); html = reply.read().decode(); connection.close()
+        self.assertEqual(reply.status, 200)
+        self.assertIn("<h1>AutoPlay 盒子</h1>", html)
 
 
 class HostCheckTests(unittest.TestCase):

@@ -381,10 +381,10 @@ class ManagedPageTests(unittest.TestCase):
         # What is on screen, not the style sheet's comments; "Wi-Fi" keeps its hyphen from breaking, addresses break
         # before the port (1.4.1).
         shown = html.split("</style>", 1)[1].replace("\u2011", "-").replace("<wbr>", "")
-        for text in ("交给 iPhone 的 Wi-Fi", "Car-5G", "在 OpenWrt 后台设置 Wi-Fi", "https://dashplay.lan:18443/",
+        for text in ("交给 iPhone 的 Wi-Fi", "Car-5G", "在 OpenWrt 后台设置", "https://dashplay.lan:18443/",
                      "添加"):
             self.assertIn(text, shown)
-        self.assertIn("在 OpenWrt 后台设置 Wi\u2011Fi", html)
+        self.assertIn("交给 iPhone 的 Wi\u2011Fi", html)
         self.assertIn("https://dashplay.lan<wbr>:18443/", html)
         for text in ("盒子热点", "重新进行首次设置", "使用方式", "第 1 步", "数据线", "用户名 root", "密码 1234", "组合与验证状态"):
             self.assertNotIn(text, html)
@@ -420,9 +420,16 @@ class ManagedPageTests(unittest.TestCase):
         update.save(self.state / "update-check.json", {"checked_at": 1, "current": "2026.10.19.1", "latest": "2026.10.20",
                                                        "notes": "- 新功能<b>\n- 修复", "available": True, "online": True})
         html = self.page.render("")
-        for text in ("程序更新", "有新版本 2026.10.20", "当前 2026.10.19.1", "- 新功能&lt;b&gt;<br>- 修复", "立即升级", "检查更新",
-                     'href="https://github.com/wz980305/AutoPlay/releases/tag/v2026.10.20">完整更新说明'):
+        for text in ("程序更新", "有新版本 2026.10.20", "- 新功能&lt;b&gt;<br>- 修复", "立即升级", "检查更新",
+                     'href="https://github.com/wz980305/AutoPlay/releases/tag/v2026.10.20">完整更新说明',
+                     # this box's version is the row above the new one (1.5.0; a line "当前 …" inside it before)
+                     "<b>本机程序</b></span><span class=value>2026.10.19.1</span>",
+                     # and the category carries a red dot while there is something to install
+                     '<a href="#update">更新<i></i></a>'):
             self.assertIn(text, html)
+        # 1.5.0: no standing line under the group; a footer speaks only while something is happening
+        self.assertNotIn("每天自动检查", html)
+        self.assertNotIn("<p class=foot>", html)
         # A CHANGELOG section as the notes: its opening paragraph, without Markdown marks (1.4.1).
         update.save(self.state / "update-check.json", {
             "checked_at": 1, "current": "1.4.0", "latest": "1.4.1", "available": True, "online": True,
@@ -437,10 +444,15 @@ class ManagedPageTests(unittest.TestCase):
         self.assertNotIn("立即升级", html, "a release that changed the system is not offered online")
         update.save(self.state / "update-check.json", {"checked_at": 1, "current": "2026.10.20", "latest": "2026.10.20",
                                                        "available": False, "online": True})
-        self.assertIn("已是最新", self.page.render(""))
-        self.assertNotIn("本机程序", self.page.render(""), "a development build names no release")
-        (self.state.parent / "version.txt").write_text("2026.10.20\n")
-        self.assertIn("<b>本机程序</b></span><span class=value>2026.10.20", self.page.render(""))
+        html = self.page.render("")
+        self.assertIn("<b>已是最新</b></span><span class=value>2026.10.20</span>", html)
+        self.assertNotIn("本机程序", html, "one row says both: the version and that none is newer")
+        self.assertNotIn("<i></i>", html, "nothing to install, no dot")
+        (self.state.parent / "version.txt").write_text("2026.10.21\n")
+        self.assertIn("<b>已是最新</b></span><span class=value>2026.10.21</span>", self.page.render(""),
+                      "the version is what this box runs")
+        (self.state / "update-check.json").unlink()
+        self.assertIn("<b>本机程序</b></span><span class=value>2026.10.21", self.page.render(""), "never checked")
 
     def test_a_failed_update_is_not_shown_once_the_box_is_up_to_date(self):
         # F50, 2026-10-19: updated by hand after a failed web update, the page still said it did not finish.

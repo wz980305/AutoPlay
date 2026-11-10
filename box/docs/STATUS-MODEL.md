@@ -146,10 +146,11 @@ the checks are answered as long as the AP is up.
 - The file is tmpfs and written on change only (`state.save_json(sync=False)`),
   so polling it costs nothing on the SD card.
 
-## What earns a bar at the top of the settings page (1.4.1)
+## What earns a bar at the top of the box page (1.4.1)
 
-A bar above the connection chain is for a state the owner has to act on, or an
-error: Bluetooth not starting, the identity missing, a certificate that cannot
+A bar under the title bar - on every category since 1.5.0, when the page took
+the layout of the CarPlay page's "AutoPlay 设置" panel (`docs/UI-1.5.0.md`) -
+is for a state the owner has to act on, or an error: Bluetooth not starting, the identity missing, a certificate that cannot
 be renewed, an expired page, and (1.5.0) the box overheating - only while the
 kernel really holds the processor back for heat (a cooling device of the
 processor above state 0), not above some temperature of our choosing. Everything else is said where it happened:
@@ -162,7 +163,12 @@ processor above state 0), not above some temperature of our choosing. Everything
   (until 1.4.0 a bar said "正在检查更新，几秒后刷新页面就能看到结果", and the owner
   had to reload by hand);
 - an action that leads to its own screen (pairing, removal, upgrade) says
-  nothing at all: the screen is the answer.
+  nothing at all: the screen is the answer;
+- with nothing going on a group has no line under it (1.5.0): the standing
+  lines ("每天自动检查一次，不会自动安装。", "添加 iPhone 时，请在车机或另一台设备上操作。"
+  and the like) are gone, as on the panel. A footer speaks only while something
+  is happening: an invitation sent, an upgrade refused or running, Bluetooth
+  not ready yet.
 
 An error from any action (`错误：…`) still goes to the top, red.
 

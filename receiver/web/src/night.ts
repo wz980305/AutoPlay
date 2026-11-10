@@ -15,3 +15,9 @@ export function isNight(mode: NightMode, now: Date, prefersDark: boolean): boole
   const minutes = now.getHours() * 60 + now.getMinutes();
   return minutes >= NIGHT_START || minutes < NIGHT_END;
 }
+
+/** The box page's address as this page links to it (1.5.0): same host, plain HTTP, and the day/night this page asks
+ *  CarPlay for at that moment, so that the box page comes up in the colours CarPlay is showing. */
+export function boxPageUrl(hostname: string, port: number, night: boolean): string {
+  return `http://${hostname}${port === 80 ? '' : `:${port}`}/?night=${night ? 1 : 0}`;
+}
