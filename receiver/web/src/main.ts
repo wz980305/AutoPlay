@@ -316,10 +316,9 @@ let teslaChecking = false;
 function updateFullscreen() {
   const borderless = teslaBorderless();
   const label = t(borderless ? 'borderlessOn' : teslaChecking ? 'checkingNetwork' : 'fullscreen');
-  // The waiting screen's row explains the hop (a first-run screen); the settings row is a bare iOS-style row (1.3.0).
-  const hint = t(borderless ? 'borderlessOnHint' : teslaChecking ? 'checkingNetworkHint' : 'fullscreenRowHint');
+  // Bare rows on the waiting screen as in the settings panel (1.5.0, asked for in the car): until then this row and
+  // the box link carried a second line each ("使用浏览器返回按钮退出。", "配对 iPhone，查看热点与证书。").
   el('fullscreen-text').textContent = label; el('welcome-fullscreen-text').textContent = label;
-  el('welcome-fullscreen-hint').textContent = hint;
   for (const id of ['fullscreen', 'welcome-fullscreen']) {
     el(id).setAttribute('aria-label', label);
     el<HTMLButtonElement>(id).disabled = borderless || teslaChecking;
@@ -468,7 +467,7 @@ function pageEvent(ev: number) {
   connection.send({type:'stats',stats:{ev,hidden:document.hidden?1:0,borderless:teslaBorderless()?1:0,width:screen.clientWidth,height:screen.clientHeight,...viewport()}});
 }
 /** Which page build runs (raised with each build tried in the car). */
-const BUILD = 202611102200;
+const BUILD = 202611102300;
 /** What the browser says of the space it gives the page, to find the car's bar over a fullscreen page (2026-10-13):
  *  window, visual viewport (and its offset), screen, available screen, outer window, pixel ratio. */
 function viewport(): Record<string, number> {
