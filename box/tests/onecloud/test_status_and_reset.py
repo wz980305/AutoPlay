@@ -386,6 +386,56 @@ class PageLayoutTests(unittest.TestCase):
         self.assertEqual(mine["dark"]["--btn"], theirs["dark"]["--tint-under-white"])
         self.assertEqual(mine["light"]["--btn"], theirs["light"]["--tint-under-white"])
 
+    def test_the_panel_and_this_page_place_their_title_bars_alike(self):
+        """1.5.1: on a wide screen the panel kept "AutoPlay 设置" and 完成 at the window's edges while this page's title and
+        返回 stayed with the columns, and on a phone the two bars differed in height and type. The panel follows this
+        page now. What places the bar is the same in both sheets: the root size at every width, the bar's height, the
+        1440 px the bar's contents keep to (written here as a width, there as half of it on each side), the title's
+        size at each step, the button's. scripts/ui-shots.mjs twins measures the result in a browser."""
+        import settings_ui as ui
+        sheet = Path(__file__).resolve().parents[3] / "receiver/web/src/style.css"
+        if not sheet.exists():
+            self.skipTest("the CarPlay page's sources are not in this tree")
+        theirs, mine = re.sub(r"\s+", "", sheet.read_text()), re.sub(r"\s+", "", ui.CSS)
+
+        def one(pattern, text):
+            found = re.search(pattern, text)
+            self.assertTrue(found, pattern)
+            return found.group(1)
+
+        def phone(text, names):
+            rules = dict(part.split(":", 1) for part in one(r"@media\(max-width:480px\)\{:root\{([^}]*)\}", text).strip(";").split(";"))
+            return [rules[name] for name in names]
+        # one root size down to 480 px, another below, and the touch targets and the bar that go with it
+        size = r":root\{[^}]*font-size:(clamp\([^;}]*\))[;}]"
+        self.assertEqual(one(size, theirs), one(size, mine))
+        self.assertEqual(phone(theirs, ("font-size", "--hit-primary", "--hit-secondary", "--bar")), phone(mine, ("font-size", "--hit", "--hit2", "--bar")))
+        self.assertNotIn("@media(max-width:760px){:root", theirs)
+        self.assertNotIn("@media(max-width:760px){:root", mine)
+        for theirs_name, mine_name in (("--bar", "--bar"), ("--hit-primary", "--hit"), ("--hit-secondary", "--hit2")):
+            self.assertEqual(one(rf":root\{{[^}}]*{theirs_name}:([\d.]+rem)", theirs), one(rf":root\{{[^}}]*{mine_name}:([\d.]+rem)", mine), mine_name)
+        # the bar: as high, its contents as wide and as far from the edges, at each width
+        bar, here = one(r"dialogheader\{([^}]*)\}", theirs), one(r"header>div\{([^}]*)\}", mine)
+        self.assertIn("min-height:calc(var(--bar)+1px)", bar)                      # the line under it is inside the panel's box,
+        self.assertIn("min-height:var(--bar)", here)                              # under this page's
+        self.assertIn("header{position:-webkit-sticky;position:sticky;top:0;z-index:3;background:var(--bg);border-bottom:1pxsolidvar(--sep)}", mine)
+        self.assertEqual(one(r"max-width:(\d+)px", here), "1440")
+        self.assertEqual(bar.count("calc(50%-720px+var(--space-4))"), 2)
+        self.assertIn("max(var(--s4),env(safe-area-inset-right))var(--s2)max(var(--s4),env(safe-area-inset-left))", here)
+        self.assertIn("max(var(--space-2),env(safe-area-inset-top))", bar)
+        self.assertIn("max(var(--s2),env(safe-area-inset-top))", here)
+        self.assertIn("@media(max-width:760px){header>div{padding-left:var(--s3);padding-right:var(--s3)}h1{font-size:1.4rem}", mine)
+        self.assertIn("dialogheader{padding-left:var(--space-3);padding-right:var(--space-3);}", theirs)
+        # the title and the button
+        self.assertEqual(one(r"--t-title:([\d.]+rem)", theirs), one(r"h1\{font-size:([\d.]+rem)", mine))
+        self.assertIn("h2{font-size:var(--t-title);line-height:1.3;font-weight:600;", theirs)
+        self.assertIn("h1{font-size:1.6rem;line-height:1.3;font-weight:600;", mine)
+        self.assertEqual(re.findall(r"h2\{font-size:([\d.]+rem);\}", theirs), ["1.4rem", "1.3rem"])
+        self.assertEqual(re.findall(r"h1\{font-size:([\d.]+rem)\}", mine), ["1.4rem", "1.3rem"])
+        self.assertIn("min-height:var(--hit-secondary);min-width:var(--hit-primary);", theirs)
+        self.assertIn("min-height:var(--hit2);min-width:var(--hit);padding:var(--s1)var(--s3);", mine)
+        self.assertIn("button.text{border-radius:var(--radius);background:var(--cell);color:var(--label);padding:var(--space-1)var(--space-3);}", theirs)
+
     def test_the_style_sheet_keeps_its_lines_and_carries_no_comments(self):
         import settings_ui as ui
         self.assertNotIn("/*", ui.CSS)

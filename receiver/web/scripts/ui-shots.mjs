@@ -4,7 +4,7 @@
 //
 //   npm run build:offline                                   # dist/
 //   python3 ../../box/tools/render_settings_states.py out/box-states
-//   node scripts/ui-shots.mjs out/ui-shots [viewer|box]      # needs playwright-core and a Chromium (CHROME=<path>)
+//   node scripts/ui-shots.mjs out/ui-shots [viewer|box|twins]   # needs playwright-core and a Chromium (CHROME=<path>)
 //
 // Shapes (docs/TESLA.md): the windowed browser is about 773x601 CSS px and the borderless page 1256x706, both at a
 // device scale of about 1.53; a 560 px tall case stands in for a keyboard or a taller bottom bar; 1920x1200 at 1.0 is
@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 const here = fileURLToPath(new URL('.', import.meta.url));
 const OUT = resolve(process.argv[2] ?? 'out/ui-shots'); mkdirSync(OUT, { recursive: true });
 const ONLY = process.argv[3] ?? '';
+const want = part => !ONLY || ONLY === part;
 const DIST = resolve(here, '../dist');
 const BOX_STATES = resolve(process.env.BOX_STATES ?? 'out/box-states');
 const TOKEN = '0123456789abcdef0123456789abcdef';
@@ -84,7 +85,7 @@ async function goLive(page) {
 }
 const settle = page => page.waitForTimeout(350);
 
-if (ONLY !== 'box') for (const vp of SHAPES) {
+if (want('viewer')) for (const vp of SHAPES) {
   if (vp.tag === 'phone') continue;
   console.log(`viewer ${vp.tag} ${vp.w}x${vp.h}@${vp.dsf}`);
   const { ctx, page, sockets, link } = await viewer(vp);
@@ -114,7 +115,7 @@ if (ONLY !== 'box') for (const vp of SHAPES) {
 }
 // Day (1.5.0): the waiting screen, the panel and its sheets in the light colours, at the two shapes the car shows.
 // Picking 夜间 in the sheet turns the page dark at once.
-if (ONLY !== 'box') for (const vp of SHAPES.slice(0, 2)) {
+if (want('viewer')) for (const vp of SHAPES.slice(0, 2)) {
   console.log(`viewer day ${vp.tag}`);
   const { ctx, page } = await viewer(vp, { night: 'day' });
   await shot(page, 'viewer-waiting-day', vp);
@@ -141,7 +142,7 @@ if (ONLY !== 'box') for (const vp of SHAPES.slice(0, 2)) {
     link: document.getElementById('box-link-panel').href }))));
   await ctx.close();
 }
-if (ONLY !== 'box') {   // English labels (the longest strings) at the windowed shape
+if (want('viewer')) {   // English labels (the longest strings) at the windowed shape
   const vp = SHAPES[0];
   const { ctx, page } = await viewer(vp, { lang: 'en' });
   await shot(page, 'viewer-waiting-en', vp);
@@ -158,7 +159,7 @@ if (ONLY !== 'box') {   // English labels (the longest strings) at the windowed 
 // picture in the wrong colours shows at once.
 const BOX = ['fresh', 'live', 'live#net', 'live#more', 'available#update', 'checking#update', 'invited#update', 'live-open', 'invited', 'hot',
   'bt-failed', 'pair-waiting', 'pair-confirm', 'ask-remove', 'ask-install', 'reset'];
-if (ONLY !== 'viewer') for (const vp of SHAPES) {
+if (want('box')) for (const vp of SHAPES) {
   console.log(`box ${vp.tag} ${vp.w}x${vp.h}@${vp.dsf}`);
   for (const name of BOX) {
     const [state, pane] = name.split('#');
@@ -179,5 +180,31 @@ if (ONLY !== 'viewer') for (const vp of SHAPES) {
       await ctx.close();
     }
   }
+}
+// Twins (1.5.1): the panel's title bar, categories and first heading sit where the box page's do. The two style sheets
+// live apart, so this is measured, shape by shape - the car's windows, a phone, a narrow window and one wider than the
+// 1440 px the columns keep to. More than half a pixel apart is said and fails the run. (Playwright hides scrollbars. A
+// browser with standing ones puts the box page's at the window's edge, beside the bar, and the panel's beside its page.)
+const PLACES = selectors => Object.fromEntries(Object.entries(selectors).map(([name, selector]) => {
+  const r = document.querySelector(selector).getBoundingClientRect();
+  return [name, { x: r.left, y: r.top, r: innerWidth - r.right, h: r.height }];
+}));
+const COMPARED = { bar: 'yh', title: 'xyh', button: 'ryh', category: 'xyh', heading: 'xy', row: 'xrh' };
+if (want('twins')) for (const vp of [...SHAPES, { w: 600, h: 800, dsf: 2, tag: 'narrow' }, { w: 1710, h: 960, dsf: 1, tag: 'wide' }]) {
+  const { ctx, page } = await viewer(vp);
+  await page.evaluate(() => document.getElementById('btn-settings').click()); await page.waitForTimeout(500);
+  await page.click('[data-settings-page="connection"]'); await settle(page);
+  const panel = await page.evaluate(PLACES, { bar: 'dialog[open] header', title: 'dialog[open] header h2', button: '#btn-close', category: '.settings-nav button',
+    heading: '.settings-page:not([hidden]) .group-title', row: '.settings-page:not([hidden]) .group .cell' });
+  await ctx.close();
+  const ctx2 = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, deviceScaleFactor: vp.dsf, locale: 'zh-CN', colorScheme: 'dark' });
+  const page2 = await ctx2.newPage();
+  await page2.goto(`${box.url}box-live.html?night=1&from=panel#net`); await page2.waitForTimeout(300);
+  const twin = await page2.evaluate(PLACES, { bar: 'header', title: 'header h1', button: 'a.done', category: '.nav a', heading: '.pane:target .group-title', row: '.pane:target .group .cell' });
+  await ctx2.close();
+  const apart = Object.entries(COMPARED).flatMap(([name, keys]) => [...keys].filter(k => Math.abs(panel[name][k] - twin[name][k]) > 0.5)
+    .map(k => `${name}.${k} ${Math.round(panel[name][k] * 10) / 10} / ${Math.round(twin[name][k] * 10) / 10}`));
+  console.log(`twins ${vp.tag} ${vp.w}x${vp.h}: ${apart.length ? 'APART (panel / box page) ' + apart.join('; ') : `same (bar ${Math.round(panel.bar.h)} px, title at ${Math.round(panel.title.x)}, button ${Math.round(panel.button.r)} from the right)`}`);
+  if (apart.length) process.exitCode = 1;
 }
 await browser.close(); dist.server.close(); box.server.close();

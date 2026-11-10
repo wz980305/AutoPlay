@@ -13,13 +13,13 @@ python3 -m unittest discover -s openwrt/tests      # 安装脚本 90-autoplay-te
 # 接收端：1.3.1 起 GitHub Actions 对每次推送跑 ./gradlew build（编译两个模块并跑全部测试），见下文「接收端」
 
 # 盒子侧：设置页、状态模型、守护（supervision）、升级日志与回滚、证书退避、时钟下限、出厂重置、平台、诊断、装机脚本
-cd box && python3 -m unittest discover -s tests/onecloud        # 269 个（1.5.0：+13，盒子温度与过热提醒、处理器占用、系统更新保留、坐标系迁移、盒子网页的分类/日夜间/无小字、与设置面板的颜色逐项相同；Python 3.11–3.13 下都通过），通过
+cd box && python3 -m unittest discover -s tests/onecloud        # 270 个（1.5.1：+1，两份样式表里决定标题栏位置的数值逐项相同；1.5.0：+13，盒子温度与过热提醒、处理器占用、系统更新保留、坐标系迁移、盒子网页的分类/日夜间/无小字、与设置面板的颜色逐项相同；Python 3.11–3.13 下都通过），通过
 
 # 蓝牙桥：test_reason、test_relay 等 7 个可直接跑；test_bluez、test_recovery 需要 dbus-daemon 和 dbus-next 0.2.3
 cd box && python3 -m unittest discover -s tests/bluetooth       # 没有 dbus-next 时那两个模块报 import 错误，是环境问题
 ```
 
-测试身份全是合成数据。裁剪前后的基线在 `box/docs/TEST-BASELINE.md`（375 → 225 是删掉的 Debian/N1/有线/STA 测试减去新模块的测试；1.2.0 为 263，删除上游刷机脚本及其 4 个测试文件后为 238，1.3.0 起仍为 238，1.4.0 为 239，1.4.1 为 243，1.4.2 为 249，1.4.3 为 256，1.5.0 为 269）。
+测试身份全是合成数据。裁剪前后的基线在 `box/docs/TEST-BASELINE.md`（375 → 225 是删掉的 Debian/N1/有线/STA 测试减去新模块的测试；1.2.0 为 263，删除上游刷机脚本及其 4 个测试文件后为 238，1.3.0 起仍为 238，1.4.0 为 239，1.4.1 为 243，1.4.2 为 249，1.4.3 为 256，1.5.0 为 269，1.5.1 为 270）。
 
 ### 投屏页（无浏览器）
 
@@ -36,7 +36,7 @@ node scripts/build-esbuild.mjs                                   # 或 npm run b
 ```sh
 cd receiver/web && npm run build:offline
 python3 ../../box/tools/render_settings_states.py out/box-states              # 盒子设置页 13 个状态 → 静态 HTML（加 #net / #update / #more 看其他分类，加 ?night=1|0 看夜间/日间）
-CHROME=/path/to/chromium node scripts/ui-shots.mjs out/ui-shots [viewer|box]  # 特斯拉 773×601、1256×706、1256×560、1920×1200、手机
+CHROME=/path/to/chromium node scripts/ui-shots.mjs out/ui-shots [viewer|box|twins]  # 特斯拉 773×601、1256×706、1256×560、1920×1200、手机；twins（1.5.1）量设置面板和盒子设置页的标题栏、分类、第一组是否在同一位置，差半个像素以上即失败
 ```
 
 需要 `playwright-core` 和一个 Chromium；全部本地 mock，不碰盒子和手机。每个形状打印标签/说明字号、行高和有无横向溢出。

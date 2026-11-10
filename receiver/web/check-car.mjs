@@ -178,6 +178,21 @@ assert.equal(isNight('day',at(23,0),true),false);assert.equal(isNight('night',at
   assert.match(css,/:root\[data-theme=light\] dialog, :root\[data-theme=light\] #overlay \{/,'the panel, its sheets and the waiting screen');
   assert.doesNotMatch(css,/:root\[data-theme=light\] (?!dialog|#overlay)/,'nothing else changes: the picture, its surround and the notices over it stay dark');
   assert.match(css,/#app \{[^}]*background:#000;/);
+  { // 1.5.1: the panel's title bar sits where the box page's does. Its title and button end where the columns end
+    // (1440 px at most, centred: half of it on each side here), the bar is --bar high plus its line, and narrow
+    // windows take the box page's sizes - one root size down to 480 px, the box page's phone sizes below. A box test
+    // compares the numbers with settings_ui.py; scripts/ui-shots.mjs twins measures the two pages.
+    const bar=/\ndialog header \{([^}]*)\}/.exec(css)[1];
+    assert.match(bar,/min-height:calc\(var\(--bar\) \+ 1px\)/);
+    assert.equal(bar.split('calc(50% - 720px + var(--space-4))').length-1,2,'left and right');
+    assert.match(css,/\.settings-layout \{[^}]*max-width:1440px;/,'the columns the bar keeps to');
+    assert.match(css,/:root \{[^}]*--bar:4\.75rem;/);
+    const narrow=/@media \(max-width:760px\) \{([\s\S]*?)\n\}/.exec(css)[1],phone=/@media \(max-width:480px\) \{([\s\S]*?)\n\}/.exec(css)[1];
+    assert.doesNotMatch(narrow,/:root/,'no root size of its own between 480 and 760 px');
+    assert.match(narrow,/dialog header \{ padding-left:var\(--space-3\); padding-right:var\(--space-3\); \}/);
+    assert.match(phone,/:root \{ font-size:17px; --hit-primary:3rem; --hit-secondary:2\.7rem; --bar:4\.2rem; \}/);
+    assert.doesNotMatch(css,/\.settings-page > \.group-title:first-child/,'a page\'s first heading keeps the heading\'s margin, as the box page\'s categories do');
+  }
   // The waiting screen is drawn before the bundle runs, so index.html's head decides day or night by itself. Its few
   // lines and night.ts isNight() must agree for every mode, minute and browser preference.
   const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');

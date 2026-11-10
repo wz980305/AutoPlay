@@ -8,7 +8,7 @@
   --t-display:2.2rem; --t-title:1.6rem; --t-body:1.2rem; --t-caption:1rem; --t-mono:.8rem;
   /* Spacing and touch targets scale with the host interface, without resizing the video surface. */
   --space-1:.5rem; --space-2:.75rem; --space-3:1rem; --space-4:1.5rem; --space-5:2rem;
-  --radius:.75rem; --radius-sheet:1.25rem; --hit-primary:3.6rem; --hit-secondary:3.2rem; --hit-gap:.5rem;
+  --radius:.75rem; --radius-sheet:1.25rem; --hit-primary:3.6rem; --hit-secondary:3.2rem; --hit-gap:.5rem; --bar:4.75rem;
   font-size:clamp(20px, 2.78vmin, 24px);
   font-family:-apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
   line-height:1.45; color:var(--label); background:var(--bg); -webkit-text-size-adjust:100%; }
@@ -142,15 +142,19 @@ dialog.closing { animation:sheet-out .2s ease-out forwards; }
 dialog::backdrop { background:#000; }
 @keyframes sheet-in { from { opacity:0; transform:translateX(12px); } }
 @keyframes sheet-out { to { opacity:0; transform:translateX(12px); } }
-dialog header { flex:none; display:flex; align-items:center; justify-content:space-between; gap:var(--space-3);
-  padding:max(var(--space-2),env(safe-area-inset-top)) max(var(--space-4),env(safe-area-inset-right)) var(--space-2) max(var(--space-4),env(safe-area-inset-left));
+/* The title bar sits where the box page's does (1.5.1; settings_ui.py is the reference, a box test and ui-shots hold
+   the two together): the bar's colour and line cross the window, the title and the button end where the columns below
+   end - 1440 px at most, centred - and the bar is --bar high plus its line. Before, the title and "Done" kept to the
+   window's edges on a wide screen while the box page's stayed with its columns. */
+dialog header { flex:none; display:flex; align-items:center; justify-content:space-between; gap:var(--space-3); min-height:calc(var(--bar) + 1px);
+  padding:max(var(--space-2),env(safe-area-inset-top)) max(var(--space-4),env(safe-area-inset-right),calc(50% - 720px + var(--space-4))) var(--space-2) max(var(--space-4),env(safe-area-inset-left),calc(50% - 720px + var(--space-4)));
   background:var(--bg); border-bottom:1px solid var(--sep); }
 h2:focus { outline:none; }
 h2 { font-size:var(--t-title); line-height:1.3; font-weight:600; letter-spacing:normal; margin:0; }
 button.text { border-radius:var(--radius); background:var(--cell); color:var(--label); padding:var(--space-1) var(--space-3); }
 .settings-notices { flex:none; max-height:28vh; overflow:auto; }
 #settings-notices > #toast, #settings-notices > #error-banner { position:relative; inset:auto; transform:none; max-width:none; max-height:none;
-  margin:var(--space-2) var(--space-4); animation:none; }
+  margin:var(--space-2) max(var(--space-4),calc(50% - 720px + var(--space-4))); animation:none; }
 .settings-layout { display:grid; grid-template-columns:11rem minmax(0,1fr); gap:var(--space-4); width:100%; max-width:1440px; margin:0 auto; flex:1; min-height:0;
   padding:var(--space-3) max(var(--space-4),env(safe-area-inset-right)) 0 max(var(--space-4),env(safe-area-inset-left)); }
 .settings-nav { display:flex; flex-direction:column; gap:var(--space-2); padding-top:.25rem; overflow:auto; padding-bottom:var(--space-3); }
@@ -159,8 +163,11 @@ button.text { border-radius:var(--radius); background:var(--cell); color:var(--l
 /* The chosen category as the iPad's Settings sidebar shows it: the tint fills the row. */
 .settings-nav button[aria-current=page] { background:var(--tint); color:#fff; }
 .settings-nav button:active { background:var(--press); color:var(--label); }
-.settings-body { min-width:0; overflow:auto; overscroll-behavior:contain; padding:0 .2rem max(var(--space-4),env(safe-area-inset-bottom)); scrollbar-gutter:stable; }
-.settings-page > .group-title:first-child { margin-top:.25rem; }
+/* The rows end under the bar's button, as the box page's do (1.5.1). The .2rem keeps a row's focus ring inside the
+   scroller and the same .2rem outwards puts the rows back in line; no room is kept for a scrollbar that is not there
+   (it was, 15 px in a browser with standing scrollbars: the rows stopped short of the button on every page). */
+.settings-body { min-width:0; overflow:auto; overscroll-behavior:contain; margin:0 -.2rem; padding:0 .2rem max(var(--space-4),env(safe-area-inset-bottom)); }
+/* A page's first heading keeps the heading's own margin, as the box page's categories do (1.5.1; it was .25rem). */
 .spaced { margin-top:var(--space-3); }
 /* Rows inside the picture form's fieldset are separated like any other rows of a group. */
 .group fieldset > :not([hidden]) ~ :not([hidden]) { border-top:var(--hair) solid var(--sep); }
@@ -203,19 +210,30 @@ dialog.picker::backdrop { background:rgba(0,0,0,.6); }
 :root[data-theme=light] dialog::backdrop { background:#F2F2F7; }
 :root[data-theme=light] dialog.picker { box-shadow:0 12px 40px rgba(0,0,0,.25); }
 :root[data-theme=light] dialog.picker::backdrop { background:rgba(0,0,0,.4); }
+/* Narrow windows and phones take the box page's sizes (1.5.1): the same root size down to 480 px (it was 18 px here
+   and 20 px there), the box page's 17 px and smaller touch targets below. */
 @media (max-width:760px) {
-  :root { font-size:18px; }
   .welcome { width:100%; min-width:0; }
   .status { font-size:1.85rem; }
   dialog header { padding-left:var(--space-3); padding-right:var(--space-3); }
   .settings-layout { display:flex; flex-direction:column; gap:var(--space-2); padding:var(--space-2) var(--space-3) 0; }
-  .settings-nav { flex:none; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--space-1); padding:0 .2rem .2rem 0; overflow:visible; }
-  .settings-nav button { min-width:0; padding:var(--space-1); justify-content:center; font-size:1rem; text-align:center; overflow-wrap:anywhere; }
+  #settings-notices > #toast, #settings-notices > #error-banner { margin-left:var(--space-3); margin-right:var(--space-3); }
+  .settings-nav { flex:none; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--space-1); padding:0; overflow:visible; }
+  .settings-nav button { min-width:0; min-height:var(--hit-secondary); padding:var(--space-1); justify-content:center; font-size:1rem; text-align:center; overflow-wrap:anywhere; }
   .settings-body { flex:1; min-height:0; }
   h2 { font-size:1.4rem; }
 }
 @media (max-width:480px) {
+  :root { font-size:17px; --hit-primary:3rem; --hit-secondary:2.7rem; --bar:4.2rem; }
+  h2 { font-size:1.3rem; }
+  .tile { width:1.75rem; height:1.75rem; } .tile .ico { width:1.1rem; height:1.1rem; }
   dialog.picker { width:calc(100% - 2 * var(--space-3)); }
+}
+
+/* A window too low for the bar, the categories and a page at once (a phone on its side; the Tesla's lowest window is
+   560 px): the box page lets its bar scroll away there. This bar stays, so it gives up its spare height instead. */
+@media (max-height:479px) {
+  dialog header { min-height:0; padding-top:var(--space-1); padding-bottom:var(--space-1); }
 }
 
 @media (prefers-reduced-motion:reduce) {

@@ -54,7 +54,9 @@ mkdir -p node_modules && ln -sfn /opt/npm-tools/node_modules/typescript node_mod
   lines in the `<head>` of `index.html` apply the same rule before the bundle runs, and `check-car.mjs` runs them
   against `isNight()`. The day palette is the `:root[data-theme=light]` block in `src/style.css`; a test in
   `box/tests/onecloud` compares it value by value with the box page's. `ui-shots.mjs` takes both pages by night and
-  by day; `BOX_STATES=<dir>` points it at the box page's rendered states.
+  by day; `BOX_STATES=<dir>` points it at the box page's rendered states. Since 1.5.1 its `twins` pass measures the
+  panel's title bar, categories and first group against the box page's and fails when they are half a pixel apart:
+  the panel's bar follows the box page's (`settings_ui.py`), and `box/tests/onecloud` compares the numbers.
 - Sizes are larger than the numbers below (`index.html` 14.5 KB, `style.css` 20.4 KB source as of 1.5.0); those are
   the 2026-10-26 snapshot.
 
