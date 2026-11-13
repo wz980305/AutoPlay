@@ -9,7 +9,7 @@ const messages = {
   locationReconnecting: ['已开启，正在重新连接 CarPlay。', 'On. Reconnecting CarPlay.'],
   locationFail: ['设置失败，请检查盒子连接后重试。', 'Could not change the setting. Check the box connection and retry.'],
   boxLink: ['打开盒子网页', 'Open box page'],
-  playerSettings: ['设置', 'Settings'], performanceMode: ['性能模式', 'Performance mode'], language: ['语言', 'Language'],
+  playerSettings: ['设置', 'Settings'], performanceMode: ['增强模式', 'Enhanced mode'], language: ['语言', 'Language'],
   waiting: ['等待 iPhone', 'Waiting for iPhone'], waitingHint: ['打开 iPhone 的蓝牙与 Wi-Fi，已配对设备会自动连接。首次使用，请先在盒子网页配对。', 'Turn on iPhone Bluetooth and Wi-Fi to connect a paired device. Pair it on the box page first if it is new.'],
   connecting: ['正在连接盒子', 'Connecting to box'], reconnecting: ['正在重新连接', 'Reconnecting'],
   reconnectingHint: ['暂时无法连接盒子。请检查盒子电源与车机的 AutoPlay 热点连接。', 'Cannot connect to the box. Check its power and the car’s AutoPlay hotspot connection.'],

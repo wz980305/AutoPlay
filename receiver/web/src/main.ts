@@ -53,7 +53,9 @@ interface Display { width: number; height: number; fps: number; uiScale: number;
   /** The car-location switch and the datum of the browser's coordinates (1.4.0; absent from an older box). */
   carLocation?: boolean; carLocationDatum?: string; }
 let display: Display | null = null;
-/** Performance mode: upsize each window to the sharpest size (long side at least 1280), then shrink it into the
+/** Enhanced mode (「增强模式」; called performance mode until 1.5.1, which read as "faster" when it costs speed for
+ *  sharpness - the owner's name, 2026-11-13; the stored flag keeps its old key so a browser's choice survives):
+ *  upsize each window to the sharpest size (long side at least 1280), then shrink it into the
  *  window. Off (the Tesla default, 2026-10-26: the F50 and the iPhone run cooler, and a Tesla's panel is dense enough
  *  at the window's own pixels): the window's own size (minimum width 720). 2026-10-23, in Advanced. */
 const performanceMode = el<HTMLInputElement>('performance-mode');
