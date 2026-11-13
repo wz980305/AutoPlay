@@ -362,7 +362,7 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
     const i18n=readFileSync(new URL('./src/i18n.ts',import.meta.url),'utf8');
     assert.doesNotMatch(i18n,/在车机打开|open on the car/);
     assert.match(i18n,/accessHint: \['[^']*刷新本页。', '[^']*reload this page\.'\]/);
-    // The switch that renders CarPlay larger and shrinks it into the window is 「增强模式」 (after 1.5.1): "performance" read
+    // The switch that renders CarPlay larger and shrinks it into the window is 「增强模式」 (1.5.2): "performance" read
     // as faster, and it costs speed for sharpness. Its stored flag keeps the old key, so a browser's choice survives.
     assert.match(i18n,/performanceMode: \['增强模式', 'Enhanced mode'\]/);
     assert.doesNotMatch(i18n,/性能模式|Performance mode/);
