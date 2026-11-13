@@ -15,6 +15,8 @@
 
 地址：清单固定从 `releases/latest/download/autoplay-update.json` 取，其余从 `releases/download/v<版本>/<文件名>` 取。1.4.2 起这些 github.com 地址先经 REST API 下载（`api.github.com/repos/<owner>/<repo>/releases/latest` 或 `/releases/tags/v<版本>` 查出 asset 地址，带 `Accept: application/octet-stream` 取文件）：github.com 的下载链接在车主的网络上返回过 502，API 的 asset 接口能下。API 拒绝（未登录每小时 60 次）或连不上时，退回 github.com 链接，再按 uci `update_mirror`（默认 `https://ghfast.top/`）加前缀重试。签名让任何来源都不需要被信任。
 
+**检查更新**（1.5.3 起）：这几个地方不再一个接一个地等。每个地方先取清单、再从同一个地方取签名，核对通过才算数；第一个地方（上次拿到清单的那个，否则是 API）单独问 5 秒，没回应或失败就同时再问下一个，谁先交出核对通过的一对就用谁，整次检查最多 60 秒（`CHECK_LIMIT`，车主定）。之前每个地方每个文件每次连接都可以等 30 秒，GitHub 卡住时要两分钟以上才轮到镜像，盒子网页只等 90 秒，之后显示的是上一次的结果。升级时下载安装包仍是一个地方一个地方地试，但先试刚才拿到清单的那个地方。
+
 1.5.0 起，升级成功之后盒子还会把新装的包交给 mu300-linux 的 `mu300-user-packages keep`（`update.keep_for_system_update`；盒子上没有这个工具就什么都不做），这样 mu300-linux 自己的系统更新会把 AutoPlay 装回来；`python3 /opt/autoplay/update.py keep` 手动做同一件事。这一步失败只写日志，不影响升级结果。
 
 ## 二、密钥

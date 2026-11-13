@@ -161,7 +161,10 @@ processor above state 0), not above some temperature of our choosing. Everything
 - a check for updates runs in place: the update group shows a spinner row
   "正在检查更新…" and the page reloads every 2 s until the result row replaces it
   (until 1.4.0 a bar said "正在检查更新，几秒后刷新页面就能看到结果", and the owner
-  had to reload by hand);
+  had to reload by hand). Since 1.5.3 a check gives up as a whole within 60 s
+  (`update.CHECK_LIMIT`) and the spinner stays until it has; until then a check
+  could run past the spinner's 90 s where GitHub stalled, and the page went back to
+  the last result;
 - an action that leads to its own screen (pairing, removal, upgrade) says
   nothing at all: the screen is the answer;
 - with nothing going on a group has no line under it (1.5.0): the standing

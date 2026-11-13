@@ -79,8 +79,11 @@ TITLE = "AutoPlay 盒子"   # what the CarPlay page's link calls it (打开盒�
 # Which category a button's answer is shown on: the redirect after a POST carries it as the address's fragment.
 PANE_AFTER = {"/update": "#update"}
 
-# The longest a check started from the page shows as running (update.check tries GitHub, then the mirror).
-CHECK_SHOWN_FOR = 90
+# The longest a check started from the page shows as running. "Checking" stays until the check ends: update.latest_manifest gives up as a whole after update.CHECK_LIMIT (60 s,
+# 1.5.3); this is only the guard against a check that never comes back. It was 90 s while a check could take two
+# minutes and more (30 s per place, file and connection, one after another), so the page went back to the last result
+# and stopped refreshing while the check went on.
+CHECK_SHOWN_FOR = update.CHECK_LIMIT + 15
 
 
 def release_summary(notes):
@@ -315,7 +318,7 @@ class SettingsPage:
         threading.Thread(target=run, name="update-check", daemon=True).start()
 
     def check_running(self):
-        # Never "checking" for ever: update.check gives up on each source well within this.
+        # Never "checking" for ever: update.check gives up as a whole within update.CHECK_LIMIT.
         return self.checking.is_set() and time.monotonic() - self.check_started < CHECK_SHOWN_FOR
 
     def update_block(self, nonce, note=""):

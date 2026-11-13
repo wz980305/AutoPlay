@@ -12,6 +12,7 @@ import sys
 import tarfile
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -493,6 +494,7 @@ class GitHub:
 
     def __init__(self, root, latest):
         self.root, self.latest, self.web_status, self.api_status, self.seen = Path(root), latest, None, None, []
+        self.stall, self.released = set(), threading.Event()   # 'api' / 'web' in stall: no answer until released
         github = self
 
         class Handler(http.server.BaseHTTPRequestHandler):
@@ -509,6 +511,9 @@ class GitHub:
             def do_GET(self):
                 github.seen.append((self.path, self.headers.get('Accept')))
                 parts = self.path.strip('/').split('/')
+                if parts[0] in github.stall:   # connected, never answering (1.5.3: GitHub from the owner's network)
+                    github.released.wait(20)
+                    return   # the caller gave up long ago
                 if parts[0] == 'web':                     # web/<o>/<r>/releases/(latest/download|download/<t>)/<n>
                     if github.web_status:
                         return self.send_error(github.web_status)
@@ -552,6 +557,42 @@ class GitHub:
         return [p for p, _ in self.seen if p.startswith('/api/') and '/assets/' not in p]
 
     def close(self):
+        self.released.set()
+        self.httpd.shutdown()
+        self.httpd.server_close()
+
+
+class Mirror:
+    """A mirror (its prefix + the github.com address): answers with the files it holds, by name, or stalls."""
+
+    def __init__(self):
+        self.files, self.seen, self.stall, self.released = {}, [], False, threading.Event()
+        mirror = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *_):
+                pass
+
+            def do_GET(self):
+                mirror.seen.append(self.path.rsplit('/', 1)[-1])
+                if mirror.stall:
+                    mirror.released.wait(20)
+                    return   # the caller gave up long ago
+                data = mirror.files.get(self.path.rsplit('/', 1)[-1])
+                if data is None:
+                    return self.send_error(404)
+                self.send_response(200)
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+        self.httpd = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        self.prefix = f'http://localhost:{self.httpd.server_port}/'   # its own label, apart from GitHub's 127.0.0.1
+        self.label = f'localhost:{self.httpd.server_port}'
+
+    def close(self):
+        self.released.set()
         self.httpd.shutdown()
         self.httpd.server_close()
 
@@ -578,6 +619,9 @@ class GitHubApiTests(unittest.TestCase):
             self.addCleanup(p.stop)
         update._releases.clear()
         self.addCleanup(update._releases.clear)
+        p = patch.object(update, '_last_good', None)
+        p.start()
+        self.addCleanup(p.stop)
         self.root = self.dir / 'opt/autoplay'
         (self.root / 'state').mkdir(parents=True)
 
@@ -649,6 +693,75 @@ class GitHubApiTests(unittest.TestCase):
         self.assertIsNone(update.api_download('https://ghfast.top/https://github.com/o/r/releases/latest/download/x'))
         self.assertEqual([label for label, _, _ in update.sources('http://192.168.1.2:8000/x', ('https://m/',))],
                          ['192.168.1.2:8000', 'm'])
+        self.assertEqual([label for label, _, _ in update.sources('http://192.168.1.2:8000/x', ('https://m/',), 'm')],
+                         ['m', '192.168.1.2:8000'], 'the place that delivered last time first')
+
+    # 1.5.3: on the owner's network 「正在检查更新」 ran past the page's 90 s. Each place had 30 s per connection and per
+    # file, one after another: where GitHub stalled, the mirror answered after two minutes.
+
+    def mirror(self, files):
+        mirror = Mirror()
+        self.addCleanup(mirror.close)
+        mirror.files.update(files)
+        p = patch.object(update, 'MIRRORS', (mirror.prefix,))
+        p.start()
+        self.addCleanup(p.stop)
+        return mirror
+
+    def signed(self, version):
+        manifest = json.dumps({'format': 1, 'version': version, 'online': True}).encode()
+        return {'autoplay-update.json': manifest, 'autoplay-update.json.sig': self.sign(manifest)}
+
+    def test_a_stalled_github_does_not_hold_the_check(self):
+        mirror = self.mirror(self.signed('1.5.3'))
+        self.github.stall.update({'api', 'web'})
+        started = time.monotonic()
+        self.assertEqual(update.latest_manifest(self.root, True, self.pub, limit=10, head_start=0.3)['version'], '1.5.3')
+        self.assertLess(time.monotonic() - started, 3, 'the mirror after two head starts, not after 30 s per place')
+        self.assertEqual(update._last_good, mirror.label)
+        # The downloads that follow (an install) ask that place first, so they do not wait on GitHub either.
+        started, target = time.monotonic(), self.dir / 'pkg.apk'
+        mirror.files['autoplay-1.5.3-r1.apk'] = b'new package'
+        update.fetch(update.GITHUB + 'owner/AutoPlay/releases/download/v1.5.3/autoplay-1.5.3-r1.apk', (mirror.prefix,),
+                     target=target, sha256=sha(b'new package'), size=11)
+        self.assertLess(time.monotonic() - started, 3)
+        self.assertEqual(target.read_bytes(), b'new package')
+
+    def test_the_whole_check_gives_up_at_its_limit(self):
+        mirror = self.mirror(self.signed('1.5.3'))
+        mirror.stall = True
+        self.github.stall.update({'api', 'web'})
+        started = time.monotonic()
+        with self.assertRaisesRegex(update.UpdateError, '下载失败：1 秒内没有拿到更新清单') as caught:
+            update.latest_manifest(self.root, True, self.pub, limit=1, head_start=0.2)
+        self.assertLess(time.monotonic() - started, 2)
+        self.assertEqual(str(caught.exception).count('没有回应'), 3, 'the API, github.com and the mirror, each named')
+        self.assertEqual(update.CHECK_LIMIT, 60, "the owner's figure")
+
+    def test_a_quick_wrong_answer_does_not_beat_a_slower_right_one(self):
+        manifest = json.dumps({'format': 1, 'version': '1.5.3', 'online': True}).encode()
+        self.release('v1.5.3', {'autoplay-update.json': manifest})
+        self.github.latest = 'v1.5.3'
+        mirror = self.mirror({'autoplay-update.json': manifest.replace(b'1.5.3', b'9.9.9'),
+                              'autoplay-update.json.sig': self.sign(manifest)})
+        with patch.object(update, '_last_good', mirror.label):   # asked first, answers at once, and wrongly
+            self.assertEqual(update.latest_manifest(self.root, True, self.pub, limit=10, head_start=0.3)['version'],
+                             '1.5.3')
+            self.assertEqual(update._last_good, f'127.0.0.1:{self.github.port}')
+        self.assertIn('autoplay-update.json', mirror.seen)
+
+    def test_the_manifest_and_its_signature_come_from_one_place(self):
+        manifest = json.dumps({'format': 1, 'version': '1.5.3', 'online': True}).encode()
+        self.github.put('v1.5.3', 'autoplay-update.json', manifest)   # no signature on GitHub
+        self.github.latest = 'v1.5.3'
+        mirror = self.mirror(self.signed('1.5.3'))
+        self.assertEqual(update.latest_manifest(self.root, True, self.pub, limit=10, head_start=0.3)['version'], '1.5.3')
+        self.assertEqual(mirror.seen, ['autoplay-update.json', 'autoplay-update.json.sig'])
+
+    def test_the_page_shows_checking_until_the_check_has_given_up(self):
+        import settings_page
+        self.assertGreater(settings_page.CHECK_SHOWN_FOR, update.CHECK_LIMIT)
+        self.assertLessEqual(settings_page.CHECK_SHOWN_FOR, update.CHECK_LIMIT + 30)
 
 
 class ServiceUpTests(unittest.TestCase):

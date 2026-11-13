@@ -19,6 +19,7 @@ import hashlib
 import http.client
 import json
 import os
+import queue
 from pathlib import Path
 import re
 import shutil
@@ -27,6 +28,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -60,6 +62,12 @@ API = os.environ.get("AUTOPLAY_UPDATE_API", "https://api.github.com/")
 RELEASE_LINK = re.compile(r"([^/]+)/([^/]+)/releases/(?:latest/download|download/([^/]+))/([^/]+)")
 RELEASE_CACHE_FOR = 600   # s: one release lookup serves one check or install, never a later day's
 _releases = {}            # (owner, repo, tag or None) -> (looked up at, {asset name: API download URL})
+# A check asks the places above for the manifest and its signature with a head start each and gives up as a whole
+# after CHECK_LIMIT seconds (1.5.3, the owner's figure). Before, each place had 30 s per connection and per file, one
+# after another: where GitHub stalled, the mirror answered only after two minutes, and the page had stopped waiting.
+CHECK_LIMIT = 60          # s: a whole check, whatever the places do
+HEAD_START = 5            # s: how long a place is asked alone before the next one is asked as well
+_last_good = None         # the place the last good manifest came from in this process: asked first from then on
 OPENWRT_PACKAGES = ("autoplay", "luci-app-autoplay", "luci-i18n-autoplay-zh-cn")
 # The DashPlay names of the packages this fork replaces: a box still running them is moved over by the first AutoPlay
 # update (they are removed first, their prerm keeps state/, the autoplay postinst migrates /opt/dashplay/state), and
@@ -118,7 +126,7 @@ class NoSuchAsset(OSError):
     code = 404
 
 
-def api_download(url, clock=time.monotonic):
+def api_download(url, clock=time.monotonic, timeout=30):
     """The REST API address that downloads the release file at github.com address url, or None for an address that
     is not a GitHub release download (a test server, a mirror). Looks the release up once per RELEASE_CACHE_FOR, so
     a manifest and its signature come from the same release."""
@@ -135,7 +143,7 @@ def api_download(url, clock=time.monotonic):
         request = urllib.request.Request(API + path, headers={
             "User-Agent": "AutoPlay-update", "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28"})
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             release = json.loads(response.read(1 << 21))
         if not isinstance(release, dict):
             raise ValueError("unexpected release lookup answer")
@@ -148,45 +156,54 @@ def api_download(url, clock=time.monotonic):
     return asset
 
 
-def sources(url, prefixes=()):
-    """Where url is fetched from, in order: (label, address or None for "ask the API", extra headers)."""
+def sources(url, prefixes=(), prefer=None):
+    """Where url is fetched from, in order: (label, address or None for "ask the API", extra headers). The place
+    labelled prefer goes first, the others keep their order."""
     first = [(urllib.parse.urlsplit(API).netloc, None, {"Accept": "application/octet-stream"})] \
         if url.startswith(GITHUB) and RELEASE_LINK.fullmatch(url[len(GITHUB):]) else []
-    return first + [(candidate.split("/")[2], candidate, {}) for candidate in [url] + [p + url for p in prefixes]]
+    found = first + [(candidate.split("/")[2], candidate, {}) for candidate in [url] + [p + url for p in prefixes]]
+    return sorted(found, key=lambda place: place[0] != prefer) if prefer else found
 
 
-def fetch(url, prefixes=(), limit=1 << 20, target=None, sha256=None, size=None):
-    """Bytes of url (or, with target, the file written there), from GitHub's API, github.com, or else each mirror
-    prefix. With sha256 and size the download must match them exactly."""
-    errors, codes = [], []
-    for label, candidate, extra in sources(url, prefixes):
+def fetch_from(place, url, limit=1 << 20, target=None, sha256=None, size=None, timeout=30):
+    """Bytes of url (or, with target, the file written there) from one place of sources(); raises what went wrong."""
+    _label, candidate, extra = place
+    candidate = candidate or api_download(url, timeout=timeout)
+    request = urllib.request.Request(candidate, headers={"User-Agent": "AutoPlay-update", **extra})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        digest, total = hashlib.sha256(), 0
+        out = open(target, "wb") if target else None
+        chunks = []
         try:
-            candidate = candidate or api_download(url)
-            request = urllib.request.Request(candidate, headers={"User-Agent": "AutoPlay-update", **extra})
-            with urllib.request.urlopen(request, timeout=30) as response:
-                digest, total = hashlib.sha256(), 0
-                out = open(target, "wb") if target else None
-                chunks = []
-                try:
-                    while True:
-                        chunk = response.read(1 << 16)
-                        if not chunk:
-                            break
-                        total += len(chunk)
-                        if total > (size if size is not None else limit):
-                            raise UpdateError("下载的文件比预期大，已停止")
-                        digest.update(chunk)
-                        (out.write(chunk) if out else chunks.append(chunk))
-                finally:
-                    if out:
-                        out.close()
-            if sha256 and (digest.hexdigest() != sha256 or total != size):
-                raise UpdateError("下载的文件与签名清单不符")
-            return target if target else b"".join(chunks)
+            while True:
+                chunk = response.read(1 << 16)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > (size if size is not None else limit):
+                    raise UpdateError("下载的文件比预期大，已停止")
+                digest.update(chunk)
+                (out.write(chunk) if out else chunks.append(chunk))
+        finally:
+            if out:
+                out.close()
+    if sha256 and (digest.hexdigest() != sha256 or total != size):
+        raise UpdateError("下载的文件与签名清单不符")
+    return target if target else b"".join(chunks)
+
+
+def fetch(url, prefixes=(), limit=1 << 20, target=None, sha256=None, size=None, prefer=None):
+    """Bytes of url (or, with target, the file written there), from GitHub's API, github.com, or else each mirror
+    prefix; the place the last good manifest came from first (prefer, by default). With sha256 and size the
+    download must match them exactly."""
+    errors, codes = [], []
+    for place in sources(url, prefixes, prefer or _last_good):
+        try:
+            return fetch_from(place, url, limit, target, sha256, size)
         except (OSError, UpdateError, ValueError, http.client.HTTPException) as error:
             if hasattr(error, "close"):   # an HTTPError holds its response open
                 error.close()
-            errors.append(f"{label}: {error}")
+            errors.append(f"{place[0]}: {error}")
             codes.append(getattr(error, "code", None))
     if all(code == 404 for code in codes):
         raise NotFound("下载失败（" + "；".join(errors)[-300:] + "）")
@@ -206,12 +223,68 @@ def verify(data, signature, key=KEY):
     return out.returncode == 0 and "Signature Verified Successfully" in out.stdout
 
 
-def latest_manifest(root, openwrt, key=KEY):
-    prefixes = mirrors(root, openwrt)
-    data = fetch(LATEST + MANIFEST, prefixes, limit=1 << 20)
-    signature = fetch(LATEST + SIGNATURE, prefixes, limit=4096)
-    if not verify(data, signature, key):
-        raise UpdateError("更新清单的签名不对，已忽略（可能是镜像或网络被篡改）")
+class BadSignature(UpdateError):
+    """A place delivered a manifest and a signature that do not match the release key."""
+
+
+def latest_manifest(root, openwrt, key=KEY, limit=CHECK_LIMIT, head_start=HEAD_START, clock=time.monotonic):
+    """The latest release's manifest, checked against the release key (1.5.3). Each place of sources() is asked for
+    the manifest and then for its signature, both from the same place, and the first place whose pair verifies
+    wins: a quick but wrong answer (a bad mirror) does not stop a slower right one. The first place (the one that
+    delivered last time, else GitHub's API) is asked alone for head_start seconds; the next one is asked as well when
+    that time is up or every place asked so far has failed. After `limit` seconds the check gives up as a whole,
+    leaving the places still busy to time out on their own."""
+    global _last_good
+    prefixes, prefer = mirrors(root, openwrt), _last_good
+    pairs = list(zip(sources(LATEST + MANIFEST, prefixes, prefer), sources(LATEST + SIGNATURE, prefixes, prefer)))
+    deadline, answers = clock() + limit, queue.Queue()
+
+    def ask(index):
+        manifest_place, signature_place = pairs[index]
+        try:
+            data = fetch_from(manifest_place, LATEST + MANIFEST, 1 << 20, timeout=min(30, max(1, deadline - clock())))
+            signature = fetch_from(signature_place, LATEST + SIGNATURE, 4096,
+                                   timeout=min(30, max(1, deadline - clock())))
+            if not verify(data, signature, key):
+                raise BadSignature("签名不对")
+            answers.put((index, data, None))
+        except Exception as error:   # whatever one place does, the others go on
+            if hasattr(error, "close"):   # an HTTPError holds its response open
+                error.close()
+            answers.put((index, None, error))
+
+    asked, failed = 0, {}
+
+    def ask_next():
+        nonlocal asked
+        threading.Thread(target=ask, args=(asked,), name="update-check-" + pairs[asked][0][0], daemon=True).start()
+        asked += 1
+        return clock() + head_start
+
+    next_at, data = ask_next(), None
+    while data is None and len(failed) < len(pairs):
+        now, more = clock(), asked < len(pairs)
+        if now >= deadline:
+            break
+        try:
+            index, data, error = answers.get(timeout=max(0.01, (min(deadline, next_at) if more else deadline) - now))
+        except queue.Empty:
+            if more and clock() >= next_at:
+                next_at = ask_next()
+            continue
+        if data is None:
+            failed[index] = error
+            if asked < len(pairs) and len(failed) == asked:   # every place asked so far has failed: the next at once
+                next_at = ask_next()
+    if data is None:
+        said = "；".join(f"{pairs[i][0][0]}: {failed[i] if i in failed else '没有回应'}" for i in range(asked))
+        if any(isinstance(error, BadSignature) for error in failed.values()):
+            raise UpdateError(f"更新清单的签名不对，已忽略（可能是镜像或网络被篡改；{said[-240:]}）")
+        if len(failed) == len(pairs) and all(getattr(error, "code", None) == 404 for error in failed.values()):
+            raise NotFound("下载失败（" + said[-300:] + "）")
+        within = "" if len(failed) == len(pairs) else f"：{limit} 秒内没有拿到更新清单"
+        raise UpdateError(f"下载失败{within}（{said[-300:]}）。网络恢复后再试，或在设置里换一个镜像")
+    _last_good = pairs[index][0][0]
     manifest = json.loads(data)
     if manifest.get("format") != 1 or not version_key(manifest.get("version")):
         raise UpdateError("更新清单格式不认识：请先手动升级到较新的版本")
