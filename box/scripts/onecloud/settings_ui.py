@@ -243,7 +243,12 @@ def page(title, body, refresh=False, done=None, out=None):
     then the way out of the box page: 返回 for a visit that came from the CarPlay page (to the settings panel when it
     began there, see SCRIPT), "CarPlay 画面" for a browser that came by itself."""
     body = keep_words(body)
-    meta = f'<meta http-equiv=refresh content={3 if refresh is True else refresh}>' if refresh else ''
+    seconds = 3 if refresh is True else refresh
+    # The refresh tag, and a script that reloads half a second after it would have (1.5.3): the owner had to open the
+    # page again to see what a check had found. A browser may leave the tag alone for an address with a fragment
+    # (/?m=#update after a button): it only scrolls. Where the tag works the page is gone before the script's turn.
+    meta = (f'<meta http-equiv=refresh content={seconds}>'
+            f'<script>setTimeout(function(){{location.reload()}},{int(seconds * 1000) + 500})</script>') if refresh else ''
     button = f'<a class=done href="{escape(done[1])}">{escape(done[0])}</a>' if done else ''
     if out:
         button = f'<a class="done out" href="{escape(out)}"><span class=fwd>CarPlay 画面</span><span class=back>返回</span></a>'

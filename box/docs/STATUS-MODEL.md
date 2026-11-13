@@ -164,7 +164,9 @@ processor above state 0), not above some temperature of our choosing. Everything
   had to reload by hand). Since 1.5.3 a check gives up as a whole within 60 s
   (`update.CHECK_LIMIT`) and the spinner stays until it has; until then a check
   could run past the spinner's 90 s where GitHub stalled, and the page went back to
-  the last result;
+  the last result. A page that refreshes also reloads from a script half a second
+  after its refresh tag: a browser may take the tag to an address ending in
+  `#update` as a scroll;
 - an action that leads to its own screen (pairing, removal, upgrade) says
   nothing at all: the screen is the answer;
 - with nothing going on a group has no line under it (1.5.0): the standing

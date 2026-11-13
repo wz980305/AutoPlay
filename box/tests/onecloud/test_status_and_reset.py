@@ -448,6 +448,21 @@ class PageLayoutTests(unittest.TestCase):
                      '#net:target~.nav a[href="#net"]', "scroll-margin-top:100vh"):
             self.assertIn(rule, ui.CSS)
 
+    def test_a_page_that_refreshes_also_reloads_from_a_script(self):
+        """1.5.3: the owner had to open the page again to see what 「检查更新」 had found. After a button the address
+        ends in #update, and a browser may take the refresh tag to such an address as a scroll, not a reload. A
+        script reloads half a second after the tag would have; where the tag works, the page is gone by then."""
+        import settings_ui as ui
+        html = ui.page("t", "<p>x</p>", 2)
+        self.assertIn("<meta http-equiv=refresh content=2><script>setTimeout(function(){location.reload()},2500)</script>", html)
+        self.assertIn("setTimeout(function(){location.reload()},3500)", ui.page("t", "<p>x</p>", True))
+        self.assertNotIn("location.reload", ui.page("t", "<p>x</p>"))
+        with patch("settings_page.update.check", side_effect=lambda root: threading.Event().wait(5)):
+            self.page.start_check()
+        checking = self.page.render("m=")
+        self.assertIn("正在检查更新…", checking)
+        self.assertIn("location.reload()},2500)", checking)
+
     def test_a_buttons_answer_comes_back_on_its_category(self):
         import http.client
         self.page.start(0)   # any free port; a request from the loopback is the box's own
