@@ -5,7 +5,7 @@ include $(TOPDIR)/rules.mk
 LUCI_TITLE:=LuCI page for AutoPlay
 # Runtime dependencies only: building luci-base's own dependencies needs the full package feeds.
 LUCI_DEPENDS:=
-LUCI_EXTRA_DEPENDS:=autoplay (>=1.5.2), luci-base (>=0)
+LUCI_EXTRA_DEPENDS:=autoplay (>=1.5.3), luci-base (>=0)
 LUCI_PKGARCH:=all
 PKG_LICENSE:=GPL-3.0-only
 

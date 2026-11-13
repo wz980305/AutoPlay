@@ -10,7 +10,7 @@
 
 > **这不是 Apple 认证产品。** 运行需要你自己提供配件认证身份，见 [box/README.md](../box/README.md#认证身份)。
 
-前提是 F50 已按 [mu300-linux](https://github.com/dikeckaan/mu300-linux) 的文档刷成 OpenWrt（我们实测的那台原厂固件是 B13；刷机步骤本仓库不写）。装包走下面的手动路线，完整过程见 [安装使用说明](../交付资料/AutoPlay-1.5.2-安装使用说明.md)。
+前提是 F50 已按 [mu300-linux](https://github.com/dikeckaan/mu300-linux) 的文档刷成 OpenWrt（我们实测的那台原厂固件是 B13；刷机步骤本仓库不写）。装包走下面的手动路线，完整过程见 [安装使用说明](../交付资料/AutoPlay-1.5.3-安装使用说明.md)。
 
 ## 安装（手动）
 
