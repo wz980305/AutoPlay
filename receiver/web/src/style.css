@@ -121,7 +121,8 @@ fieldset { border:0; padding:0; margin:0; min-width:0; }
 
 /* Notices over the live picture: a plain translucent fill with an edge, never a blur (a backdrop-filter above the
    canvas costs the low-latency path, media_performance_audit #8). The toast sits bottom-centre, away from CarPlay's
-   navigation banner at the top (viewer audit V12). */
+   navigation banner at the top (viewer audit V12). Since 1.5.4 it is the pill for what the page handled by itself -
+   one short line, gone by itself - and only that: a problem the driver must act on is an alert (dialog.alert). */
 .capsule { position:absolute; left:50%; transform:translateX(-50%); max-width:calc(100vw - 2rem); padding:var(--space-2) var(--space-4); border-radius:1.4rem;
   background:var(--overlay); border:1px solid var(--overlay-edge);
   color:#fff; font-size:1.3rem; line-height:1.4; text-align:center; box-shadow:0 8px 30px rgba(0,0,0,.4); }
@@ -132,16 +133,20 @@ fieldset { border:0; padding:0; margin:0; min-width:0; }
   font:var(--t-mono)/1.45 ui-monospace,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums; }
 #debug-hud[hidden] { display:none; }
 @keyframes drop { from { opacity:0; transform:translate(-50%,10px); } }
-#error-banner { position:absolute; bottom:max(var(--space-3),env(safe-area-inset-bottom)); left:var(--space-3); right:var(--space-3); max-width:36rem; max-height:40vh; margin:auto;
-  overflow:auto; padding:var(--space-2) var(--space-3); border-radius:var(--radius); background:var(--cell); box-shadow:inset 4px 0 var(--red), 0 8px 30px rgba(0,0,0,.4); }
-/* The headline is the reason in a sentence (1.5.4), so the body size, as an iOS alert's title. */
-#error-banner > b { display:block; font-size:var(--t-body); font-weight:600; line-height:1.35; padding-right:var(--hit-primary); }
-#error-banner details[hidden] { display:none; }
-#error-banner summary { color:var(--secondary); font-size:1rem; padding:.3rem 0; min-height:var(--hit-secondary); display:flex; align-items:center; cursor:pointer; }
-#error-text { overflow-wrap:anywhere; color:var(--secondary); font-size:1rem; }
-#error-banner #dismiss-error { position:absolute; top:var(--space-1); right:var(--space-1); }
-/* The way to the setting a message is about (1.5.4, Apple: a button, not the setting's address in words). */
-#error-banner .link { display:block; min-height:var(--hit-secondary); padding:0; border:0; background:none; color:var(--tint); font-weight:600; text-align:left; }
+/* A problem that needs the driver (main.ts problem(), 1.5.4): Apple's alert - in the middle over a dimmed screen, a
+   title, one line, the buttons side by side and the one that fixes it tinted. It replaced a card at the bottom with
+   关闭 in its corner and the decoder's English under 详细信息. */
+dialog.alert { position:fixed; inset:0; margin:auto; width:min(24rem, calc(100% - 2 * var(--space-4))); height:fit-content; max-height:calc(100% - 2 * var(--space-4));
+  padding:var(--space-4) var(--space-4) var(--space-3); border-radius:1.75rem; background:#2C2C2E; color:var(--label); text-align:center;
+  box-shadow:0 16px 50px rgba(0,0,0,.5); overflow:auto; }
+dialog.alert[open] { display:flex; flex-direction:column; gap:var(--space-1); animation:pop .16s cubic-bezier(.2,.8,.2,1); }
+dialog.alert::backdrop { background:rgba(0,0,0,.45); }
+.alert h2 { font-size:var(--t-body); line-height:1.35; }
+.alert p { margin:0; color:var(--secondary); font-size:1rem; line-height:1.45; }
+.alert-buttons { display:flex; gap:var(--space-2); margin-top:var(--space-3); }
+.alert-buttons button { flex:1; min-height:var(--hit-secondary); border:0; border-radius:999px; background:var(--fill); color:var(--label); font-weight:600; }
+.alert-buttons button[hidden] { display:none; }
+.alert-buttons .prominent { background:var(--tint-under-white); color:#fff; }
 
 /* A stable, opaque settings workspace. The live canvas below keeps its original geometry. */
 dialog { margin:0; height:100%; max-height:100%; width:100%; max-width:100%; padding:0; border:0;
@@ -170,7 +175,7 @@ button.bar-icon .ico { width:1.45rem; height:1.45rem; }
 button.bar-icon:active { opacity:.5; }
 button.text { border-radius:var(--radius); background:var(--cell); color:var(--label); padding:var(--space-1) var(--space-3); }
 .settings-notices { flex:none; max-height:28vh; overflow:auto; }
-#settings-notices > #toast, #settings-notices > #error-banner { position:relative; inset:auto; transform:none; max-width:none; max-height:none;
+#settings-notices > #toast { position:relative; inset:auto; transform:none; max-width:none; max-height:none;
   margin:var(--space-2) max(var(--space-4),calc(50% - 720px + var(--space-4))); animation:none; }
 .settings-layout { display:grid; grid-template-columns:11rem minmax(0,1fr); gap:var(--space-4); width:100%; max-width:1440px; margin:0 auto; flex:1; min-height:0;
   padding:var(--space-3) max(var(--space-4),env(safe-area-inset-right)) 0 max(var(--space-4),env(safe-area-inset-left)); }
@@ -222,7 +227,9 @@ dialog.picker::backdrop { background:transparent; }
 :root[data-theme=light] dialog, :root[data-theme=light] #overlay { color-scheme:light; color:var(--label); --bg:#F2F2F7; --cell:#FFF; --cell-hi:#FFF; --press:#D1D1D6; --sep:rgba(60,60,67,.24);
   --label:#000; --secondary:rgba(60,60,67,.7); --tint:#0088FF; --tint-under-white:#007AFF; --green:#34C759; --red:#FF383C; --orange:#FF8D28;
   --fill:rgba(120,120,128,.14); --chev:rgba(60,60,67,.45); --hair:1px; }
-:root[data-theme=light] dialog:not(.picker)::backdrop { background:#F2F2F7; }
+:root[data-theme=light] dialog:not(.picker):not(.alert)::backdrop { background:#F2F2F7; }
+:root[data-theme=light] dialog.alert { background:#FFF; box-shadow:0 16px 50px rgba(0,0,0,.25); }
+:root[data-theme=light] dialog.alert::backdrop { background:rgba(0,0,0,.25); }
 :root[data-theme=light] dialog.picker { background:#FFF; box-shadow:0 12px 40px rgba(0,0,0,.22); }
 /* Narrow windows and phones take the box page's sizes (1.5.1): the same root size down to 480 px (it was 18 px here
    and 20 px there), the box page's 17 px and smaller touch targets below. */
@@ -231,7 +238,7 @@ dialog.picker::backdrop { background:transparent; }
   .status { font-size:1.85rem; }
   dialog header { padding-left:var(--space-3); padding-right:var(--space-3); }
   .settings-layout { display:flex; flex-direction:column; gap:var(--space-2); padding:var(--space-2) var(--space-3) 0; }
-  #settings-notices > #toast, #settings-notices > #error-banner { margin-left:var(--space-3); margin-right:var(--space-3); }
+  #settings-notices > #toast { margin-left:var(--space-3); margin-right:var(--space-3); }
   .settings-nav { flex:none; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--space-1); padding:0; overflow:visible; }
   .settings-nav button { min-width:0; min-height:var(--hit-secondary); padding:var(--space-1); justify-content:center; font-size:1rem; text-align:center; overflow-wrap:anywhere; }
   .settings-body { flex:1; min-height:0; }

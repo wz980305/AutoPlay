@@ -401,7 +401,7 @@ def phone_rows(devices, active, last, nonce, idle, joining=None):
     remove it. The one in use is a plain row: nothing can be done to it until it disconnects. joining: the phone the
     box is inviting - its row says so, with a spinner (1.5.4, Apple: status beside what it describes)."""
     if not devices:
-        return f'<div class="cell empty">{tile("gray", "phone")}<span class=main><b>还没有添加 iPhone</b></span></div>'
+        return f'<div class="cell empty">{tile("gray", "phone")}<span class=main><b>尚未添加 iPhone</b></span></div>'
     twins = same_names(devices.values())
     html = ""
     for phone, name in devices.items():

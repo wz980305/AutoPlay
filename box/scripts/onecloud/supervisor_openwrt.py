@@ -136,17 +136,17 @@ def lan_warning(address):
         return ""
     if address.ip in state_files.SHARED_SPACE:
         return ""
-    return (f"局域网地址是 {address}，不在 100.64.0.0/10 里，特斯拉的浏览器打不开它。请在 OpenWrt 后台「网络 → 接口 → LAN」"
+    return (f"局域网地址是 {address}，不在 100.64.0.0/10 内，特斯拉浏览器无法访问。请在 OpenWrt 后台「网络 → 接口 → LAN」"
             f"改回 {SHARED_LAN}，或重新安装 AutoPlay。")
 
 
 def channel_warning(channel):
     """A Tesla sees 5 GHz channels 36-48 and 149-165 only (tesla_only_box_delta.md 6.1, platform_audit #9)."""
     if channel is None or channel <= 14:
-        return "AutoPlay 热点在 2.4 GHz：能用，但 5 GHz（国内信道 149）更稳。" if channel else ""
+        return "AutoPlay 热点使用 2.4 GHz：可以使用，但 5 GHz 更稳定，国内请用信道 149。" if channel else ""
     if 36 <= channel <= 48 or 149 <= channel <= 165:
         return ""
-    return f"特斯拉看不到 AutoPlay 热点的信道 {channel}，请改为 149（国家 CN）或 36。"
+    return f"特斯拉不支持 AutoPlay 热点当前的信道 {channel}，请改为 149 或 36，国家选 CN。"
 
 
 def trusted_networks(network):
@@ -164,11 +164,11 @@ def waiting_trust(planned, lan):
 
 
 WAITING_REASONS = [   # platform_openwrt's reasons, for the settings page; others are shown as they are
-    (r"no Wi-Fi network is switched on.*", "路由器的 Wi-Fi 都关着"),
-    (r"Wi-Fi (.+) is not up yet", r"「\1」还没开启"),
-    (r"no Wi-Fi network with a password type.*", "没有 iPhone 能用的加密方式（不加密、WPA2 或 WPA3 个人）"),
-    (r"network (\S+) for Wi-Fi (.+) has no IPv4 address yet", r"「\2」所在的网络 \1 还没有地址"),
-    (r"Wi-Fi (.+) has no channel yet", r"「\1」还没有信道"),
+    (r"no Wi-Fi network is switched on.*", "路由器的 Wi-Fi 均已关闭"),
+    (r"Wi-Fi (.+) is not up yet", r"「\1」尚未开启"),
+    (r"no Wi-Fi network with a password type.*", "iPhone 不支持当前加密方式，请选 WPA2 或 WPA3 个人，或不加密"),
+    (r"network (\S+) for Wi-Fi (.+) has no IPv4 address yet", r"「\2」所在的网络 \1 尚无地址"),
+    (r"Wi-Fi (.+) has no channel yet", r"「\1」尚无信道"),
 ]
 
 
@@ -178,7 +178,7 @@ def waiting_warning(why):
         if re.fullmatch(pattern, why):
             why = re.sub(pattern, text, why)
             break
-    return f"AutoPlay 热点还没准备好：{why}。"
+    return f"AutoPlay 热点尚未就绪：{why}。"
 
 
 TAILSCALE_DROP = re.compile(r'iifname != "tailscale0\*?" ip saddr 100\.64\.0\.0/10 .*\bdrop\b')
@@ -197,8 +197,8 @@ def shared_lan_conflict(ip_addresses, lan_device, ruleset=None):
             continue
         device = fields[1]
         if device.startswith("tailscale") and (ruleset is None or tailscale):
-            return ("Tailscale 的防火墙会丢掉别的网口进来的 100.64.0.0/10 地址：先在路由器上运行 "
-                    "tailscale set --netfilter-mode=off（OpenWrt 防火墙要有放行 tailscale0 的区域）")
+            return ("Tailscale 的防火墙会丢弃来自其他网口的 100.64.0.0/10 地址：请先在路由器上运行 "
+                    "tailscale set --netfilter-mode=off，并在 OpenWrt 防火墙中放行 tailscale0 的区域")
         try:
             theirs = ipaddress.IPv4Interface(fields[3]).network
         except ValueError:

@@ -115,29 +115,41 @@ function fit() {
   surface.style.width = `${size.width}px`; surface.style.height = `${size.height}px`;
   screen.classList.toggle('area', !!area);
 }
-/** The error banner (1.5.4): its headline is the reason in the page's words; technical text, if any, under 详细信息.
- *  Until then the headline was always "播放遇到问题" and the reason sat folded away, in English where the decoder
- *  wrote it, with advice that no longer held. */
-let errorAction: (() => void) | null = null;
-function error(headline: string, detail = '', action: (() => void) | null = null) {
-  el('error-title').textContent = headline; el('error-text').textContent = detail;
-  el('error-details').hidden = !detail; el('error-banner').hidden = !headline;
-  errorAction = action; el('error-action').hidden = !action;
+/** A problem that needs the driver (1.5.4, Apple's alerts): only when there can be no picture until something is
+ *  changed. A title, one short line, 好 and - where a setting fixes it - 前往设置, which goes there. Until then a card at
+ *  the bottom with 关闭, the decoder's English under 详细信息, and the setting's place in words. The decoder's own text
+ *  goes to the box's log (viewer stats ev 17), not on the screen. Everything the page handled by itself is a pill
+ *  instead (toast). */
+const alertBox = el<HTMLDialogElement>('alert');
+let alertAction: (() => void) | null = null;
+function problem(title: string, message: string, action: (() => void) | null = null) {
+  el('alert-title').textContent = title; el('alert-message').textContent = message;
+  alertAction = action; el('alert-action').hidden = !action;
+  if (!alertBox.open) { if (typeof alertBox.showModal === 'function') alertBox.showModal(); else alertBox.setAttribute('open', ''); }
 }
-el('error-action').onclick = () => { const go = errorAction; error(''); go?.(); };
-/** What the decoder reports, said for this page: its own words go under the details. */
+function closeProblem() { if (alertBox.open) alertBox.close(); }
+el('alert-ok').onclick = closeProblem;
+el('alert-action').onclick = () => { const go = alertAction; closeProblem(); go?.(); };
+/** What the decoder reports, said for this page; its own words go to the box's log. Viewer log: ev 17 decoder
+ *  (1 H.265 failed, auto went back to H.264; 2 H.265 failed, picked by hand; 3 no VideoDecoder; 4 not a secure page;
+ *  5 a frame failed to decode). */
 function decoderError(message: string) {
-  if (!message) { error(''); return; }
+  if (!message) return;
   if (message.includes('H.265/HEVC')) {
     // This browser said it decodes H.265 but cannot: auto goes back to H.264 for good (on this browser); a codec
-    // picked by hand stays as picked, and the banner says where to change it.
+    // picked by hand stays as picked, and the alert leads to it.
     saveFlag('f50-hevc-failed', '1'); lastAutoTarget = ''; urgentChange = 'codec'; scheduleAuto();
-    if (el<HTMLSelectElement>('codec').value === 'h265') error(t('hevcManual'), message, () => openSetting('display', 'codec'));
-    else error(t('hevcAuto'), message);
+    if (el<HTMLSelectElement>('codec').value === 'h265') {
+      lifeEvent(17, { decoder: 2 }); problem(t('hevcTitle'), t('hevcManual'), () => openSetting('display', 'codec'));
+    } else { lifeEvent(17, { decoder: 1 }); toast(t('hevcAuto')); }
     return;
   }
-  if (message.startsWith('VideoDecoder is not available')) { error(t(isSecureContext ? 'unsupported' : 'insecure'), message); return; }
-  error(t('decodeFail'), message);
+  if (message.startsWith('VideoDecoder is not available')) {
+    lifeEvent(17, { decoder: isSecureContext ? 3 : 4 });
+    if (isSecureContext) problem(t('unsupportedTitle'), t('unsupported')); else problem(t('insecureTitle'), t('insecure'));
+    return;
+  }
+  lifeEvent(17, { decoder: 5 }); toast(t('decodeFail'));
 }
 /** Auto quality (2026-10-14; a Tesla decodes a frame in ~1 ms, the XPeng in 60-100 ms): once this browser has
  *  shown it decodes fast (f50-fast-decoder, from the 10 s reports), auto picks the resolution from the screen's real
@@ -297,7 +309,7 @@ function openSetting(page: string, select: string) {
 }
 function openPanel() {
   if (!panel.open) {
-    for (const id of ['toast', 'error-banner']) el('settings-notices').append(el(id));
+    el('settings-notices').append(el('toast'));
     panel.classList.remove('closing'); panel.showModal();
   }
   void loadDisplay();
@@ -324,10 +336,9 @@ el('btn-settings').onclick = openPanel;
 el('btn-close').onclick = closePanel;
 // Native modal dialogs are in the top layer: keep notices with the controls that triggered them.
 panel.addEventListener('close', () => {
-  for (const id of ['toast', 'error-banner']) el('app').append(el(id));
+  el('app').append(el('toast'));
 });
 panel.addEventListener('cancel', event => { event.preventDefault(); closePanel(); });
-el('dismiss-error').onclick = () => error('');
 el<HTMLSelectElement>('language').onchange = event => { setLanguage((event.target as HTMLSelectElement).value); render(); };
 panel.addEventListener('click', event => { if (event.target !== panel) return; const r=panel.getBoundingClientRect(); if(event.clientX<r.left || event.clientX>r.right) closePanel(); });
 /** A Tesla's browser ignores a page's fullscreen request (so the DOM requestFullscreen path and an Xpeng's
@@ -467,7 +478,7 @@ async function adapt() {
   if (sameStream(display,next)) return;
   // Every window size (and a codec this browser proved it can or cannot handle) renegotiates now: each size is its
   // own CarPlay session at its sharpest resolution (2026-10-23).
-  if (!(await saveDisplay(next, { reason: urgent || 'shape' }))) { error(t('autoFail')); return; }
+  if (!(await saveDisplay(next, { reason: urgent || 'shape' }))) { toast(t('autoFail')); return; }
   fit();
 }
 /** The window's own size, at the sharpest the box offers: the CSS size times the pixels used (the device pixel ratio
@@ -517,7 +528,9 @@ let resizeTimer = 0;
 window.addEventListener('resize', () => { window.clearTimeout(resizeTimer); resizeTimer = window.setTimeout(() => pageEvent(5), 400); });
 window.setInterval(()=>{
   const now=performance.now(),fps=frames*1000/Math.max(1,now-lastStats);frames=0;lastStats=now;
-  el('stats').textContent=painted?`${canvas.width} × ${canvas.height} · ${fps.toFixed(0)} fps · ${display?.hevc ? 'H.265' : 'H.264'}`:t('noStream');
+  // Plain punctuation between the facts (1.5.4: middle dots read as machine-made).
+  const sep = language === 'zh' ? '，' : ', ';
+  el('stats').textContent=painted?`${canvas.width} × ${canvas.height}${sep}${fps.toFixed(0)} fps${sep}${display?.hevc ? 'H.265' : 'H.264'}`:t('noStream');
   el('latency').textContent=painted?`${video.decodeLatencyMs.toFixed(0)} ms`:'–';
 },750);
 // Which browser the car runs.
@@ -533,7 +546,7 @@ window.setInterval(()=>{ if (active) { lag.sent(performance.now()); connection.s
  *  last resort: no link for RELOAD_AFTER_MS while the box answers. The last picture stays up meanwhile (reset, hold).
  *  A Tesla also leaves its Wi-Fi out of Park unless "Remain connected in Drive" is on: then the link comes back on
  *  "online". Viewer log: ev 8 frozen (gapMs), 11 link open again (downMs), 12 reloading, 13 back (how: 1 same link,
- *  2 new link, 3 network back), 14 first picture (pictureMs since waking). */
+ *  2 new link, 3 network back), 14 first picture (pictureMs since waking), 17 decoder (see decoderError). */
 const PROBE_MS = 600, RELOAD_AFTER_MS = 15000;
 let lastTick = performance.now(), lastHeard = performance.now(), revived = 0, hiddenMeanwhile = document.hidden;
 let reloading = false, closedAt = 0, lifecycle: Record<string, number> = {}, probing = 0, wokeAt = 0;
@@ -638,7 +651,7 @@ function showDatumChoices() {
   const wgs = compassText(lastFix.lat, lastFix.lon, zh), gcj = compassText(gLat, gLon, zh);
   const auto = autoDatum(lastFix.lat, lastFix.lon, zone);
   for (const option of Array.from(datumSelect.options)) {
-    option.dataset.detail = option.value === 'auto' ? `${DATUM_NAME[auto]} · ${auto === 'gcj02' ? gcj : wgs}` : option.value === 'gcj02' ? gcj : wgs;
+    option.dataset.detail = option.value === 'auto' ? `${DATUM_NAME[auto]}${language === 'zh' ? '：' : ': '}${auto === 'gcj02' ? gcj : wgs}` : option.value === 'gcj02' ? gcj : wgs;
   }
 }
 function applyLocation(on: boolean, datum: string) {

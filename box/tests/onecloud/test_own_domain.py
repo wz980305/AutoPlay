@@ -233,7 +233,7 @@ class MaintainerTests(unittest.TestCase):
         self.assertEqual(status["phase"], "retry")
         self.assertEqual(status["reason"], "acme", "obtain() starts a fresh log and the fake acme.sh wrote nothing to it")
         self.assertNotIn(TOKEN, json.dumps(status))
-        self.assertIn("申请没有成功", own_domain.message(self.state, self.name))
+        self.assertIn("申请未成功", own_domain.message(self.state, self.name))
         log.write_text("curl: (6) Could not resolve host; error code: 6\n")   # what this run's log would say
         self.assertEqual(own_domain.failure_reason(TimeoutError("x")), "timeout")
         self.assertEqual(own_domain.failure_reason(ValueError("x")), "certificate")

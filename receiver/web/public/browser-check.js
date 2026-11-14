@@ -14,17 +14,18 @@
  var T={
   title:['浏览器检测','Browser check'],back:['返回','Back'],
   checking:['正在检测车机浏览器…','Checking this car browser…'],
-  checkingNote:['一直停在这里时，请刷新页面。','If this stays, reload the page.'],
+  checkingNote:['如长时间无响应，请刷新页面。','If this stays, reload the page.'],
   passTitle:['浏览器检测通过','Browser check passed'],passNote:['正在加载播放器…','Loading the player…'],
-  failTitle:['这台车机的浏览器无法显示 CarPlay 画面','This car browser cannot show the CarPlay picture'],
+  failTitle:['此浏览器无法显示 CarPlay 画面','This browser can’t show the CarPlay picture'],
   failNote:['缺少：','Missing: '],
-  advice:['请在「控制 › 软件」更新车辆软件后再试。','Update the car software (Controls › Software) and try again.'],
+  advice:['请在「控制 › 软件」更新车辆软件后再试。','Update the car software in Controls › Software and try again.'],
+  adviceSecure:['请用盒子的 https:// 地址打开本页。','Open this page at the box’s https:// address.'],
   ok:['通过','OK'],missing:['缺少','Missing'],limited:['受限','Limited'],
   appFailed:['播放器未正常启动','The player did not start'],
-  appFailedNote:['请刷新页面；仍不行就更新车辆软件。','Reload the page; if that fails, update the car software.'],
+  appFailedNote:['请刷新页面；如仍无效，请更新车辆软件。','Reload the page; if that fails, update the car software.'],
   agent:['浏览器上报：','Browser reports: '],
-  secure:['不是安全连接（证书未受信任，或用了 http://）','not a secure connection (certificate not trusted, or http://)'],
-  old:['浏览器太旧','browser too old'],video:['视频解码（H.264 / WebCodecs）','video decoding (H.264 / WebCodecs)']
+  secure:['安全连接','a secure connection'],
+  old:['较新的浏览器','a newer browser'],video:['视频解码','video decoding']
  };
  function t(k){return T[k][lang==='zh'?0:1];}
  var panel=d.getElementById('browser-check'), list=d.getElementById('browser-check-list'), state=d.getElementById('browser-check-status'), note=d.getElementById('browser-check-note'),
@@ -41,7 +42,7 @@
  function report(){if(agent)agent.textContent=t('agent')+w.navigator.userAgent;}
  function plainWords(){var keys=['secure','video','old'],out=[];for(var i=0;i<keys.length;i++)if(plain[keys[i]])out.push(t(keys[i]));return out.join(lang==='zh'?'；':'; ');}
  function finish(){if(api.done||pending)return;api.done=true;api.allowed=failures===0;
-  if(!api.allowed){panel.style.display='block';state.textContent=t('failTitle');note.textContent=t('failNote')+plainWords();if(advice)advice.textContent=t('advice');report();return;}
+  if(!api.allowed){panel.style.display='block';state.textContent=t('failTitle');note.textContent=t('failNote')+plainWords();if(advice)advice.textContent=t(plain.secure?'adviceSecure':'advice');report();return;}
   state.textContent=t('passTitle');note.textContent=t('passNote');timer=w.setTimeout(function(){if(!api.ready)api.appFailed();},12000);}
  api.appReady=function(){api.ready=true;w.clearTimeout(timer);button.disabled=false;button.hidden=false;note.textContent='';if(api.allowed)panel.style.display='none';};
  api.appFailed=function(){w.clearTimeout(timer);panel.style.display='block';state.textContent=t('appFailed');note.textContent=t('appFailedNote');if(advice)advice.textContent=t('advice');report();button.disabled=true;button.hidden=true;};

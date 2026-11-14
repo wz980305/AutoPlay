@@ -358,7 +358,7 @@ def read(path):
 def compare(root, openwrt, manifest):
     """What the page shows about the installed program and this release."""
     current = current_version(root, openwrt)
-    online, reason = bool(manifest.get("online")), "" if manifest.get("online") else "这一版改了系统"
+    online, reason = bool(manifest.get("online")), "" if manifest.get("online") else "此版本改动了系统"
     available = newer(manifest["version"], current)
     return {"current": current, "latest": manifest["version"], "notes": manifest.get("notes", ""),
             "available": available, "online": online, "reason": reason}
@@ -406,8 +406,8 @@ def previous_packages(version, prefixes, work, names=OPENWRT_PACKAGES, key=KEY):
         data = fetch(base + "SHA256SUMS", prefixes, limit=1 << 16)
         signature = fetch(base + "SHA256SUMS.sig", prefixes, limit=4096)
     except NotFound:
-        raise UpdateError(f"找不到当前版本 {version} 的安装包（它不是正式发布的版本），升级失败时无法退回，已停止。"
-                          "请按装机说明手动升级") from None
+        raise UpdateError(f"当前版本 {version} 不是正式发布版本，没有可用于退回的安装包，已停止。"
+                          "请按安装说明手动升级") from None
     if not verify(data, signature, key):
         raise UpdateError("回滚包校验清单的签名不对，无法信任回滚包，已停止升级")
     sums = data.decode()
@@ -458,7 +458,7 @@ def keep_for_system_update(root, say=print, key=KEY, have=(), tool=None, index=N
             return 0
         version, jre = current_version(root, True), apk_version("autoplay-jre")
         if not version:
-            raise UpdateError("没有找到已安装的 autoplay 软件包")
+            raise UpdateError("未找到已安装的 autoplay 软件包")
         installed = apk_version("autoplay")
         kept = kept_versions(index)
         names = [] if not jre or kept.get("autoplay-jre") == jre else ["autoplay-jre"]
@@ -473,7 +473,7 @@ def keep_for_system_update(root, say=print, key=KEY, have=(), tool=None, index=N
             sums = fetch(base + "SHA256SUMS", prefixes, limit=1 << 16)
             signature = fetch(base + "SHA256SUMS.sig", prefixes, limit=4096)
         except NotFound:
-            raise UpdateError(f"找不到 {version} 的发布文件（它不是正式发布的版本）") from None
+            raise UpdateError(f"{version} 不是正式发布的版本，找不到它的发布文件") from None
         if not verify(sums, signature, key):
             raise UpdateError("发布文件校验清单的签名不对")
         digests = {name: digest.strip() for digest, _, name in (line.partition("  ") for line in sums.decode().splitlines())}
@@ -488,7 +488,7 @@ def keep_for_system_update(root, say=print, key=KEY, have=(), tool=None, index=N
                            else rf"{re.escape(name)}-[0-9][^/]*\.apk")
                 found = [file for file in digests if re.fullmatch(pattern, file)]
                 if len(found) != 1:
-                    raise UpdateError(f"{version} 的发布文件里没有 {name}" + (f"（{arch}）" if name == "autoplay-jre" else ""))
+                    raise UpdateError(f"{version} 的发布文件里没有 " + (f"{arch} 的 {name}" if name == "autoplay-jre" else name))
                 file = found[0]
                 if file in local and local[file].is_file() and file_sha256(local[file]) == digests[file]:
                     files.append(local[file])
@@ -585,7 +585,7 @@ def write_journal(root, **fields):
 def install_openwrt(root, manifest, status, work, key=KEY):
     current = current_version(root, True)
     if not current:
-        raise UpdateError("没有找到已安装的 autoplay 软件包")
+        raise UpdateError("未找到已安装的 autoplay 软件包")
     legacy = installed_name() == "dashplay"   # the first AutoPlay update of a DashPlay box
     prefixes = mirrors(root, True)
     arch = Path("/etc/apk/arch").read_text().strip()
@@ -593,7 +593,7 @@ def install_openwrt(root, manifest, status, work, key=KEY):
     wanted = {name: feed["packages"][name] for name in OPENWRT_PACKAGES}
     if apk_version("autoplay-jre") != feed["jre"]["version"]:
         if arch not in feed["jre"]["files"]:
-            raise UpdateError(f"这一版没有 {arch} 的 Java 运行环境")
+            raise UpdateError(f"此版本没有 {arch} 的 Java 运行环境")
         wanted["autoplay-jre"] = feed["jre"]["files"][arch]
     # The way back first: without it nothing is installed, so the new release is not fetched for nothing. Both
     # package sets go to the persistent cache, so a power cut leaves recover() something to work with.
@@ -603,7 +603,7 @@ def install_openwrt(root, manifest, status, work, key=KEY):
     status("downloading", f"正在下载退回用的 {current}")
     previous = previous_packages(current, prefixes, cache, LEGACY_PACKAGES if legacy else OPENWRT_PACKAGES, key)
     total = sum(f["size"] for f in wanted.values()) or 1
-    said = f"正在下载 {manifest['version']}（{total // 1048576} MB）"
+    said = f"正在下载 {manifest['version']}，共 {total // 1048576} MB"
     status("downloading", said, progress=0)
     done, last = 0, [0.0]
 
@@ -625,7 +625,7 @@ def install_openwrt(root, manifest, status, work, key=KEY):
         raise UpdateError("升级计划不成立：" + (simulation.stderr or simulation.stdout).strip()[-300:])
     blocked = forbidden_in_plan(simulation.stdout)
     if blocked:
-        raise UpdateError("升级会改动内核、内核模块或系统蓝牙（" + "、".join(blocked) + "），已停止，请按说明手动升级")
+        raise UpdateError("此次升级会改动内核或系统蓝牙，已停止，请按安装说明手动升级。涉及：" + "、".join(blocked))
     status("installing", "正在安装")
     port = settings_port()
     write_journal(root, phase="installing", target=manifest["version"], previous=current, legacy=legacy,
@@ -638,7 +638,7 @@ def install_openwrt(root, manifest, status, work, key=KEY):
     if result.returncode == 0 and service_up(port):
         write_journal(root, phase="done", target=manifest["version"], previous=current)
         return
-    status("restoring", "新版本没有正常启动，正在退回原来的版本")
+    status("restoring", "新版本未能正常启动，正在退回原来的版本")
     write_journal(root, phase="restoring", target=manifest["version"], previous=current, legacy=legacy,
                   previous_files=[str(f) for f in previous])
     if legacy:
@@ -651,8 +651,8 @@ def install_openwrt(root, manifest, status, work, key=KEY):
     up = back.returncode == 0 and service_up(port)
     write_journal(root, phase="rolled-back" if up else "failed", target=manifest["version"], previous=current,
                   legacy=legacy)
-    raise UpdateError(f"新版本没有正常启动，已退回 {current}" if up else
-                      "新版本没有正常启动，退回也没有成功：请按说明用电脑恢复（数据备份在 /opt/" + BACKUP + "）")
+    raise UpdateError(f"新版本未能正常启动，已退回 {current}" if up else
+                      "新版本未能正常启动，退回也未成功：请按安装说明用电脑恢复，数据备份在 /opt/" + BACKUP)
 
 
 def return_state_to_legacy(root, legacy_root=None):
@@ -724,8 +724,8 @@ def install(root, openwrt=None, key=KEY):
             status("done", f"已是最新版本 {manifest['version']}")
             return 0
         if not found.get("online"):
-            raise UpdateError(f"{found.get('reason') or '这一版改了系统'}，不能在线升级 {manifest['version']}："
-                              "请按装机说明用刷机包升级")
+            raise UpdateError(f"{found.get('reason') or '此版本改动了系统'}，无法在线升级 {manifest['version']}："
+                              "请按安装说明手动升级")
         if carplay_in_use(root):
             raise UpdateError("正在使用 CarPlay：停车、断开后再升级")
         if shutil.disk_usage(tempfile.gettempdir()).free < 200 << 20:

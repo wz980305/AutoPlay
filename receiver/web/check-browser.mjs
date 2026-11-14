@@ -21,8 +21,8 @@ let old=setup(false);assert.equal(old.w.F50BrowserCheck.allowed,false);assert.eq
  assert.equal(passed.className,'ok');assert.equal(passed.children[1].children[0],'通过');assert.equal(passed.children[0].children.length,1,'no reason under a passed check');}
 // Driver view (viewer audit V10): one headline, the missing things in plain words (each cause once), the Tesla advice.
 assert.equal(old.nodes['browser-check-title'].textContent,'浏览器检测','a short title (Apple: under 15 characters); the result is the first line');
-assert.equal(old.nodes['browser-check-status'].textContent,'这台车机的浏览器无法显示 CarPlay 画面');
-assert.equal(old.nodes['browser-check-note'].textContent,'缺少：视频解码（H.264 / WebCodecs）；浏览器太旧');
+assert.equal(old.nodes['browser-check-status'].textContent,'此浏览器无法显示 CarPlay 画面');
+assert.equal(old.nodes['browser-check-note'].textContent,'缺少：视频解码；较新的浏览器','plain words, no asides in brackets (1.5.4)');
 assert.equal(old.nodes['browser-check-advice'].textContent,'请在「控制 › 软件」更新车辆软件后再试。','one thing to do, in the Tesla\'s own menu (1.5.4)');
 assert.equal(old.nodes['browser-check-agent'].textContent,'浏览器上报：Android 4.2.2 Firefox/68','the browser\'s own report, only when something failed');
 assert(!/轻点|声音|tap/i.test(code.split('var T={')[1].split('};')[0]),'no word about a first sound: the page has played none since 1.3.0');
@@ -33,8 +33,9 @@ assert(!/轻点|声音|tap/i.test(code.split('var T={')[1].split('};')[0]),'no w
   vm.runInNewContext(code,{window:w,document:d});await Promise.resolve();
   assert.equal(w.F50BrowserCheck.allowed,false);
   assert.equal(nodes['browser-check-title'].textContent,'Browser check');
-  assert.equal(nodes['browser-check-status'].textContent,'This car browser cannot show the CarPlay picture');
-  assert.equal(nodes['browser-check-note'].textContent,'Missing: not a secure connection (certificate not trusted, or http://)');
+  assert.equal(nodes['browser-check-status'].textContent,'This browser can’t show the CarPlay picture');
+  assert.equal(nodes['browser-check-note'].textContent,'Missing: a secure connection');
+  assert.equal(nodes['browser-check-advice'].textContent,'Open this page at the box’s https:// address.','the advice for that cause');
 }
 let good=setup(true);await Promise.resolve();assert.equal(good.w.F50BrowserCheck.allowed,true);
 assert.equal(good.nodes['browser-check-agent'].textContent,undefined,'nothing failed: no browser report');

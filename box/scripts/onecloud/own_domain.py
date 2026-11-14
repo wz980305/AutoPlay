@@ -220,18 +220,18 @@ def failure_reason(error, log=None):
 def reason_text(reason):
     """The settings page's words for failure_reason() and the readiness codes."""
     if reason == "route":
-        return "SIM 卡还没连上网络"
+        return "SIM 卡尚未联网"
     if reason == "dns":
         return "域名解析不到"
     if reason == "timeout":
         return "申请超时"
     if reason and reason.startswith("curl") and reason[4:].isdigit():
-        return f"连接失败（curl 错误 {reason[4:]}）"
+        return f"连接失败，curl 错误 {reason[4:]}"
     if reason == "network":
         return "网络中断"
     if reason == "certificate":
         return "证书内容不对"
-    return "申请没有成功"
+    return "申请未成功"
 
 
 def curl_shim(home):

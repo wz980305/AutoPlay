@@ -387,7 +387,7 @@ class SignedReleaseTests(unittest.TestCase):
             (self.root / 'state/receiver/phone-presence.json').write_text('{}')
             self.publish({'format': 1, 'version': '2026.10.20', 'online': False})
             self.assertEqual(update.install(self.root, True, self.pub), 1)
-            self.assertIn('刷机包', json.loads((self.root / 'state/update-status.json').read_text())['message'])
+            self.assertIn('请按安装说明手动升级', json.loads((self.root / 'state/update-status.json').read_text())['message'])
         with patch.object(update, 'apk_version', lambda name: '2026.10.20-r1'):
             self.assertEqual(update.install(self.root, True, self.pub), 0)
             self.assertIn('已是最新', json.loads((self.root / 'state/update-status.json').read_text())['message'])
@@ -450,7 +450,7 @@ class SignedReleaseTests(unittest.TestCase):
         # F50 on a test build, 2026-10-19: it fetched 35 MB, then stopped with a download error that read like the network.
         code, calls, status = self.openwrt_install(old_published=False)
         self.assertEqual((code, status['phase']), (1, 'failed'))
-        self.assertIn('找不到当前版本 2026.10.19.1 的安装包', status['message'])
+        self.assertIn('当前版本 2026.10.19.1 不是正式发布版本，没有可用于退回的安装包', status['message'])
         self.assertNotIn('网络', status['message'])
         self.assertFalse([p for p in self.server.seen if p.endswith('.apk')], 'stopped before the new release was fetched')
         self.assertFalse([c for c in calls if c[:2] == ['apk', 'add']])

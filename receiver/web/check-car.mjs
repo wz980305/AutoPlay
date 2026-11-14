@@ -462,6 +462,16 @@ console.log('Compatible display: automatic below Chrome 120, neither low-latency
   assert.match(html,/<dialog id="picker" class="picker"><div id="picker-options" class="options" role="listbox"><\/div><\/dialog>/);
   assert.match(css,/\.select-row \.chev::before, \.select-row \.chev::after/);assert.match(css,/dialog\.picker::backdrop \{ background:transparent; \}/);
 }
+{ // 1.5.4: what the driver must act on is an alert (a title, one line, 好 / 前往设置); what the page handled by itself
+  // is a one-line pill; no text the page shows carries an aside in brackets or middle dots between its phrases
+  const html=readFileSync(new URL('./index.html',import.meta.url),'utf8'),i18n=readFileSync(new URL('./src/i18n.ts',import.meta.url),'utf8');
+  const bc=readFileSync(new URL('./public/browser-check.js',import.meta.url),'utf8');
+  assert.match(html,/<dialog id="alert" class="alert" role="alertdialog"[^>]*><h2 id="alert-title" tabindex="-1" autofocus><\/h2><p id="alert-message"><\/p><div class="alert-buttons"><button id="alert-ok"[^>]*data-i18n="ok"><\/button><button id="alert-action" class="prominent"[^>]*data-i18n="goToSetting" hidden><\/button><\/div><\/dialog>/);
+  assert.doesNotMatch(html,/error-banner|详细信息/);
+  const shown=[...i18n.matchAll(/\['([^']*)', (?:'[^']*'|"[^"]*")\]/g)].map(m=>m[1]).concat([...bc.split('var T={')[1].split('};')[0].matchAll(/:\['([^']*)'/g)].map(m=>m[1]));
+  assert(shown.length>80,'the texts were found');
+  for(const text of shown){assert.doesNotMatch(text,/[（）]/,text);assert.doesNotMatch(text,/ · /,text);}
+}
 { // 1.5.4: until a language is chosen, the car browser's own (Apple: detect what can be detected); it was zh for all
   const {defaultLanguage}=await load('i18n');
   assert.deepEqual(['zh-CN','zh-TW','zh','en-US','en-AU','de-DE',''].map(defaultLanguage),['zh','zh','zh','en','en','en','zh']);

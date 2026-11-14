@@ -52,7 +52,6 @@
   <div id="recovering" role="status" hidden><div class="notice"><span class="spinner" aria-hidden="true"></span><span id="recovering-text"></span></div></div>
   <div id="toast" class="capsule" role="status" hidden></div>
   <div id="debug-hud" aria-hidden="true" hidden></div>
-  <div id="error-banner" role="alert" hidden><b id="error-title"></b><details id="error-details" hidden><summary data-i18n="technical"></summary><p id="error-text"></p></details><button id="error-action" class="link" type="button" data-i18n="goToSetting" hidden></button><button id="dismiss-error" class="text" data-i18n="close"></button></div>
 </main>
 <dialog id="settings" aria-labelledby="settings-title">
   <header><button id="btn-close" class="bar-icon" type="button" data-i18n-label="close" aria-label="关闭"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button><h2 id="settings-title" data-i18n="settings" tabindex="-1" autofocus></h2></header>
@@ -95,5 +94,5 @@
     </div>
   </div>
 </dialog>
-<dialog id="picker" class="picker"><div id="picker-options" class="options" role="listbox"></div></dialog>
+<dialog id="alert" class="alert" role="alertdialog" aria-labelledby="alert-title" aria-describedby="alert-message"><h2 id="alert-title" tabindex="-1" autofocus></h2><p id="alert-message"></p><div class="alert-buttons"><button id="alert-ok" type="button" data-i18n="ok"></button><button id="alert-action" class="prominent" type="button" data-i18n="goToSetting" hidden></button></div></dialog><dialog id="picker" class="picker"><div id="picker-options" class="options" role="listbox"></div></dialog>
 <script type="module" src="/src/boot.ts"></script></body></html>

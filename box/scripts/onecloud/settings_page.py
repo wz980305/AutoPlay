@@ -40,11 +40,11 @@ BLUETOOTH_TEXT = {   # reason codes of the bluetooth domain (status_model) -> wh
     # command: only whoever installed the box sees it, and it is the fix.
     "helper-starting": "蓝牙正在启动",
     "powering": "蓝牙正在上电",
-    "adapter-not-powered": "蓝牙没有上电",
+    "adapter-not-powered": "蓝牙未上电",
     "controller-init-failed": "蓝牙芯片初始化失败",
-    "controller-timeout": "蓝牙芯片没有响应",
-    "bluez-missing": "安装没有完成，在盒子上运行 python3 /opt/autoplay/board_zte_f50.py --setup",
-    "rfkill": "蓝牙被系统关闭，打不开",
+    "controller-timeout": "蓝牙芯片无响应",
+    "bluez-missing": "安装未完成，请在盒子上运行 python3 /opt/autoplay/board_zte_f50.py --setup",
+    "rfkill": "蓝牙被系统关闭，无法开启",
     "rfkill-hard": "蓝牙被硬件开关关闭",
     "hci-busy": "蓝牙被另一个程序占用",
     "hci-lost": "蓝牙芯片复位了，正在重新启动",
@@ -98,12 +98,20 @@ def check_failure(error):
     asked, their errors, and advice about a mirror setting this page does not have. The details went to the
     diagnostics (update.check), where they are read."""
     if "签名" in error:
-        return "下载到的更新清单没有通过签名核对，已忽略。"
+        return "更新清单未通过签名验证，已忽略。"
     if error.startswith("下载失败"):
-        return "连不上 GitHub 和下载镜像，稍后再试。"
+        return "无法连接 GitHub 和下载镜像，请稍后再试。"
     if "格式不认识" in error:
-        return "这个版本看不懂新的更新清单，请按安装说明手动升级。"
-    return "检查没有完成，稍后再试。"
+        return "当前版本无法识别新的更新清单，请按安装说明手动升级。"
+    return "检查未完成，请稍后再试。"
+
+
+def upgrade_failure(message):
+    """A failed upgrade's message as the page says it (1.5.4): a download's or a signature's places and errors are
+    the update log's business, as a failed check's are the diagnostics' (check_failure)."""
+    if message.startswith("下载失败") or "更新清单的签名" in message:
+        return check_failure(message).replace("已忽略", "已停止")
+    return message
 
 
 class SettingsPage:
@@ -278,7 +286,7 @@ class SettingsPage:
                 return ""   # the phone's row says 「正在接入…」 (1.5.4: 「已邀请。」 under the group)
             if action in ("yes", "no"):
                 self.pairing.confirm(form.get("request_id", ""), action == "yes")
-                return "" if action == "yes" else {"m": "已拒绝这次配对。", "at": "phones"}
+                return "" if action == "yes" else {"m": "已拒绝此次配对。", "at": "phones"}
             raise ValueError("未知操作。")
         if path == "/update":
             self.check_nonce(form)
@@ -370,10 +378,10 @@ class SettingsPage:
         if progress.get("phase") in ("done", "failed") and time.time() - progress.get("at", 0) < 86400 and not settled:
             done = progress["phase"] == "done"
             cells += (f'<div class=cell>{ui.tile("green" if done else "orange", "check" if done else "alert")}'
-                      f'<span class=main><b>{"上次升级" if done else "上次升级没有完成"}</b>'
-                      f'<span>{escape(progress.get("message", ""))}</span></span></div>')
+                      f'<span class=main><b>{"上次升级" if done else "上次升级未完成"}</b>'
+                      f'<span>{escape(progress.get("message", "") if done else upgrade_failure(progress.get("message", "")))}</span></span></div>')
         if found.get("error"):
-            cells = mine + cells + (f'<div class=cell>{ui.tile("orange", "alert")}<span class=main><b>检查更新没有成功</b>'
+            cells = mine + cells + (f'<div class=cell>{ui.tile("orange", "alert")}<span class=main><b>检查更新失败</b>'
                                     f'<span>{check_failure(found["error"])}</span></span></div>')
         elif found.get("available"):
             notes = escape(release_summary(found.get("notes", ""))).replace("\n", "<br>")
@@ -392,7 +400,7 @@ class SettingsPage:
                 cells += (f'<form method=post action=/update>{ui.hidden(nonce)}<button class="cell action" name=action '
                           'value=install>立即升级</button></form>')
             else:
-                foot = foot or f'{escape(found.get("reason") or "这一版改了系统")}，需要按发布说明手动升级。'
+                foot = foot or f'{escape(found.get("reason") or "此版本改动了系统")}，需要按发布说明手动升级。'
         elif found.get("latest"):
             # One row says both: this box's version and that there is none newer.
             cells += (f'<div class=cell>{ui.tile("green", "check")}<span class=main><b>已是最新</b></span>'
@@ -446,7 +454,7 @@ class SettingsPage:
         bluetooth = (status.get("bluetooth") or {}).get("state")
         system = (status.get("system") or {}).get("state")
         if bluetooth == "failed" or system == "degraded":
-            return ("bad", "盒子", "蓝牙没有启动" if bluetooth == "failed" else "程序反复重启")
+            return ("bad", "盒子", "蓝牙未启动" if bluetooth == "failed" else "程序反复重启")
         if bluetooth == "starting" or system in ("starting", "restarting"):
             return ("wait", "盒子", "正在启动")
         return ("on", "盒子", "运行中")
@@ -520,26 +528,26 @@ class SettingsPage:
         if bluetooth.get("state") in ("failed", "starting") and bluetooth.get("reason") not in (None, "helper-starting", "powering"):
             # S2: the real reason at the top of the chain, never a cable story.
             reason = BLUETOOTH_TEXT.get(bluetooth["reason"], bluetooth["reason"])
-            html += ui.banner(f"蓝牙没有启动：{reason}。请重启盒子。", "bad")
+            html += ui.banner(f"蓝牙未启动：{reason}。请重启盒子。", "bad")
         elif bluetooth.get("state") == "failed":
-            html += ui.banner("蓝牙没有启动，正在重试。可以重启盒子。", "bad")
+            html += ui.banner("蓝牙未启动，正在重试，也可以重启盒子。", "bad")
         phone = status.get("phone") or {}
         if phone.get("state") == "pairing-lost":
-            html += ui.banner("有一部 iPhone 忘记了这台盒子，请删除它后重新添加。", "bad")
+            html += ui.banner("有一部 iPhone 已不再与此盒子配对，请删除后重新添加。", "bad")
         certificate = status.get("certificate") or {}
         if certificate.get("state") in ("expiring_soon", "expired", "failed"):
             until = certificate.get("not_after")
             text = {"expiring_soon": f"证书 {until} 到期",
                     "expired": f"证书已于 {until} 过期，车机会提示不安全",
-                    "failed": "证书还没申请到"}[certificate["state"]]
+                    "failed": "证书尚未申请成功"}[certificate["state"]]
             uplink = (status.get("uplink") or {}).get("state")
-            advice = "盒子没网无法续签，请插上能上网的 SIM 卡。" if uplink == "offline" else "联网后会自动续签。"
+            advice = "盒子未联网，无法续签，请插入可上网的 SIM 卡。" if uplink == "offline" else "联网后会自动续签。"
             html += ui.banner(text + "。" + advice, "wait")
         identity = status.get("identity")
         if identity is False or (isinstance(identity, dict) and identity.get("state") == "missing"):
             # No credentials here: the F50's root password is the installer's, never 1234 (S3). How to put the files in
             # place is the install guide's business (1.5.4: the banner retold it in three clauses).
-            html += ui.banner("还缺 CarPlay 认证文件，按「AI 安装说明」放好后自动开始工作。", "wait")
+            html += ui.banner("缺少 CarPlay 认证文件，按「AI 安装说明」放置后将自动开始工作。", "wait")
         if status.get("warning"):
             # A notice about the hotspot leads to OpenWrt's Wi-Fi page itself (1.5.4: it said where that page is).
             link = ("在 OpenWrt 后台设置", self.admin_url()) if "AutoPlay 热点" in status["warning"] else None
@@ -548,7 +556,7 @@ class SettingsPage:
         # first seconds of probing are no problem either.
         # The page's own words since 1.4.1 ("上游" was ours, not the owner's); tesla_internet stays in the diagnostics.
         if status.get("tesla_upstream") == "offline":
-            html += ui.banner("盒子没有 4G 网络：CarPlay 照常，车机自带的音乐、地图不能上网。", "wait")
+            html += ui.banner("盒子无 4G 网络：CarPlay 不受影响，车机自带的音乐、地图无法联网。", "wait")
         error = status.get("tesla_error", "")
         if error:
             html += ui.banner("车机网络设置失败：" + error + "。CarPlay 不受影响。", "bad")
@@ -556,7 +564,7 @@ class SettingsPage:
         if slowed:
             # 1.5.0: said only while the system is really holding the processor back for heat, which the owner can
             # do something about. The drive of 2026-11-10 reached 72 C parked in the sun with nobody told.
-            html += ui.banner(f"盒子过热（{hottest} °C），正在降速，CarPlay 可能卡顿。请移到晒不到的地方。", "wait")
+            html += ui.banner(f"盒子温度已达 {hottest} °C，正在降速，CarPlay 可能卡顿。请移至阴凉处。", "wait")
         return html
 
     def heat(self):
@@ -667,10 +675,10 @@ class SettingsPage:
     def render_refused():
         """403 (1.5.4: was the bare word "forbidden"): a browser that is not on the box's Wi-Fi, or came by a name the
         page does not answer to. Nothing of the box on it, and no button: there is nowhere here to go back to."""
-        return ui.page(TITLE, ui.flow(ui.banner("从这个地址打不开 AutoPlay 盒子。连上 AutoPlay 热点后，从「AutoPlay 设置 → 连接 → "
+        return ui.page(TITLE, ui.flow(ui.banner("无法通过此地址打开 AutoPlay 盒子。请连接 AutoPlay 热点后，从「AutoPlay 设置 → 连接 → "
                                                 "AutoPlay 盒子」打开。", "wait")))
 
     @staticmethod
     def render_missing():
         """404 (1.5.4: was the bare words "not found"), with the bar's way back to the page."""
-        return ui.page(TITLE, ui.flow(ui.banner("没有这一页。", "wait")), done=ui.back("/"))
+        return ui.page(TITLE, ui.flow(ui.banner("找不到此页面。", "wait")), done=ui.back("/"))

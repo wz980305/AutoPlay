@@ -183,9 +183,9 @@ class WaitingForWifiTests(unittest.TestCase):
                          (None, "no Wi-Fi network is switched on (access point)"))
 
     def test_the_page_says_what_it_waits_for(self):
-        self.assertIn("还没准备好：「DashPlay-F50」还没开启。", waiting_warning("Wi-Fi DashPlay-F50 is not up yet"))
-        self.assertIn("路由器的 Wi-Fi 都关着", waiting_warning("no Wi-Fi network is switched on (access point)"))
-        self.assertIn("「Car-5G」所在的网络 lan 还没有地址",
+        self.assertIn("尚未就绪：「DashPlay-F50」尚未开启。", waiting_warning("Wi-Fi DashPlay-F50 is not up yet"))
+        self.assertIn("路由器的 Wi-Fi 均已关闭", waiting_warning("no Wi-Fi network is switched on (access point)"))
+        self.assertIn("「Car-5G」所在的网络 lan 尚无地址",
                       waiting_warning("network lan for Wi-Fi Car-5G has no IPv4 address yet"))
         self.assertIn("the other router's Wi-Fi channel is missing",   # anything else as it is
                       waiting_warning("the other router's Wi-Fi channel is missing: set a fixed channel there and enter it"))
@@ -409,7 +409,7 @@ class ManagedPageTests(unittest.TestCase):
         self.assertNotIn("过热", self.page.render(""), "the processor's own cooling is what counts")
         self.page.thermal = lambda: ({"soc": 74, "nr": 55}, {"cpufreq-0": "2/9"})
         html = self.page.render("")
-        self.assertIn("盒子过热（74 °C），正在降速", html)
+        self.assertIn("盒子温度已达 74 °C，正在降速", html)
         self.assertIn("<span>过热，正在降速</span></span><span class=value>74 °C</span>", html)
         def broken(): raise OSError("sensor")
         self.page.thermal = broken
@@ -464,12 +464,12 @@ class ManagedPageTests(unittest.TestCase):
         update.save(self.state / "update-status.json", {"phase": "failed", "message": "下载失败", "at": time.time()})
         update.save(self.state / "update-check.json", {"checked_at": 1, "current": "2026.10.19.1", "latest": "2026.10.20",
                                                        "available": True, "online": True})
-        self.assertIn("上次升级没有完成", self.page.render(""))
+        self.assertIn("上次升级未完成", self.page.render(""))
         update.save(self.state / "update-check.json", {"checked_at": time.time() + 1, "current": "2026.10.20",
                                                        "latest": "2026.10.20",
                                                        "available": False, "online": True})
         html = self.page.render("")
-        self.assertNotIn("上次升级没有完成", html)
+        self.assertNotIn("上次升级未完成", html)
         self.assertIn("已是最新", html)
 
     def test_update_actions_need_the_page_and_start_apart(self):

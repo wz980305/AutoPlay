@@ -113,7 +113,7 @@ class PageBannerTests(unittest.TestCase):
     def test_bluetooth_failure_is_a_red_bar_with_the_reason(self):
         self.status.set("bluetooth", "failed", "controller-init-failed", retry_in=60)
         html = self.page.render("")
-        self.assertIn("蓝牙没有启动：蓝牙芯片初始化失败", html)
+        self.assertIn("蓝牙未启动：蓝牙芯片初始化失败", html)
         self.assertIn("请重启盒子。", html)
         self.assertNotIn("数据线", html)
         self.assertIn("蓝牙就绪后才能添加", html)
@@ -128,7 +128,7 @@ class PageBannerTests(unittest.TestCase):
         self.status.set("uplink", "offline")
         html = self.page.render("")
         self.assertIn("证书 2026-11-20 到期", html)
-        self.assertIn("请插上能上网的 SIM 卡。", html)
+        self.assertIn("请插入可上网的 SIM 卡。", html)
         self.status.set("certificate", "expired", None, not_after="2026-10-01")
         self.status.set("uplink", "online")
         html = self.page.render("")
@@ -145,7 +145,7 @@ class PageBannerTests(unittest.TestCase):
         for text in ("导航播报", "声音", "上游在线", "可以上网"):
             self.assertNotIn(text, html)
         self.status.update(tesla_upstream="offline", tesla_internet="上游不可用（没有 4G 信号）；局域网 CarPlay 正常；特斯拉自带音乐、地图不能上网。")
-        self.assertIn("盒子没有 4G 网络", self.page.render(""))
+        self.assertIn("盒子无 4G 网络", self.page.render(""))
         self.status.update(tesla_upstream="unknown", tesla_internet="上游状态检测中；局域网 CarPlay 正常。")
         self.assertNotIn("检测中", self.page.render(""))
 
@@ -189,11 +189,11 @@ class PageBannerTests(unittest.TestCase):
 
     def test_pairing_lost_tells_the_owner_to_re_add(self):
         self.status.set("phone", "pairing-lost", "pairing-lost")
-        self.assertIn("请删除它后重新添加", self.page.render(""))
+        self.assertIn("请删除后重新添加", self.page.render(""))
 
     def test_box_node_follows_bluetooth_and_receiver(self):
         self.status.set("bluetooth", "failed", "rfkill")
-        self.assertIn("蓝牙没有启动</div>", self.page.render(""))
+        self.assertIn("蓝牙未启动</div>", self.page.render(""))
         self.status.set("bluetooth", "on")
         self.status.set("system", "degraded", "receiver-exit-1")
         self.assertIn("程序反复重启", self.page.render(""))
@@ -203,7 +203,7 @@ class PageBannerTests(unittest.TestCase):
     def test_no_credentials_and_a_status_endpoint_exist(self):
         self.status.set("identity", "missing", "files-missing")
         html = self.page.render("")
-        self.assertIn("还缺 CarPlay 认证文件", html)
+        self.assertIn("缺少 CarPlay 认证文件", html)
         self.assertNotIn("1234", html)
         self.assertIn("恢复出厂设置", html)
 
@@ -387,7 +387,7 @@ class PageLayoutTests(unittest.TestCase):
         doing."""
         import settings_ui as ui
         # determinate progress while downloading (update.install writes the share)
-        (self.state / "update-status.json").write_text(json.dumps({"phase": "downloading", "message": "正在下载 1.5.4（38 MB）", "progress": 0.42, "at": int(time.time())}))
+        (self.state / "update-status.json").write_text(json.dumps({"phase": "downloading", "message": "正在下载 1.5.4，共 38 MB", "progress": 0.42, "at": int(time.time())}))
         with patch("settings_page.update.running", return_value=True):
             html = self.page.render("")
         self.assertIn('<progress max=100 value=42 aria-label="已下载 42%"></progress>', html)
@@ -401,9 +401,9 @@ class PageLayoutTests(unittest.TestCase):
         self.assertIn('function auto(){if(location.hash!=="#update")return;var f=document.querySelector("form[data-auto]")', ui.SCRIPT)
         self.assertIn('sessionStorage.setItem(k,n)}catch(e){}var b=f.querySelector("button[name=action]");if(b)b.click()}', ui.SCRIPT)
         # a notice about the hotspot leads to OpenWrt's Wi-Fi page instead of saying where it is
-        self.status.update(warning="特斯拉看不到 AutoPlay 热点的信道 44，请改为 149（国家 CN）或 36。")
+        self.status.update(warning="特斯拉看不到 AutoPlay 热点的信道 44，请改为 149 或 36，国家选 CN。")
         html = self.page.render("")
-        self.assertIn('<p class="banner bad" role=status><span>特斯拉看不到 AutoPlay 热点的信道 44，请改为 149（国家 CN）或 36。'
+        self.assertIn('<p class="banner bad" role=status><span>特斯拉看不到 AutoPlay 热点的信道 44，请改为 149 或 36，国家选 CN。'
                       '<a href="http://100.96.0.1/cgi-bin/luci/admin/network/wireless">在 OpenWrt 后台设置</a></span></p>', html)
         self.assertNotIn("「网络 → 无线」", html)
         self.status.update(warning="")
@@ -443,14 +443,14 @@ class PageLayoutTests(unittest.TestCase):
 
     def test_a_failed_check_is_one_sentence_and_its_details_go_to_the_diagnostics(self):
         import settings_page
-        said = {"下载失败：60 秒内没有拿到更新清单（github: timed out）。网络恢复后再试，或在设置里换一个镜像": "连不上 GitHub 和下载镜像，稍后再试。",
-                "更新清单的签名不对，已忽略（可能是镜像或网络被篡改；mirror: 签名不对）": "下载到的更新清单没有通过签名核对，已忽略。",
-                "检查更新失败：Expecting value": "检查没有完成，稍后再试。"}
+        said = {"下载失败：60 秒内没有拿到更新清单（github: timed out）。网络恢复后再试，或在设置里换一个镜像": "无法连接 GitHub 和下载镜像，请稍后再试。",
+                "更新清单的签名不对，已忽略（可能是镜像或网络被篡改；mirror: 签名不对）": "更新清单未通过签名验证，已忽略。",
+                "检查更新失败：Expecting value": "检查未完成，请稍后再试。"}
         for error, sentence in said.items():
             self.assertEqual(settings_page.check_failure(error), sentence)
         (self.state / "update-check.json").write_text(json.dumps({"error": list(said)[0], "checked_at": 1}))
         html = self.page.render("")
-        self.assertIn("连不上 GitHub 和下载镜像，稍后再试。", html)
+        self.assertIn("无法连接 GitHub 和下载镜像，请稍后再试。", html)
         for gone in ("github: timed out", "换一个镜像"):
             self.assertNotIn(gone, html)
         root = self.state.parent
@@ -482,10 +482,10 @@ class PageLayoutTests(unittest.TestCase):
         """1.5.4: a bare English "forbidden" / "not found" was all a browser got."""
         refused, missing = self.page.render_refused(), self.page.render_missing()
         self.assertIn("<h1>AutoPlay 盒子</h1>", refused)
-        self.assertIn("连上 AutoPlay 热点后，从「AutoPlay 设置 → 连接 → AutoPlay 盒子」打开。", refused)
+        self.assertIn("请连接 AutoPlay 热点后，从「AutoPlay 设置 → 连接 → AutoPlay 盒子」打开。", refused)
         self.assertNotIn("class=done", refused)
         self.assertNotIn("Car-5G", refused, "nothing of the box for a browser that may not see it")
-        self.assertIn("没有这一页。", missing)
+        self.assertIn("找不到此页面。", missing)
         self.assertIn('<a class="done icon" href="/" aria-label="返回"><svg', missing)
 
     def test_colours_follow_carplay_or_the_browser(self):
