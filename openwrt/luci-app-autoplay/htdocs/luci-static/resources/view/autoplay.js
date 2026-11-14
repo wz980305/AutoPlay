@@ -10,7 +10,7 @@
 
 // Tesla-only box: the LAN (100.96.0.1/24), the settings port, the Tesla connectivity checks and the car's
 // Bluetooth audio are constants of the package, not options. This page keeps the seven uci options and shows the
-// status; iPhones are added on the AutoPlay box page (tesla_only_box_delta.md D15, settings_onboarding_audit S13).
+// status; iPhones are added on the AutoPlay settings page (tesla_only_box_delta.md D15, settings_onboarding_audit S13).
 var callServiceList = rpc.declare({
 	object: 'service',
 	method: 'list',
@@ -78,7 +78,7 @@ return view.extend({
 		o = s.taboption('network', form.DummyValue, '_lan', _('Addresses'));
 		o.rawhtml = true;
 		o.cfgvalue = function() {
-			return _('The box\'s LAN is %s (set at install: a Tesla\'s browser opens no private address). The first access point under Network → Wireless is the AutoPlay hotspot handed to the iPhone, 5 GHz first; the Tesla sees 5 GHz channels 36–48 and 149–165 only (CN: 149). In the Tesla\'s Wi-Fi settings turn on "Remain connected in Drive", else the picture stops out of Park. AutoPlay box page: %s').format(
+			return _('The box\'s LAN is %s (set at install: a Tesla\'s browser opens no private address). The first access point under Network → Wireless is the AutoPlay hotspot handed to the iPhone, 5 GHz first; the Tesla sees 5 GHz channels 36–48 and 149–165 only (CN: 149). In the Tesla\'s Wi-Fi settings turn on "Remain connected in Drive", else the picture stops out of Park. AutoPlay settings page: %s').format(
 				'100.96.0.1/24', 'http://' + host + ':' + port + '/');
 		};
 
@@ -88,12 +88,12 @@ return view.extend({
 		o.description = _('The HTTPS port of the CarPlay page. Empty is 18443, or the port an older install saved; a change takes about a minute and interrupts CarPlay briefly. It must differ from 18080, 80, 443 and 7000.');
 
 		o = s.taboption('network', form.DummyValue, '_debug', _('Diagnostics'));
-		o.cfgvalue = function() { return _('Download diagnostics on the AutoPlay box page (Advanced). Saving changes here restarts the service and interrupts CarPlay briefly.'); };
+		o.cfgvalue = function() { return _('Download diagnostics on the AutoPlay settings page (Advanced). Saving changes here restarts the service and interrupts CarPlay briefly.'); };
 
 		o = s.taboption('iphone', form.DummyValue, '_iphone', _('Adding an iPhone'));
 		o.rawhtml = true;
 		o.cfgvalue = function() {
-			return _('Open the AutoPlay box page on the Tesla or another device (not on the iPhone being added: it must stay in Settings → Bluetooth) and tap "Add iPhone". Pair the iPhone with the Tesla over Bluetooth as well and pick it as the media source: music, navigation prompts, calls and Siri all play over the car\'s own Bluetooth; the CarPlay page only shows the screen.') +
+			return _('Open the AutoPlay settings page on the Tesla or another device (not on the iPhone being added: it must stay in Settings → Bluetooth) and tap "Add iPhone". Pair the iPhone with the Tesla over Bluetooth as well and pick it as the media source: music, navigation prompts, calls and Siri all play over the car\'s own Bluetooth; the CarPlay page only shows the screen.') +
 				' <a class="btn cbi-button cbi-button-action" target="_blank" href="http://' + host + ':' + port + '/">' + _('Add iPhone') + '</a>';
 		};
 

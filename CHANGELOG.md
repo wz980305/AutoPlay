@@ -2,6 +2,14 @@
 
 格式参考 Keep a Changelog；版本号从 0.1.0 起，1.0 之前不承诺兼容性。每节第一段是盒子「程序更新」里显示的摘要（最多四行），写短。
 
+## [Unreleased]
+
+CarPlay 主屏的图标和它打开的面板改叫「AutoPlay」，换上新图标；盒子的页面改叫「AutoPlay 设置」。
+
+- 车主提出（1.6.0 发布后）：「AutoPlay 设置」改为「AutoPlay」，「AutoPlay 盒子」改为「AutoPlay 设置」。图标代表这个产品，`:18080` 上添加 iPhone、看网络、升级的页面才是「设置」；「AutoPlay」也短到 CarPlay 不会截断。等待画面里打开面板的一行跟着叫「AutoPlay」；403 页面、LuCI（AutoPlay settings page /「AutoPlay 设置」页）、README 和安装说明随之改（`docs/UI-1.6.0.md` §五，ADR-21 的 1.6.1 调整）。
+- 新图标（车主问能否更现代、更高级，并和 CarPlay 有联系）：两块叠在一起的玻璃面板，竖的是手机，横的是车的屏幕，就是 AutoPlay 做的事。替换 DashPlay 带来的滑杆图标；不用苹果的 CarPlay 标志或像它的图形。车主从四个方向里选定。源文件 `box/assets/autoplay-icon.svg`，`box/scripts/render-autoplay-icon.py` 画成 PNG（`box/assets/ICON-SOURCE.md`）。
+- 发布前的审查：「使用车辆定位」打开或关闭没成功时，从分组下面一行改为提示框（「无法开启车辆定位」「无法更改车辆定位」），和 1.6.0 的「应用」一致；调试浮层去掉括号。`ui-shots.mjs` 随之拍提示框并点「好」。
+
 ## [1.6.0] — 2026-11-14 — 两张页面对照苹果的 HIG 改版
 
 两张页面对照苹果的 HIG 改版：标题栏、菜单、提示框按 iOS 的做法，「立即升级」直接开始，名字统一以 AutoPlay 开头。功能没有变化。

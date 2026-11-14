@@ -7,7 +7,7 @@ export interface HudSample {
   /** Last ping round trip to the box (the pong queues behind every frame not yet sent), -1 before the first. */
   rttMs: number;
   /** Car location (1.4.0), while its switch is on: fixes sent per second, the last speed (km/h, null unknown) and,
-   *  since 1.5.0, the datum the box applies ("GCJ-02 (auto)"). */
+   *  since 1.5.0, the datum the box applies ("GCJ-02 auto"). */
   location?: { perSecond: number; kmh: number | null; datum?: string };
 }
 

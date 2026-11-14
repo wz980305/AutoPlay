@@ -676,14 +676,15 @@ async function setLocation(on: boolean, datum: string, picked = false) {
   try {
     if (on && !was.on) {
       const permission = await askLocation(navigator.geolocation);
-      if (permission !== 'granted') { applyLocation(false, was.datum); locationNote(permission === 'denied' ? 'locationDenied' : 'locationUnavailable'); return; }
+      // What the tap could not do is an alert, as for 「应用」 (after 1.6.0: a line under the group, and the switch went back)
+      if (permission !== 'granted') { applyLocation(false, was.datum); problem(t('locationOnFail'), t(permission === 'denied' ? 'locationDenied' : 'locationUnavailable')); return; }
     }
     const { ok, body } = await askBox<{ ok?: boolean; restarting?: boolean }>(`/api/location?token=${encodeURIComponent(token)}`,
       { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(picked ? { enabled: on, datum } : { enabled: on }) }, WRITE_MS);
     if (!ok || !body?.ok) throw new Error();
     applyLocation(on, datum);
     if (body.restarting) locationNote('locationReconnecting');
-  } catch { applyLocation(was.on, was.datum); locationNote('locationFail'); }
+  } catch { applyLocation(was.on, was.datum); problem(t('locationFail'), t('applyFailHint')); }
   finally { locationBusy = false; locationSwitch.disabled = false; }
 }
 locationSwitch.onchange = () => { void setLocation(locationSwitch.checked, datumSelect.value); };
@@ -694,7 +695,7 @@ function updateHud() {
     hevc: display ? display.hevc : null, videoKbps: hudBytes * 8 / 1000 / seconds, decodeMs: video.decodeLatencyMs,
     queue: video.decodeQueueSize, rttMs: lag.last,
     ...(locationFeed.enabled ? { location: { perSecond: hudFixes / seconds, kmh: lastFix?.speed === undefined ? null : lastFix.speed * 3.6,
-      datum: `${DATUM_NAME[datumInUse()]}${datumSelect.value === 'auto' ? (language === 'zh' ? '（自动）' : ' (auto)') : ''}` } } : {}) },
+      datum: `${DATUM_NAME[datumInUse()]}${datumSelect.value === 'auto' ? (language === 'zh' ? ' 自动' : ' auto') : ''}` } } : {}) },
     language === 'zh').join('\n');
   hudFrames = 0; hudBytes = 0; hudStart = now; hudFixes = 0;
 }

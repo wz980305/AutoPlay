@@ -103,7 +103,7 @@ states["live-open"] = unfold(make({}, devices=PHONES, presence={"active": "02:00
 states["hot"] = make({}, devices=ONE, presence={"active": "02:00:00:00:00:01"}, cert=LIVE,
                      thermal=({"soc": 74, "nr": 61, "chg": 52}, {"cpufreq-0": "2/9", "cpufreq-1": "3/9"}))
 NOTES = ("车辆定位的坐标系新增「自动」并设为默认：在中国大陆自动按 GCJ-02 换算。盒子网页重新排版，和投屏页的\n"
-         "「AutoPlay 设置」一个样子；过热降速时提醒。\n\n- 细节……")
+         "「AutoPlay」一个样子；过热降速时提醒。\n\n- 细节……")
 states["available"] = make({}, devices=PHONES, presence={"last_phone": "02:00:00:00:00:02"}, cert=LIVE,
                            update_check={"available": True, "online": True, "latest": "1.5.1", "current": "1.5.0",
                                          "checked_at": 1_793_500_000, "notes": NOTES})

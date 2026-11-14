@@ -255,9 +255,10 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             hevc = display.hevc,
             manufacturer = config.manufacturer,
             model = config.model,
-            // The icon opens the CarPlay page's settings panel, so it carries the panel's name (1.6.0: was "盒子设置").
-            oemLabel = "AutoPlay 设置",
-            icons = listOf(AirPlayIcon(180, 180, checkNotNull(javaClass.getResourceAsStream("/f50-settings.png")).use { it.readBytes() })),
+            // The icon opens the CarPlay page's panel, so it carries the panel's name: the product's own, short enough
+            // that CarPlay does not cut it (after 1.6.0; 1.6.0 "AutoPlay 设置", before it "盒子设置").
+            oemLabel = "AutoPlay",
+            icons = listOf(AirPlayIcon(180, 180, checkNotNull(javaClass.getResourceAsStream("/autoplay-icon.png")).use { it.readBytes() })),
             appearanceUpdates = appearanceUpdatesFor(selectedPhone),
             // No audioFormats/audioLatencies and no audio feature bits (1.3.0, always): the iPhone sets up no audio
             // stream and plays everything itself or on the Tesla's Bluetooth (docs/AUDIO.md, ADR-16).

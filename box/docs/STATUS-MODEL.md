@@ -149,7 +149,7 @@ the checks are answered as long as the AP is up.
 ## What earns a bar at the top of the box page (1.4.1)
 
 A bar under the title bar - on every category since 1.5.0, when the page took
-the layout of the CarPlay page's "AutoPlay 设置" panel (`docs/UI-1.5.0.md`) -
+the layout of the CarPlay page's settings panel (`docs/UI-1.5.0.md`) -
 is for a state the owner has to act on, or an error: Bluetooth not starting, the identity missing, a certificate that cannot
 be renewed, an expired page, and (1.5.0) the box overheating - only while the
 kernel really holds the processor back for heat (a cooling device of the

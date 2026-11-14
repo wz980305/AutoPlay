@@ -383,7 +383,7 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
   assert.deepEqual(hudLines(sample,true),['1280×846 · 30 fps · H.264 · 2.4 Mbps','解码 63 ms · 队列 1 · 往返 41 ms']);
   assert.deepEqual(hudLines({...sample,width:0,hevc:null,rttMs:-1},false),['No picture yet','Decode 63 ms · Queue 1 · RTT –']);
   // 1.5.0: the car-location line says which datum the box applies, so "automatic" can be checked in the car.
-  assert.equal(hudLines({...sample,location:{perSecond:1,kmh:43.4,datum:'GCJ-02（自动）'}},true)[2],'车辆定位 1.0/s · 43 km/h · GCJ-02（自动）');
+  assert.equal(hudLines({...sample,location:{perSecond:1,kmh:43.4,datum:'GCJ-02 自动'}},true)[2],'车辆定位 1.0/s · 43 km/h · GCJ-02 自动');
   assert.equal(hudLines({...sample,location:{perSecond:0.5,kmh:null}},false)[2],'Car location 0.5/s');
 }
 
@@ -476,6 +476,18 @@ console.log('Compatible display: automatic below Chrome 120, neither low-latency
   const main=readFileSync(new URL('./src/main.ts',import.meta.url),'utf8');
   assert.match(main,/if \(how\.reason === 'manual'\) \{ setDisplayStatus\(null\); problem\(t\('applyFail'\), t\('applyFailHint'\)\); \} else setDisplayStatus\('applyFail'\);/);
   assert.match(main,/if \(urgent !== 'manual'\) toast\(t\('autoFail'\)\)/);
+  // the location switch too: what the tap could not do is an alert (a line under the group until 1.6.0); a refusal
+  // that comes later, while the feed runs, stays a line or the pill
+  assert.match(main,/problem\(t\('locationOnFail'\), t\(permission === 'denied' \? 'locationDenied' : 'locationUnavailable'\)\)/);
+  assert.match(main,/catch \{ applyLocation\(was\.on, was\.datum\); problem\(t\('locationFail'\), t\('applyFailHint'\)\); \}/);
+  assert.match(main,/\(\) => locationNote\('locationDenied'\)\);/);
+  assert.doesNotMatch(main,/（自动）/);
+  // 1.6.1: the panel is 「AutoPlay」 and the box page 「AutoPlay 设置」; the row that opens the panel shows the AutoPlay icon
+  // itself (as iOS's Settings shows an app's icon), so it is not mistaken for the box page's row
+  assert.match(i18n,/settings: \['AutoPlay', 'AutoPlay'\]/);assert.match(i18n,/playerSettings: \['AutoPlay', 'AutoPlay'\]/);
+  assert.match(i18n,/boxLink: \['AutoPlay 设置', 'AutoPlay settings'\]/);
+  assert.match(html,/<button id="btn-settings"[^>]*><span class="tile app"><svg aria-hidden="true" viewBox="0 0 1024 1024">/);
+  assert.doesNotMatch(i18n+html,/AutoPlay 盒子|AutoPlay box/);
   assert.match(i18n,/applyFail: \['无法应用设置', 'Couldn’t Apply Settings'\], applyFailHint: \['请检查与盒子的连接，再试一次。'/);
 }
 { // 1.6.0: until a language is chosen, the car browser's own (Apple: detect what can be detected); it was zh for all

@@ -51,8 +51,8 @@ msgstr "启用"
 msgid "Addresses"
 msgstr "地址"
 
-msgid "The box's LAN is %s (set at install: a Tesla's browser opens no private address). The first access point under Network → Wireless is the AutoPlay hotspot handed to the iPhone, 5 GHz first; the Tesla sees 5 GHz channels 36–48 and 149–165 only (CN: 149). In the Tesla's Wi-Fi settings turn on \"Remain connected in Drive\", else the picture stops out of Park. AutoPlay box page: %s"
-msgstr "盒子的局域网是 %s（安装时设定：特斯拉的浏览器打不开私有地址）。「网络 → 无线」里的第一个热点是交给 iPhone 的 AutoPlay 热点，优先 5 GHz；特斯拉只认 5 GHz 的 36–48 和 149–165 信道（国内用 149）。在特斯拉的 Wi-Fi 设置里打开「行驶中保持连接」，否则出 P 挡画面会停。「AutoPlay 盒子」页：%s"
+msgid "The box's LAN is %s (set at install: a Tesla's browser opens no private address). The first access point under Network → Wireless is the AutoPlay hotspot handed to the iPhone, 5 GHz first; the Tesla sees 5 GHz channels 36–48 and 149–165 only (CN: 149). In the Tesla's Wi-Fi settings turn on \"Remain connected in Drive\", else the picture stops out of Park. AutoPlay settings page: %s"
+msgstr "盒子的局域网是 %s（安装时设定：特斯拉的浏览器打不开私有地址）。「网络 → 无线」里的第一个热点是交给 iPhone 的 AutoPlay 热点，优先 5 GHz；特斯拉只认 5 GHz 的 36–48 和 149–165 信道（国内用 149）。在特斯拉的 Wi-Fi 设置里打开「行驶中保持连接」，否则出 P 挡画面会停。「AutoPlay 设置」页：%s"
 
 msgid "CarPlay screen port"
 msgstr "CarPlay 画面端口"
@@ -63,14 +63,14 @@ msgstr "CarPlay 画面的 HTTPS 端口。留空为 18443，或旧版保存过的
 msgid "Diagnostics"
 msgstr "诊断"
 
-msgid "Download diagnostics on the AutoPlay box page (Advanced). Saving changes here restarts the service and interrupts CarPlay briefly."
-msgstr "诊断记录在「AutoPlay 盒子 → 高级」下载。在这里保存修改会重启服务，CarPlay 会短暂中断。"
+msgid "Download diagnostics on the AutoPlay settings page (Advanced). Saving changes here restarts the service and interrupts CarPlay briefly."
+msgstr "诊断记录在「AutoPlay 设置 → 高级」下载。在这里保存修改会重启服务，CarPlay 会短暂中断。"
 
 msgid "Adding an iPhone"
 msgstr "添加 iPhone"
 
-msgid "Open the AutoPlay box page on the Tesla or another device (not on the iPhone being added: it must stay in Settings → Bluetooth) and tap \"Add iPhone\". Pair the iPhone with the Tesla over Bluetooth as well and pick it as the media source: music, navigation prompts, calls and Siri all play over the car's own Bluetooth; the CarPlay page only shows the screen."
-msgstr "在特斯拉或另一台设备上打开「AutoPlay 盒子」页（不要在要添加的那部 iPhone 上：它要停在「设置 → 蓝牙」），点「添加 iPhone」。iPhone 也要用蓝牙连上特斯拉并选为媒体来源：音乐、导航播报、通话和 Siri 都从车机蓝牙播出；CarPlay 页面只显示画面。"
+msgid "Open the AutoPlay settings page on the Tesla or another device (not on the iPhone being added: it must stay in Settings → Bluetooth) and tap \"Add iPhone\". Pair the iPhone with the Tesla over Bluetooth as well and pick it as the media source: music, navigation prompts, calls and Siri all play over the car's own Bluetooth; the CarPlay page only shows the screen."
+msgstr "在特斯拉或另一台设备上打开「AutoPlay 设置」页（不要在要添加的那部 iPhone 上：它要停在「设置 → 蓝牙」），点「添加 iPhone」。iPhone 也要用蓝牙连上特斯拉并选为媒体来源：音乐、导航播报、通话和 Siri 都从车机蓝牙播出；CarPlay 页面只显示画面。"
 
 msgid "Release the iPhone after (seconds)"
 msgstr "无人观看多久后释放 iPhone（秒）"

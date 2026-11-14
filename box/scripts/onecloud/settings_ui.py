@@ -1,6 +1,6 @@
-"""HTML for the box page, laid out and drawn as the CarPlay page's "AutoPlay 设置" panel (1.5.0).
+"""HTML for the box page (「AutoPlay 设置」), laid out and drawn as the CarPlay page's "AutoPlay" panel (1.5.0).
 
-People arrive from that panel (连接 → AutoPlay 盒子) in the Tesla's browser (773x601 or 1256x706 CSS px at DPR 1.53), or
+People arrive from that panel (连接 → AutoPlay 设置) in the Tesla's browser (773x601 or 1256x706 CSS px at DPR 1.53), or
 from a phone. So the page is the panel's twin: a title bar with one button (返回, back to where the visit began - the
 panel or the waiting screen - where the panel itself has 完成; "CarPlay 画面" for a browser that came by itself), the
 categories on the left with the chosen one filled in the tint, one column of grouped rows on

@@ -133,9 +133,10 @@ if (want('viewer')) for (const vp of SHAPES.slice(0, 2)) {
   await page.click('[data-settings-page="connection"]'); await settle(page);
   await page.locator('#settings-connection details > summary').first().click(); await page.waitForTimeout(700); await shot(page, 'viewer-settings-connection-day', vp);
   await page.click('[data-settings-page="general"]'); await settle(page);
-  // A notice inside the panel: the location switch without the browser's permission (headless refuses it).
-  await page.click('#car-location-on'); await page.waitForTimeout(900); await shot(page, 'viewer-settings-general-day-notice', vp);
-  await page.waitForTimeout(6500);
+  // The location switch without the browser's permission (headless refuses it): an alert over the panel since the
+  // review before 1.6.1 (a line under the group until then); 好 closes it and leaves the panel as it was.
+  await page.click('#car-location-on'); await page.waitForTimeout(900); await shot(page, 'viewer-settings-general-day-alert', vp);
+  await page.click('#alert-ok'); await settle(page);
   await page.click('[data-picker="night-mode"]'); await settle(page);
   await page.click('#picker-options .option:nth-child(4)'); await settle(page); await shot(page, 'viewer-settings-general-day-to-night', vp);
   console.log('   ', JSON.stringify(await page.evaluate(() => ({ theme: document.documentElement.dataset.theme, panel: getComputedStyle(document.getElementById('settings')).backgroundColor,
@@ -187,9 +188,11 @@ if (want('box')) for (const vp of SHAPES) {
 // browser with standing ones puts the box page's at the window's edge, beside the bar, and the panel's beside its page.)
 const PLACES = selectors => Object.fromEntries(Object.entries(selectors).map(([name, selector]) => {
   const r = document.querySelector(selector).getBoundingClientRect();
-  return [name, { x: r.left, y: r.top, r: innerWidth - r.right, w: r.width, h: r.height }];
+  return [name, { x: r.left, y: r.top, r: innerWidth - r.right, w: r.width, h: r.height, c: r.left + r.width / 2 }];
 }));
-const COMPARED = { bar: 'yh', title: 'xyh', button: 'xywh', category: 'xyh', heading: 'xy', group: 'xyr', row: 'xrh' };
+// The titles are compared by their centre (c): since 1.6.1 they are different words (「AutoPlay」 / 「AutoPlay 设置」),
+// both centred in the bar, so their left edges differ by half the difference in width.
+const COMPARED = { bar: 'yh', title: 'cyh', button: 'xywh', category: 'xyh', heading: 'xy', group: 'xyr', row: 'xrh' };
 // Two pairs (1.6.0): a page whose first group has a title (通用 / 网络) and one whose first group has none (连接 / 高级:
 // their group titles only repeated the category's name).
 const TWIN_PAGES = [{ panel: 'general', box: 'net', titled: true }, { panel: 'connection', box: 'more', titled: false }];
@@ -209,7 +212,7 @@ if (want('twins')) for (const vp of [...SHAPES, { w: 600, h: 800, dsf: 2, tag: '
   await ctx2.close();
   const apart = Object.entries(COMPARED).filter(([name]) => panel[name]).flatMap(([name, keys]) => [...keys].filter(k => Math.abs(panel[name][k] - twin[name][k]) > 0.5)
     .map(k => `${name}.${k} ${Math.round(panel[name][k] * 10) / 10} / ${Math.round(twin[name][k] * 10) / 10}`));
-  console.log(`twins ${vp.tag} ${vp.w}x${vp.h} ${pair.panel}/${pair.box}: ${apart.length ? 'APART (panel / box page) ' + apart.join('; ') : `same (bar ${Math.round(panel.bar.h)} px, title at ${Math.round(panel.title.x)}, button at ${Math.round(panel.button.x)}, first group at ${Math.round(panel.group.y)})`}`);
+  console.log(`twins ${vp.tag} ${vp.w}x${vp.h} ${pair.panel}/${pair.box}: ${apart.length ? 'APART (panel / box page) ' + apart.join('; ') : `same (bar ${Math.round(panel.bar.h)} px, title centred at ${Math.round(panel.title.c)}, button at ${Math.round(panel.button.x)}, first group at ${Math.round(panel.group.y)})`}`);
   if (apart.length) process.exitCode = 1;
 }
 await browser.close(); dist.server.close(); box.server.close();

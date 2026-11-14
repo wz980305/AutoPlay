@@ -77,6 +77,9 @@ button.cell.static { cursor:default; } button.cell.static:active { background:va
 .tile.blue { background:var(--tint); } .tile.green { background:var(--green); } .tile.gray { background:var(--gray); }
 .tile.indigo { background:#6155F5; } .tile.orange { background:var(--orange); } .tile.purple { background:#CB30E0; }
 .tile.red { background:var(--red); } .tile.teal { background:#00C3D0; } .tile.dark { background:#636366; }
+/* The row that opens the panel shows the AutoPlay icon itself, as iOS's Settings shows an app's own icon beside its
+   name (after 1.6.0: a gray tile with sliders, beside a row called 「AutoPlay 设置」 that leads elsewhere). */
+.tile.app { overflow:hidden; } .tile.app svg { width:100%; height:100%; display:block; }
 .chev { flex:none; display:block; }
 .chev::after { content:""; display:block; width:.5rem; height:.5rem; margin-right:.25rem; border:solid var(--chev); border-width:0 2px 2px 0; transform:rotate(-45deg); }
 details[open] > summary .chev::after { transform:rotate(45deg); }

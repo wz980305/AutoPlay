@@ -5,7 +5,7 @@ what the box is doing and starts an update. It is also the always-up page while 
 missing, Wi-Fi waiting, Bluetooth down), and in Tesla mode the responder for the car's connectivity checks
 (tesla_checks.py, behind tesla_openwrt's port-80 redirect). Only clients on the Wi-Fi handed to the iPhone may
 use it. Markup lives in settings_ui.py; this module holds the behaviour. Since 1.5.0 the page is laid out as the
-CarPlay page's "AutoPlay 设置" panel: categories (iPhone, 网络, 更新, 高级) and one column of groups.
+CarPlay page's "AutoPlay" panel: categories (iPhone, 网络, 更新, 高级) and one column of groups.
 
 The Debian first-run wizard, hotspot/car/internet forms, remote debugging and DuckDNS form of DashPlay are gone
 (code_inventory_trimming.md 2.2): the F50 is the only target.
@@ -77,7 +77,8 @@ def host_allowed(host, allowed_networks, names=()):
     return address.is_loopback or address == state_files.SHARED_LAN.ip or any(address in net for net in allowed_networks)
 
 
-TITLE = "AutoPlay 盒子"   # what the CarPlay page's row calls it (连接 → AutoPlay 盒子); "AutoPlay 设置" is that page's own panel
+TITLE = "AutoPlay 设置"   # what the CarPlay page's row calls it (连接 → AutoPlay 设置); "AutoPlay" is that page's own panel
+# and the CarPlay icon that opens it (after 1.6.0: the panel was 「AutoPlay 设置」 and this page 「AutoPlay 盒子」, owner's call)
 # Which category a button's answer is shown on: the redirect after a POST carries it as the address's fragment.
 PANE_AFTER = {"/update": "#update"}
 
@@ -689,8 +690,8 @@ class SettingsPage:
     def render_refused():
         """403 (1.6.0: was the bare word "forbidden"): a browser that is not on the box's Wi-Fi, or came by a name the
         page does not answer to. Nothing of the box on it, and no button: there is nowhere here to go back to."""
-        return ui.page(TITLE, ui.flow(ui.banner(("无法通过此地址打开 AutoPlay 盒子", "请连接 AutoPlay 热点后，从「AutoPlay 设置 → 连接 → "
-                                                 "AutoPlay 盒子」打开。"), "wait")))
+        return ui.page(TITLE, ui.flow(ui.banner(("无法通过此地址打开 AutoPlay 设置", "请连接 AutoPlay 热点后，从「AutoPlay → 连接 → "
+                                                 "AutoPlay 设置」打开。"), "wait")))
 
     @staticmethod
     def render_missing():

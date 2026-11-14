@@ -59,10 +59,10 @@ authentication identities.
 
 ## Artwork
 
-The box settings icon is original geometric artwork generated for DashPlay by
-`scripts/generate-box-settings-icon.py` (2026-10-11), GPL-3.0 with this project, using no third-party
-icon or font assets: [icon provenance](assets/ICON-SOURCE.md). The receiver keeps the resource name
-`f50-settings.png`.
+The AutoPlay icon (CarPlay's home screen, since 1.6.1) is original artwork for this project: two overlapping
+rounded panes drawn in `assets/autoplay-icon.svg` and rendered by `scripts/render-autoplay-icon.py`, GPL-3.0 with
+this project, using no third-party icon, logo or font assets: [icon provenance](assets/ICON-SOURCE.md). It
+replaced DashPlay's box settings icon (two sliders in a frame), which is in the git history.
 
 CarPlay, iPhone, AirPlay and MFi are trademarks of Apple Inc. This is an independent project; no
 Apple, PlayPort, DiPlay, xcertplay, WheelPlay or DashPlay affiliation or endorsement is implied.

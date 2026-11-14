@@ -364,8 +364,8 @@ class PageLayoutTests(unittest.TestCase):
 
     def test_categories_and_what_each_holds(self):
         html = self.page.render("")
-        self.assertIn("<title>AutoPlay 盒子</title>", html)
-        self.assertIn("<h1>AutoPlay 盒子</h1>", html)
+        self.assertIn("<title>AutoPlay 设置</title>", html)
+        self.assertIn("<h1>AutoPlay 设置</h1>", html)
         self.assertEqual(re.findall(r'<a href="#(\w+)"[^>]*>([^<]+)', html.split("<nav", 1)[1]),
                          [("iphone", "iPhone"), ("net", "网络"), ("update", "更新"), ("more", "高级")])
         shown = html.replace("\u2011", "-").replace("<wbr>", "")
@@ -423,7 +423,7 @@ class PageLayoutTests(unittest.TestCase):
             html = self.page.render("", host)
             # 1.6.0: Apple's Back button (the chevron alone) on the leading edge; 「CarPlay 画面」 on the trailing edge
             self.assertIn(f'<header><div><a class="done icon out back" href="{entry}" aria-label="返回"><svg', html, host)
-            self.assertIn(f'<h1>AutoPlay 盒子</h1><a class="done out fwd" href="{entry}">CarPlay 画面</a></div></header>', html, host)
+            self.assertIn(f'<h1>AutoPlay 设置</h1><a class="done out fwd" href="{entry}">CarPlay 画面</a></div></header>', html, host)
         # its own address first in the list as well
         net = self.pane(self.page.render("", "100.96.0.1:18080"), "net")
         self.assertLess(net.index("https://100.96.0.1<wbr>:18443/"), net.index("https://mycar.duckdns.org<wbr>:18443/"))
@@ -546,8 +546,8 @@ class PageLayoutTests(unittest.TestCase):
     def test_refused_and_missing_pages_are_pages_of_the_box(self):
         """1.6.0: a bare English "forbidden" / "not found" was all a browser got."""
         refused, missing = self.page.render_refused(), self.page.render_missing()
-        self.assertIn("<h1>AutoPlay 盒子</h1>", refused)
-        self.assertIn("请连接 AutoPlay 热点后，从「AutoPlay 设置 → 连接 → AutoPlay 盒子」打开。", refused)
+        self.assertIn("<h1>AutoPlay 设置</h1>", refused)
+        self.assertIn("请连接 AutoPlay 热点后，从「AutoPlay → 连接 → AutoPlay 设置」打开。", refused)
         self.assertNotIn("class=done", refused)
         self.assertNotIn("Car-5G", refused, "nothing of the box for a browser that may not see it")
         self.assertIn("<b>找不到此页面</b>", missing)
@@ -556,7 +556,7 @@ class PageLayoutTests(unittest.TestCase):
     def test_colours_follow_carplay_or_the_browser(self):
         import settings_ui as ui
         html = self.page.render("night=1")
-        self.assertIn("<title>AutoPlay 盒子</title>", html, "the query is the browser's business; the page is the same")
+        self.assertIn("<title>AutoPlay 设置</title>", html, "the query is the browser's business; the page is the same")
         head = html.split("</head>", 1)[0]
         self.assertIn(f"<script>{ui.VISIT}</script>", head, "before anything is drawn")
         for part in ("night=([01])", "from=(panel|page)", 'sessionStorage.setItem("autoplay-visit"', "history.replaceState", "36e5",
@@ -703,7 +703,7 @@ class PageLayoutTests(unittest.TestCase):
         connection.request("GET", "/?night=0", headers={"Host": f"127.0.0.1:{port}"})
         reply = connection.getresponse(); html = reply.read().decode(); connection.close()
         self.assertEqual(reply.status, 200)
-        self.assertIn("<h1>AutoPlay 盒子</h1>", html)
+        self.assertIn("<h1>AutoPlay 设置</h1>", html)
 
 
 class HostCheckTests(unittest.TestCase):
