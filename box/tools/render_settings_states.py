@@ -108,7 +108,7 @@ states["available"] = make({}, devices=PHONES, presence={"last_phone": "02:00:00
                            update_check={"available": True, "online": True, "latest": "1.5.1", "current": "1.5.0",
                                          "checked_at": 1_793_500_000, "notes": NOTES})
 states["reset"] = make({}, query="reset")
-# 1.5.4: what an action could not do, as an alert over the page; the notices as a title and a line.
+# 1.6.0: what an action could not do, as an alert over the page; the notices as a title and a line.
 states["alert"] = make({}, devices=ONE, presence={"active": "02:00:00:00:00:01"}, cert=LIVE,
                        query="m=错误：无法添加 iPhone：CarPlay 正在使用中，请先断开。")
 states["notices"] = make({"warning": "特斯拉不支持信道 52：请将 AutoPlay 热点改为信道 149 或 36，国家代码选 CN。", "tesla_upstream": "offline"},

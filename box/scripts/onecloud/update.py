@@ -167,7 +167,7 @@ def sources(url, prefixes=(), prefer=None):
 
 def fetch_from(place, url, limit=1 << 20, target=None, sha256=None, size=None, timeout=30, progress=None):
     """Bytes of url (or, with target, the file written there) from one place of sources(); raises what went wrong.
-    progress(bytes so far) is called after each piece (1.5.4: the page shows how far a download is)."""
+    progress(bytes so far) is called after each piece (1.6.0: the page shows how far a download is)."""
     _label, candidate, extra = place
     candidate = candidate or api_download(url, timeout=timeout)
     request = urllib.request.Request(candidate, headers={"User-Agent": "AutoPlay-update", **extra})
@@ -377,7 +377,7 @@ def check(root, openwrt=None, key=KEY, manifest=None):
         result["error"] = f"检查更新失败：{error}"
     save(root / "state/update-check.json", result)
     if result.get("error"):
-        # The page says a failed check in one sentence (1.5.4); the places asked and their errors are read here.
+        # The page says a failed check in one sentence (1.6.0); the places asked and their errors are read here.
         import diagnostics   # here, not above: diagnostics imports this module
         try:
             diagnostics.DiagLog(root / "state/diag").append(
@@ -608,7 +608,7 @@ def install_openwrt(root, manifest, status, work, key=KEY):
     done, last = 0, [0.0]
 
     def moved(now_in_file):
-        # How far, for the page's progress bar (1.5.4, Apple: a determinate indicator when the size is known);
+        # How far, for the page's progress bar (1.6.0, Apple: a determinate indicator when the size is known);
         # written at most once a second.
         if time.monotonic() - last[0] >= 1:
             last[0] = time.monotonic()
@@ -766,7 +766,7 @@ def launch(root, openwrt=None):
     if running(root):
         return "正在升级，请稍候"
     if carplay_in_use(root):
-        return "无法升级：CarPlay 正在使用中，请停车并断开后再试。"   # the page's alert: title：line (1.5.4)
+        return "无法升级：CarPlay 正在使用中，请停车并断开后再试。"   # the page's alert: title：line (1.6.0)
     install = [sys.executable, str(Path(__file__).resolve()), "install", "--root", str(root)]
     service = {"name": "autoplay-update", "instances": {"update": {"command": install, "stdout": True, "stderr": True}}}
     command = ["ubus", "call", "service", "set", json.dumps(service)]

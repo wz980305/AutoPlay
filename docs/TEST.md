@@ -13,7 +13,7 @@ python3 -m unittest discover -s openwrt/tests      # 安装脚本 90-autoplay-te
 # 接收端：1.3.1 起 GitHub Actions 对每次推送跑 ./gradlew build（编译两个模块并跑全部测试），见下文「接收端」
 
 # 盒子侧：设置页、状态模型、守护（supervision）、升级日志与回滚、证书退避、时钟下限、出厂重置、平台、诊断、装机脚本
-cd box && python3 -m unittest discover -s tests/onecloud        # 276 个（1.5.3：+6，检查更新在 GitHub 卡住时接上镜像、整次 60 秒内放弃、刷新的页面带脚本重新载入；1.5.1：+1，两份样式表里决定标题栏位置的数值逐项相同；1.5.0：+13，盒子温度与过热提醒、处理器占用、系统更新保留、坐标系迁移、盒子网页的分类/日夜间/无小字、与设置面板的颜色逐项相同；Python 3.11–3.13 下都通过），通过
+cd box && python3 -m unittest discover -s tests/onecloud        # 286 个（1.6.0：+10，提示条是标题加一行、做不成的操作是提示框、恢复出厂设置的错误回到那一页、网络警告的写法、邀请中的手机写在自己那一行、检查失败一句话、403/404、没有填色按钮、对照 HIG 的进度条和自动检查、下载报告进度；1.5.3：+6，检查更新在 GitHub 卡住时接上镜像、整次 60 秒内放弃、刷新的页面带脚本重新载入；1.5.1：+1，两份样式表里决定标题栏位置的数值逐项相同；1.5.0：+13，盒子温度与过热提醒、处理器占用、系统更新保留、坐标系迁移、盒子网页的分类/日夜间/无小字、与设置面板的颜色逐项相同；Python 3.11–3.13 下都通过），通过
 
 # 蓝牙桥：test_reason、test_relay 等 7 个可直接跑；test_bluez、test_recovery 需要 dbus-daemon 和 dbus-next 0.2.3
 cd box && python3 -m unittest discover -s tests/bluetooth       # 没有 dbus-next 时那两个模块报 import 错误，是环境问题

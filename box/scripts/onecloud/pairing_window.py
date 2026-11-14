@@ -114,7 +114,7 @@ class PairingWindow:
 
     def joining(self):
         """The phone the box is inviting right now (a 接入 CarPlay, or a pairing that just finished), while its
-        invitation holds; None otherwise. The box page shows 「正在接入…」 in that phone's row (1.5.4)."""
+        invitation holds; None otherwise. The box page shows 「正在接入…」 in that phone's row (1.6.0)."""
         grant = read_json(self.root / 'state/receiver/pairing-request.json')
         try:
             current = grant.get('boot') == get_platform().boot_id() and grant.get('expires', 0) > time.monotonic()
@@ -391,7 +391,7 @@ async def run_incoming(root, timeout):
                     save_json(root / 'state/receiver/pairing-request.json', {
                         'phone':phone, 'boot':get_platform().boot_id(),
                         'expires':time.monotonic() + GRANT_SECONDS})
-                    # When (1.5.4): the box page says "connecting" for a few minutes at most, not until the next pairing.
+                    # When (1.6.0): the box page says "connecting" for a few minutes at most, not until the next pairing.
                     save_json(status_file, {'phase':'paired', 'at': int(time.time())})
                     return
             elif selected is None:

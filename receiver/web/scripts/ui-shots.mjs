@@ -104,7 +104,7 @@ if (want('viewer')) for (const vp of SHAPES) {
   await page.keyboard.press('Escape'); await settle(page);
   await page.click('#settings-display details > summary'); await page.waitForTimeout(700); await shot(page, 'viewer-settings-display-advanced', vp);
   await page.click('[data-picker="codec"]'); await settle(page); await shot(page, 'viewer-picker-codec', vp);
-  await page.keyboard.press('Escape'); await settle(page);   // a menu has no Cancel (1.5.4): Esc or a tap outside
+  await page.keyboard.press('Escape'); await settle(page);   // a menu has no Cancel (1.6.0): Esc or a tap outside
   await page.click('[data-settings-page="connection"]'); await settle(page); await shot(page, 'viewer-settings-connection', vp);
   await page.locator('#settings-connection details > summary').first().click(); await page.waitForTimeout(700); await shot(page, 'viewer-settings-connection-diagnostics', vp);
   await page.click('#btn-close'); await page.waitForTimeout(400);
@@ -190,7 +190,7 @@ const PLACES = selectors => Object.fromEntries(Object.entries(selectors).map(([n
   return [name, { x: r.left, y: r.top, r: innerWidth - r.right, w: r.width, h: r.height }];
 }));
 const COMPARED = { bar: 'yh', title: 'xyh', button: 'xywh', category: 'xyh', heading: 'xy', group: 'xyr', row: 'xrh' };
-// Two pairs (1.5.4): a page whose first group has a title (通用 / 网络) and one whose first group has none (连接 / 高级:
+// Two pairs (1.6.0): a page whose first group has a title (通用 / 网络) and one whose first group has none (连接 / 高级:
 // their group titles only repeated the category's name).
 const TWIN_PAGES = [{ panel: 'general', box: 'net', titled: true }, { panel: 'connection', box: 'more', titled: false }];
 if (want('twins')) for (const vp of [...SHAPES, { w: 600, h: 800, dsf: 2, tag: 'narrow' }, { w: 1710, h: 960, dsf: 1, tag: 'wide' }]) for (const pair of TWIN_PAGES) {

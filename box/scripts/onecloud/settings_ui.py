@@ -41,7 +41,7 @@ font:1.2rem/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","N
 [hidden]{display:none!important}
 :focus-visible{outline:3px solid var(--tint);outline-offset:2px}
 
-/* Title bar: the panel's header. It stays while the page scrolls. As iOS lays one out (1.5.4, Apple's guidelines on
+/* Title bar: the panel's header. It stays while the page scrolls. As iOS lays one out (1.6.0, Apple's guidelines on
    toolbars and sheets): the way back or 取消 on the leading edge, the title in the middle, an action on the trailing
    edge. Until then the title sat on the left and the one button on the right. */
 header{position:-webkit-sticky;position:sticky;top:0;z-index:3;background:var(--bg);border-bottom:1px solid var(--sep)}
@@ -87,7 +87,7 @@ font-weight:500;background:var(--cell);color:var(--label);text-decoration:none}
 .pane:target~.nav a.first{background:var(--cell);color:var(--label)}
 #iphone:target~.nav a.first,#net:target~.nav a[href="#net"],#update:target~.nav a[href="#update"],#more:target~.nav a[href="#more"]{background:var(--tint);color:#fff}
 .pane>.group-title:first-child{margin-top:.25rem}
-/* A group without a title (1.5.4: none repeats its category's name) keeps the distance a title gave it. */
+/* A group without a title (1.6.0: none repeats its category's name) keeps the distance a title gave it. */
 section>.group:first-child{margin-top:var(--s4)}
 .pane>.chain:first-child,.pane>section:first-child>.group:first-child{margin-top:.25rem}
 .flow>section:first-child>.group:first-child{margin-top:var(--s2)}
@@ -131,7 +131,7 @@ summary{list-style:none} summary::-webkit-details-marker{display:none}
 /* A field in a row keeps to the right and leaves the line to its label. */
 input[type=text],input[type=password]{flex:0 1 8rem;min-width:5rem;border:0;background:none;color:var(--label);font:inherit;padding:0;outline:none;min-height:2rem;text-align:right}
 input::placeholder{color:var(--secondary)}
-@media (min-width:481px){.flow input[type=text]{flex-basis:13rem}}   /* the reset's placeholder says what to type (1.5.4) */
+@media (min-width:481px){.flow input[type=text]{flex-basis:13rem}}   /* the reset's placeholder says what to type (1.6.0) */
 
 /* The connection chain: three stations on one track. A station's colour is its state; a stretch of track is green
    when what it joins is up, moving dashes while it is being set up. */
@@ -158,11 +158,11 @@ progress{display:block;width:100%;height:.4rem;margin-top:.55rem;-webkit-appeara
 progress::-webkit-progress-bar{background:var(--fill)} progress::-webkit-progress-value{background:var(--tint);border-radius:.2rem} progress::-moz-progress-bar{background:var(--tint)}
 .value.busy{display:inline-flex;align-items:center}
 .value.busy .spin{width:1.1rem;height:1.1rem;border-width:2px;margin:0 .45rem 0 0}
-/* A notice reads as an alert does (1.5.4): what happened in bold, what to do under it in the secondary colour. */
+/* A notice reads as an alert does (1.6.0): what happened in bold, what to do under it in the secondary colour. */
 .banner>span{display:flex;flex-direction:column;gap:.1rem;min-width:0}
 .banner b{font-weight:600} .banner span span{color:var(--secondary)}
 .banner a{display:block;padding:.35rem 0 .1rem;color:var(--tint);font-weight:600;text-decoration:none}
-/* What an action could not do (alert(), 1.5.4): the CarPlay page's dialog.alert, in the middle over a dimmed page. */
+/* What an action could not do (alert(), 1.6.0): the CarPlay page's dialog.alert, in the middle over a dimmed page. */
 .scrim{position:fixed;inset:0;z-index:10;display:grid;place-items:center;padding:var(--s4);background:var(--scrim)}
 .alert{display:flex;flex-direction:column;gap:var(--s1);width:min(24rem,100%);max-height:100%;overflow:auto;
 padding:var(--s4) var(--s4) var(--s3);border-radius:1.75rem;background:var(--raised);text-align:center;
@@ -283,7 +283,7 @@ def url(address):
     return re.sub(r"(:\d+/?)$", r"<wbr>\1", escape(address))
 
 
-# Apple's standard Back symbol (a chevron, no word): the box page's way back and the 404 page's (1.5.4).
+# Apple's standard Back symbol (a chevron, no word): the box page's way back and the 404 page's (1.6.0).
 CHEVRON = ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" '
            'stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>')
 
@@ -384,7 +384,7 @@ def tile(color, name):
 def parts(text):
     """A notice's two parts, Apple's alert shape: (what happened, what to do). Written as one sentence wherever the
     words also stand alone (LuCI, the diagnostics, an exception): the part before the first 「：」, else before 「，请」
-    (1.5.4: until then one run-on line under a prefix that said again what the line said, 「蓝牙未启动：…」)."""
+    (1.6.0: until then one run-on line under a prefix that said again what the line said, 「蓝牙未启动：…」)."""
     text = text.strip()
     if "：" in text:
         title, _, line = text.partition("：")
@@ -397,7 +397,7 @@ def parts(text):
 
 def banner(text, kind="ok", link=None):
     """A state the owner can act on, in the page: the title in bold, one line under it. text: (title, line), or one
-    sentence for parts(); link: (label, address) of the place that fixes it (1.5.4, Apple: a direct link, not its
+    sentence for parts(); link: (label, address) of the place that fixes it (1.6.0, Apple: a direct link, not its
     location in words)."""
     if not text:
         return ""
@@ -415,9 +415,9 @@ def flash(message):
 
 
 def alert(message, back):
-    """What an action just tried and could not do (1.5.4), as Apple's alert and the CarPlay page's dialog.alert: in
+    """What an action just tried and could not do (1.6.0), as Apple's alert and the CarPlay page's dialog.alert: in
     the middle over a dimmed page, a title, one line, 「好」. Without JS too: 「好」 is a link to the page without the
-    message (back), the fragment added by SCRIPT; a page under an alert does not reload itself (page()). Until 1.5.4
+    message (back), the fragment added by SCRIPT; a page under an alert does not reload itself (page()). Until 1.6.0
     a red banner at the top, where a page of the 高级 category showed it out of sight."""
     if not message.startswith("错误："):
         return ""
@@ -453,7 +453,7 @@ def device_name(name, address, twins):
 def phone_rows(devices, active, last, nonce, idle, joining=None):
     """Bluetooth-style "My devices": a row per iPhone with its state; one that is not in use unfolds to connect it or
     remove it. The one in use is a plain row: nothing can be done to it until it disconnects. joining: the phone the
-    box is inviting - its row says so, with a spinner (1.5.4, Apple: status beside what it describes)."""
+    box is inviting - its row says so, with a spinner (1.6.0, Apple: status beside what it describes)."""
     if not devices:
         return f'<div class="cell empty">{tile("gray", "phone")}<span class=main><b>尚未添加 iPhone</b></span></div>'
     twins = same_names(devices.values())
@@ -483,7 +483,7 @@ def pairing_panel(pair, nonce):
     iOS shows an incoming pairing request only while Settings > Bluetooth is open, so the iPhone stays
     there and this page is operated on another screen, normally the head unit's browser.
 
-    1.5.4, after Apple's guidelines (buttons, alerts, action sheets): one action per screen as a row of the list, the
+    1.6.0, after Apple's guidelines (buttons, alerts, action sheets): one action per screen as a row of the list, the
     way the rest of this page acts (「配对」, the word the iPhone's own request uses; 取消 is the bar's button), no
     yes/no pair (一致 / 不一致), no numbered steps. And, the owner's rule for this page: no line that tells how to
     do the task or how long it takes - only the rows (the steps live in the install guide).
@@ -511,13 +511,13 @@ def pairing_panel(pair, nonce):
         return (group("", f'<div class=cell aria-busy=true><span class=spin></span><span class=main><b>正在连接「{escape(pair.get("name", ""))}」</b>'
                       '</span></div>'), True)
     if phase in ("starting", "finishing"):
-        # What is happening (1.5.4, Apple: no vague words like "please wait" beside a spinner).
+        # What is happening (1.6.0, Apple: no vague words like "please wait" beside a spinner).
         doing = "正在打开配对…" if phase == "starting" else "正在完成配对…"
         return group("", f'<div class="cell empty" aria-busy=true><span class=spin></span><span class=main><b>{doing}</b></span></div>'), True
     return None, False
 
 
 def pair_cancel(nonce):
-    """The pairing screens' bar button (1.5.4): 取消 where every one-task screen has it, a POST as before."""
+    """The pairing screens' bar button (1.6.0): 取消 where every one-task screen has it, a POST as before."""
     return (f'<form method=post action=/pair>{hidden(nonce)}'
             '<button class=done name=action value=cancel>取消</button></form>')

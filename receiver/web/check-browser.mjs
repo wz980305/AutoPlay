@@ -12,7 +12,7 @@ function setup(modern,codec=true){
  if(modern)Object.assign(w,{AudioContext:function(){},PointerEvent:function(){},AudioDecoder:function(){},VideoDecoder:{isConfigSupported:()=>Promise.resolve({supported:codec})},MediaSource:{isTypeSupported:()=>true}});
  vm.runInNewContext(code,{window:w,document:d});return {w,nodes};
 }
-let old=setup(false);assert.equal(old.w.F50BrowserCheck.allowed,false);assert.equal(old.w.F50BrowserCheck.done,true);assert.equal(old.nodes['browser-check'].style.display,'block');// 1.5.4: a row per check in the settings panel's look - the name, the result as the value, the reason only under a
+let old=setup(false);assert.equal(old.w.F50BrowserCheck.allowed,false);assert.equal(old.w.F50BrowserCheck.done,true);assert.equal(old.nodes['browser-check'].style.display,'block');// 1.6.0: a row per check in the settings panel's look - the name, the result as the value, the reason only under a
 // check that failed.
 {const rows=old.nodes['browser-check-list'].children,row=rows.find(n=>n.children[0].children[0]==='视频解码');
  assert.equal(row.className,'missing');assert.equal(row.children[1].children[0],'缺少');
@@ -22,8 +22,8 @@ let old=setup(false);assert.equal(old.w.F50BrowserCheck.allowed,false);assert.eq
 // Driver view (viewer audit V10): one headline, the missing things in plain words (each cause once), the Tesla advice.
 assert.equal(old.nodes['browser-check-title'].textContent,'浏览器检测','a short title (Apple: under 15 characters); the result is the first line');
 assert.equal(old.nodes['browser-check-status'].textContent,'此浏览器无法显示 CarPlay 画面');
-assert.equal(old.nodes['browser-check-note'].textContent,'缺少：视频解码；较新的浏览器','plain words, no asides in brackets (1.5.4)');
-assert.equal(old.nodes['browser-check-advice'].textContent,'请在「控制 › 软件」更新车辆软件后再试。','one thing to do, in the Tesla\'s own menu (1.5.4)');
+assert.equal(old.nodes['browser-check-note'].textContent,'缺少：视频解码；较新的浏览器','plain words, no asides in brackets (1.6.0)');
+assert.equal(old.nodes['browser-check-advice'].textContent,'请在「控制 › 软件」更新车辆软件后再试。','one thing to do, in the Tesla\'s own menu (1.6.0)');
 assert.equal(old.nodes['browser-check-agent'].textContent,'浏览器上报：Android 4.2.2 Firefox/68','the browser\'s own report, only when something failed');
 assert(!/轻点|声音|tap/i.test(code.split('var T={')[1].split('};')[0]),'no word about a first sound: the page has played none since 1.3.0');
 { // English when this browser saved it; an insecure page is named as such, not as a missing API.
@@ -39,7 +39,7 @@ assert(!/轻点|声音|tap/i.test(code.split('var T={')[1].split('};')[0]),'no w
 }
 let good=setup(true);await Promise.resolve();assert.equal(good.w.F50BrowserCheck.allowed,true);
 assert.equal(good.nodes['browser-check-agent'].textContent,undefined,'nothing failed: no browser report');
-assert.equal(good.nodes['browser-check-continue'].attributes['aria-label'],'返回','the chevron back to the panel (1.5.4: it said 完成)');assert.equal(good.nodes['browser-check-continue'].hidden,true,'the bar button waits for the player');
+assert.equal(good.nodes['browser-check-continue'].attributes['aria-label'],'返回','the chevron back to the panel (1.6.0: it said 完成)');assert.equal(good.nodes['browser-check-continue'].hidden,true,'the bar button waits for the player');
 good.w.F50BrowserCheck.appReady();assert.equal(good.nodes['browser-check-continue'].disabled,false);assert.equal(good.nodes['browser-check-continue'].hidden,false);assert.equal(good.nodes['browser-check'].style.display,'none');
 let bad=setup(true,false);await Promise.resolve();assert.equal(bad.w.F50BrowserCheck.allowed,false);
 good.w.F50BrowserCheck.appFailed();assert.equal(good.nodes['browser-check'].style.display,'block');assert.equal(good.nodes['browser-check-continue'].disabled,true);assert.equal(good.nodes['browser-check-continue'].hidden,true);

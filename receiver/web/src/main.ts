@@ -115,7 +115,7 @@ function fit() {
   surface.style.width = `${size.width}px`; surface.style.height = `${size.height}px`;
   screen.classList.toggle('area', !!area);
 }
-/** A problem that needs the driver (1.5.4, Apple's alerts): only when there can be no picture until something is
+/** A problem that needs the driver (1.6.0, Apple's alerts): only when there can be no picture until something is
  *  changed. A title, one short line, 好 and - where a setting fixes it - 前往设置, which goes there. Until then a card at
  *  the bottom with 关闭, the decoder's English under 详细信息, and the setting's place in words. The decoder's own text
  *  goes to the box's log (viewer stats ev 17), not on the screen. Everything the page handled by itself is a pill
@@ -298,7 +298,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) drop
   const keyboard = (navigator as unknown as { virtualKeyboard?: { overlaysContent: boolean } }).virtualKeyboard;
   if (keyboard) try { keyboard.overlaysContent = true; } catch { /* Then the meta viewport alone decides. */ }
 }
-/** The panel at one setting's row (1.5.4): the way an error leads to what fixes it. A row inside a folded group
+/** The panel at one setting's row (1.6.0): the way an error leads to what fixes it. A row inside a folded group
  *  (画质与兼容) unfolds it first; the row is scrolled into view and focused. */
 function openSetting(page: string, select: string) {
   openPanel();
@@ -357,7 +357,7 @@ function teslaFullscreenUrl() {
 let teslaChecking = false;
 function updateFullscreen() {
   const borderless = teslaBorderless();
-  // The row's name stays 「无边框模式」 and its state is the grey value, as every other row (1.5.4; it used to turn into
+  // The row's name stays 「无边框模式」 and its state is the grey value, as every other row (1.6.0; it used to turn into
   // 「已开启无边框」 or 「正在检查网络」). Bare rows on the waiting screen as in the settings panel (1.5.0).
   const value = borderless ? t('borderlessOn') : teslaChecking ? t('checkingNetwork') : '';
   el('fullscreen-value').textContent = value; el('welcome-fullscreen-value').textContent = value;
@@ -365,7 +365,7 @@ function updateFullscreen() {
   for (const id of ['fullscreen', 'welcome-fullscreen']) {
     el(id).setAttribute('aria-label', label);
     // Off: a row that leaves for the video site, so it shows ›. On: a status row - not greyed out as a disabled
-    // button (1.5.4), only nothing to tap (it can be left in the car browser's own controls only).
+    // button (1.6.0), only nothing to tap (it can be left in the car browser's own controls only).
     el(id).classList.toggle('static', borderless);
     el<HTMLButtonElement>(id).disabled = teslaChecking;
     el(id).setAttribute('aria-disabled', String(borderless || teslaChecking));
@@ -452,7 +452,7 @@ async function saveDisplay(target: Display, how: { defer?: boolean; reason: stri
     display = { ...target, pending: false }; setDisplayStatus('applied'); return true;
   } catch {
     if (restart) { endExpectRestart(); fit(); }
-    // A change made by hand that did not take is an alert, as on the box page (1.5.4: 「应用失败，请重试。」 in the
+    // A change made by hand that did not take is an alert, as on the box page (1.6.0: 「应用失败，请重试。」 in the
     // group's footer); one the page made by itself keeps its pill (the caller's) and says it in the footer.
     if (how.reason === 'manual') { setDisplayStatus(null); problem(t('applyFail'), t('applyFailHint')); } else setDisplayStatus('applyFail');
     return false;
@@ -521,7 +521,7 @@ function pageEvent(ev: number) {
   connection.send({type:'stats',stats:{ev,hidden:document.hidden?1:0,borderless:teslaBorderless()?1:0,width:screen.clientWidth,height:screen.clientHeight,...viewport()}});
 }
 /** Which page build runs (raised with each build tried in the car). */
-const BUILD = 202611131630;
+const BUILD = 202611141600;
 /** What the browser says of the space it gives the page, to find the car's bar over a fullscreen page (2026-10-13):
  *  window, visual viewport (and its offset), screen, available screen, outer window, pixel ratio. */
 function viewport(): Record<string, number> {
@@ -535,7 +535,7 @@ let resizeTimer = 0;
 window.addEventListener('resize', () => { window.clearTimeout(resizeTimer); resizeTimer = window.setTimeout(() => pageEvent(5), 400); });
 window.setInterval(()=>{
   const now=performance.now(),fps=frames*1000/Math.max(1,now-lastStats);frames=0;lastStats=now;
-  // Plain punctuation between the facts (1.5.4: middle dots read as machine-made).
+  // Plain punctuation between the facts (1.6.0: middle dots read as machine-made).
   const sep = language === 'zh' ? '，' : ', ';
   el('stats').textContent=painted?`${canvas.width} × ${canvas.height}${sep}${fps.toFixed(0)} fps${sep}${display?.hevc ? 'H.265' : 'H.264'}`:t('noStream');
   el('latency').textContent=painted?`${video.decodeLatencyMs.toFixed(0)} ms`:'–';
@@ -637,7 +637,7 @@ const locationFeed = new LocationFeed(fix => {
   send({ type: 'location', location: zone ? { ...fix, zone } : fix });
 }, navigator.geolocation, () => !document.hidden, () => locationNote('locationDenied'));
 let locationTimer = 0;
-/** What a location change came to (1.5.4): under the 导航 group while the panel is open, as the picture settings say
+/** What a location change came to (1.6.0): under the 导航 group while the panel is open, as the picture settings say
  *  theirs under 画质 (it was a capsule across the top of the panel); a toast over the picture otherwise (the browser
  *  can take the permission back while driving). "Reconnecting" has said its piece after about 6 s. */
 function locationNote(key: Key | null) {

@@ -54,7 +54,7 @@ const messages = {
   cancel: ['取消', 'Cancel'],
 } as const;
 export type Key = keyof typeof messages;
-/** The language chosen in 「语言」; until one is chosen, the car browser's own (1.5.4, Apple's settings guidance: detect
+/** The language chosen in 「语言」; until one is chosen, the car browser's own (1.6.0, Apple's settings guidance: detect
  *  what can be detected - it was 简体中文 for every car). Chinese for a zh browser or one that names none, else English.
  *  Storage can be blocked or throw in a car browser (private mode, cleared site data): then the browser's, for the page. */
 export function defaultLanguage(asked: string): 'zh' | 'en' { return !asked || asked.toLowerCase().startsWith('zh') ? 'zh' : 'en'; }
@@ -69,6 +69,6 @@ export function setLanguage(value: string): void {
   try { localStorage.setItem('f50-language', language); } catch { /* Kept for this page only. */ }
   document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
   document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(e => { e.textContent = t(e.dataset.i18n as Key); });
-  // Buttons that are a symbol alone (1.5.4: the panel's close) carry their name for a screen reader.
+  // Buttons that are a symbol alone (1.6.0: the panel's close) carry their name for a screen reader.
   document.querySelectorAll<HTMLElement>('[data-i18n-label]').forEach(e => { e.setAttribute('aria-label', t(e.dataset.i18nLabel as Key)); });
 }

@@ -113,7 +113,7 @@ class PageBannerTests(unittest.TestCase):
     def test_bluetooth_failure_is_a_red_bar_with_the_reason(self):
         self.status.set("bluetooth", "failed", "controller-init-failed", retry_in=60)
         html = self.page.render("")
-        # 1.5.4: the reason is the title, what to do the line under it (it was 「蓝牙未启动：蓝牙芯片初始化失败。请重启盒子。」)
+        # 1.6.0: the reason is the title, what to do the line under it (it was 「蓝牙未启动：蓝牙芯片初始化失败。请重启盒子。」)
         self.assertIn('<p class="banner bad" role=status><span><b>蓝牙芯片初始化失败</b><span>请重启盒子。</span></span></p>', html)
         self.assertNotIn("蓝牙未启动：", html)
         self.assertIn("<div class=state>蓝牙未启动</div>", html, "the box's state in the chain stays, a word beside it")
@@ -156,7 +156,7 @@ class PageBannerTests(unittest.TestCase):
         self.page.pairing.devices = lambda: {"02:00:00:00:00:01": "小王的 iPhone"}
         nonce = self.page.pairing.nonce
         self.page.pairing.use = lambda phone: None
-        # 1.5.4: an invitation says nothing under the group - the phone's row says 「正在接入…」 (below)
+        # 1.6.0: an invitation says nothing under the group - the phone's row says 「正在接入…」 (below)
         self.assertEqual(self.page.apply("/pair", {"nonce": nonce, "action": "use", "phone": "02:00:00:00:00:01"}), "")
         self.page.pairing.joining = lambda: "02:00:00:00:00:01"
         html = self.page.render("")
@@ -169,7 +169,7 @@ class PageBannerTests(unittest.TestCase):
         self.assertNotIn("<p class=foot>", self.page.render(""))
         self.page.pairing.stop = lambda: None
         self.assertEqual(self.page.apply("/pair", {"nonce": nonce, "action": "cancel"}), "")
-        # What an action could not do is an alert over the page (1.5.4: a red banner at the top)
+        # What an action could not do is an alert over the page (1.6.0: a red banner at the top)
         html = self.page.render(urllib.parse.urlencode({"m": "错误：页面已过期：请再试一次。", "at": "phones"}))
         self.assertNotIn('class="banner', html)
         self.assertIn('<h2 id=alert-title tabindex=-1>页面已过期</h2><p id=alert-line>请再试一次。</p><a class=ok href="/">好</a>', html)
@@ -222,7 +222,7 @@ class PageBannerTests(unittest.TestCase):
         self.assertEqual(reply, {"ask": "remove", "phone": "02:00:00:00:00:01"})
         self.assertEqual(removed, [])
         html = self.page.render("ask=remove&phone=02%3A00%3A00%3A00%3A00%3A01")
-        # 1.5.4: one shape for every one-task screen - the task is the title, 取消 the bar's button, one button below
+        # 1.6.0: one shape for every one-task screen - the task is the title, 取消 the bar's button, one button below
         self.assertIn("<h1>删除 iPhone</h1>", html)
         self.assertIn('<a class=done href="/">取消</a>', html)
         self.assertNotIn("class=group-title", html, "the question was the smallest text on the screen")
@@ -243,7 +243,7 @@ class PageBannerTests(unittest.TestCase):
         self.assertIn("添加 iPhone", self.page.render("ask=remove&phone=02%3A00%3A00%3A00%3A00%3A01"))
 
     def test_an_upgrade_starts_at_once(self):
-        """1.5.4: no confirmation screen (1.2.0-1.5.3 asked first). Apple's guidelines keep confirmations for what loses
+        """1.6.0: no confirmation screen (1.2.0-1.5.3 asked first). Apple's guidelines keep confirmations for what loses
         data unexpectedly; an upgrade loses none, is refused while CarPlay is in use and goes back by itself."""
         nonce = self.page.pairing.nonce
         (self.state / "update-check.json").write_text(json.dumps({"available": True, "online": True, "latest": "1.4.0", "current": "1.3.0", "checked_at": 1}))
@@ -254,7 +254,7 @@ class PageBannerTests(unittest.TestCase):
 
 
     def test_a_notice_is_a_title_and_a_line(self):
-        """1.5.4: what happened in bold, what to do under it, as an alert has them; one sentence where the words also
+        """1.6.0: what happened in bold, what to do under it, as an alert has them; one sentence where the words also
         stand alone (LuCI, the diagnostics), split at its first 「：」 or before 「，请」."""
         import settings_page
         import settings_ui as ui
@@ -274,7 +274,7 @@ class PageBannerTests(unittest.TestCase):
                          "where the box restarts Bluetooth by itself it says so, not only 「请重启盒子」")
 
     def test_what_an_action_could_not_do_is_an_alert(self):
-        """1.5.4: Apple's alert over the page (title, line, 「好」), not a red notice at the top: on the 高级 category
+        """1.6.0: Apple's alert over the page (title, line, 「好」), not a red notice at the top: on the 高级 category
         the notice was out of sight above the category's own rows. It works without JS: 「好」 is a link."""
         import settings_ui as ui
         self.page.pairing.presence = lambda: {"active": "02:00:00:00:00:01"}
@@ -333,7 +333,7 @@ class PageBannerTests(unittest.TestCase):
             html = page.render_reset()
             self.assertIn("恢复出厂设置", html)
             self.assertIn('placeholder="输入「删除认证文件」"', html)
-            # 1.5.4: names only (no line under a row or a group), the button a red row (Apple: never a filled
+            # 1.6.0: names only (no line under a row or a group), the button a red row (Apple: never a filled
             # destructive button)
             main = html.split("<main", 1)[1]
             self.assertNotIn("<p class=foot>", main)
@@ -378,7 +378,7 @@ class PageLayoutTests(unittest.TestCase):
             for text in texts:
                 self.assertIn(text, pane, f"{text} belongs under {key}")
         self.assertNotIn("添加 iPhone", self.pane(shown, "net"))
-        # 1.5.4: a group's title does not repeat its category's name (iPhone / iPhone, 高级 / 高级)
+        # 1.6.0: a group's title does not repeat its category's name (iPhone / iPhone, 高级 / 高级)
         for key in ("iphone", "more"):
             self.assertNotIn("<section><p class=group-title>", self.pane(shown, key))
         # No fragment shows the first category: its page comes after the others (the style sheet hides it when one
@@ -394,7 +394,7 @@ class PageLayoutTests(unittest.TestCase):
         self.assertNotIn("<p class=foot>", html)
         for gone in ("每天自动检查一次", "车机连上", "配对一次后", "添加 iPhone 时，请在车机", "蓝牙 …", "正在使用。它断开后"):
             self.assertNotIn(gone, html)
-        # Where to add an iPhone from is said on the pairing screen, before the first iPhone only (1.5.4: until then
+        # Where to add an iPhone from is said on the pairing screen, before the first iPhone only (1.6.0: until then
         # it was a standing group of the iPhone category).
         self.assertNotIn("http://100.96.0.1<wbr>:18080/", html)
         self.page.pairing.devices = lambda: {}
@@ -403,7 +403,7 @@ class PageLayoutTests(unittest.TestCase):
         self.assertNotIn("<p class=foot>", html)
         self.page.pairing.status = lambda: {"phase": "waiting", "found": []}
         html = self.page.render("")
-        # 1.5.4: the list alone (three numbered steps under a 怎么做 title, then one line, until then; the owner's rule:
+        # 1.6.0: the list alone (three numbered steps under a 怎么做 title, then one line, until then; the owner's rule:
         # no line that tells how to do the task)
         self.assertIn("正在寻找附近的 iPhone…", html)
         self.assertNotIn("<p class=foot>", html)
@@ -421,7 +421,7 @@ class PageLayoutTests(unittest.TestCase):
                             ("100.96.0.1:18080", "https://100.96.0.1:18443/"), ("MYCAR.duckdns.org", "https://mycar.duckdns.org:18443/"),
                             ("autoplay.lan:18080", "https://mycar.duckdns.org:18443/"), ("", "https://mycar.duckdns.org:18443/")):
             html = self.page.render("", host)
-            # 1.5.4: Apple's Back button (the chevron alone) on the leading edge; 「CarPlay 画面」 on the trailing edge
+            # 1.6.0: Apple's Back button (the chevron alone) on the leading edge; 「CarPlay 画面」 on the trailing edge
             self.assertIn(f'<header><div><a class="done icon out back" href="{entry}" aria-label="返回"><svg', html, host)
             self.assertIn(f'<h1>AutoPlay 盒子</h1><a class="done out fwd" href="{entry}">CarPlay 画面</a></div></header>', html, host)
         # its own address first in the list as well
@@ -429,12 +429,12 @@ class PageLayoutTests(unittest.TestCase):
         self.assertLess(net.index("https://100.96.0.1<wbr>:18443/"), net.index("https://mycar.duckdns.org<wbr>:18443/"))
         self.status.update(entries=[])
         self.assertNotIn("class=done", self.page.render(""), "no CarPlay page yet (the Wi-Fi is not up), no button")
-        # A task's screen has no way out but 取消 in the bar (1.5.4: the pairing's cancel was a button in the body).
+        # A task's screen has no way out but 取消 in the bar (1.6.0: the pairing's cancel was a button in the body).
         self.status.update(entries=["https://100.96.0.1:18443/"])
         self.page.pairing.status = lambda: {"phase": "confirm", "name": "iPhone", "passkey": "123456", "request_id": "r"}
         html = self.page.render("")
         self.assertIn("<h1>添加 iPhone</h1>", html)
-        # 1.5.4: 「配对」, the iPhone's own word, as the one row; no yes/no pair and no line explaining two buttons
+        # 1.6.0: 「配对」, the iPhone's own word, as the one row; no yes/no pair and no line explaining two buttons
         self.assertIn('<button class="cell action" name=action value=yes>配对</button>', html)
         self.assertNotIn("不一致", html)
         self.assertNotIn("value=no", html)
@@ -446,21 +446,21 @@ class PageLayoutTests(unittest.TestCase):
         self.assertIn('<a class=done href="/#more">取消</a>', self.page.render_reset())
 
     def test_the_review_against_apples_guidelines(self):
-        """1.5.4, the second review against Apple's guidelines: a known size downloads with a bar, an old check is
+        """1.6.0, the second review against Apple's guidelines: a known size downloads with a bar, an old check is
         made when 更新 opens, a notice about the hotspot links to the page that fixes it, pairing says what it is
         doing."""
         import settings_ui as ui
         # determinate progress while downloading (update.install writes the share)
-        (self.state / "update-status.json").write_text(json.dumps({"phase": "downloading", "message": "正在下载 1.5.4，共 38 MB", "progress": 0.42, "at": int(time.time())}))
+        (self.state / "update-status.json").write_text(json.dumps({"phase": "downloading", "message": "正在下载 1.6.0，共 38 MB", "progress": 0.42, "at": int(time.time())}))
         with patch("settings_page.update.running", return_value=True):
             html = self.page.render("")
         self.assertIn('<progress max=100 value=42 aria-label="已下载 42%"></progress>', html)
         self.assertIn("<span class=value>42%</span>", html)
         (self.state / "update-status.json").unlink()
         # an old check is made when 更新 opens (the script submits the marked form); a fresh one is not
-        (self.state / "update-check.json").write_text(json.dumps({"latest": "1.5.4", "current": "1.5.4", "checked_at": int(time.time()) - 7200}))
+        (self.state / "update-check.json").write_text(json.dumps({"latest": "1.6.0", "current": "1.6.0", "checked_at": int(time.time()) - 7200}))
         self.assertIn("<form method=post action=/update data-auto>", self.page.render(""))
-        (self.state / "update-check.json").write_text(json.dumps({"latest": "1.5.4", "current": "1.5.4", "checked_at": int(time.time())}))
+        (self.state / "update-check.json").write_text(json.dumps({"latest": "1.6.0", "current": "1.6.0", "checked_at": int(time.time())}))
         self.assertNotIn("<form method=post action=/update data-auto>", self.page.render(""))
         self.assertIn('function auto(){if(location.hash!=="#update")return;var f=document.querySelector("form[data-auto]")', ui.SCRIPT)
         self.assertIn('sessionStorage.setItem(k,n)}catch(e){}var b=f.querySelector("button[name=action]");if(b)b.click()}', ui.SCRIPT)
@@ -480,7 +480,7 @@ class PageLayoutTests(unittest.TestCase):
             self.assertNotIn("请稍候", html)
 
     def test_a_phone_being_invited_says_so_in_its_own_row(self):
-        """1.5.4: after a pairing (or 接入 CarPlay) the box invites the phone for 90 s; its row says 「正在接入…」 for that
+        """1.6.0: after a pairing (or 接入 CarPlay) the box invites the phone for 90 s; its row says 「正在接入…」 for that
         long, the chain too, and the page refreshes. It said so as a screen of its own until 1.5.3 (for as long as the
         phone did not come), then as a line under the group."""
         import pairing_window
@@ -528,12 +528,12 @@ class PageLayoutTests(unittest.TestCase):
         self.assertIn("github: timed out", record["error"])
 
     def test_no_filled_buttons_on_any_screen(self):
-        """1.5.4: every action on this page is a row of a list, blue (action) or red (destructive), as the rest of the
+        """1.6.0: every action on this page is a row of a list, blue (action) or red (destructive), as the rest of the
         page and the CarPlay page's panel act; the full-width filled buttons are gone with their styles."""
         import settings_ui as ui
         self.assertNotIn(".btn", ui.CSS)
         screens = [self.page.render(""), self.page.render_reset()]
-        (self.state / "update-check.json").write_text(json.dumps({"available": True, "online": True, "latest": "1.6.0", "current": "1.5.4", "checked_at": 1}))
+        (self.state / "update-check.json").write_text(json.dumps({"available": True, "online": True, "latest": "1.6.0", "current": "1.6.0", "checked_at": 1}))
         screens.append(self.page.render("ask=install"))
         screens.append(self.page.render("ask=remove&phone=02%3A00%3A00%3A00%3A00%3A01"))
         for phase in ({"phase": "waiting", "found": []}, {"phase": "confirm", "name": "iPhone", "passkey": "123456", "request_id": "r"},
@@ -544,7 +544,7 @@ class PageLayoutTests(unittest.TestCase):
             self.assertNotRegex(html, r'class="?btn')
 
     def test_refused_and_missing_pages_are_pages_of_the_box(self):
-        """1.5.4: a bare English "forbidden" / "not found" was all a browser got."""
+        """1.6.0: a bare English "forbidden" / "not found" was all a browser got."""
         refused, missing = self.page.render_refused(), self.page.render_missing()
         self.assertIn("<h1>AutoPlay 盒子</h1>", refused)
         self.assertIn("请连接 AutoPlay 热点后，从「AutoPlay 设置 → 连接 → AutoPlay 盒子」打开。", refused)
@@ -637,7 +637,7 @@ class PageLayoutTests(unittest.TestCase):
         self.assertIn("max(var(--s2),env(safe-area-inset-top))", here)
         self.assertIn("@media(max-width:760px){header>div{padding-left:var(--s3);padding-right:var(--s3)}h1{font-size:1.4rem}", mine)
         self.assertIn("dialogheader{padding-left:var(--space-3);padding-right:var(--space-3);}", theirs)
-        # the title and the button (1.5.4, Apple's toolbars and sheets: the button on the leading edge - the panel's
+        # the title and the button (1.6.0, Apple's toolbars and sheets: the button on the leading edge - the panel's
         # close cross, this page's chevron back or 取消 - and the title in the middle)
         self.assertIn("grid-template-columns:1frauto1fr;", bar)
         self.assertIn("grid-template-columns:1frauto1fr;", here)
@@ -696,7 +696,7 @@ class PageLayoutTests(unittest.TestCase):
         with patch("settings_page.update.check"):
             self.assertEqual(post("/update", action="check"), (303, "/?m=#update"))
         with patch("settings_page.update.launch", return_value="已开始升级"):
-            self.assertEqual(post("/update", action="install"), (303, "/?m=#update"), "at once (1.5.4), back on 更新")
+            self.assertEqual(post("/update", action="install"), (303, "/?m=#update"), "at once (1.6.0), back on 更新")
         self.page.pairing.stop = lambda: None
         self.assertEqual(post("/pair", action="cancel"), (303, "/?m="), "the first category needs no fragment")
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)

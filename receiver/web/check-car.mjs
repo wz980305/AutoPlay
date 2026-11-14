@@ -350,7 +350,7 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
 { // The hint follows the state (viewer audit V3): the box is the question while the link is down, the iPhone only
   // while the box answers; the box's own page link hides while the box is unreachable.
   const {statusHint,SLOW_LINK_S}=await load('status');
-  // 1.5.4: no line under the title while things go as they should (waiting, starting, a display change): the
+  // 1.6.0: no line under the title while things go as they should (waiting, starting, a display change): the
   // owner's rule, no explanation and no time estimate; the lines are for a box that does not answer.
   assert.deepEqual(statusHint('waiting',0),{key:null,seconds:null,boxLink:true},'the one good state: the title says it');
   assert.deepEqual(statusHint('starting',0),{key:null,seconds:null,boxLink:true},'iPhone connected: the title says it');
@@ -413,7 +413,7 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
   }
 }
 console.log('Compatible display: automatic below Chrome 120, neither low-latency canvas nor hardware preference.');
-{ // Option menu (1.2.0, picker.ts; a menu from the row since 1.5.4): a car browser draws a native <select> list at
+{ // Option menu (1.2.0, picker.ts; a menu from the row since 1.6.0): a car browser draws a native <select> list at
   // the OS size, so the rows open the page's own list; the hidden <select> keeps the value and its change event.
   class Node {
     constructor(tag){this.tag=tag;this.children=[];this.attrs={};this.listeners={};this.textContent='';this.hidden=false;this.disabled=false;this.open=false;}
@@ -457,12 +457,12 @@ console.log('Compatible display: automatic below Chrome 120, neither low-latency
   select.disabled=true;observers[0].fn();assert.equal(trigger.disabled,true,'a disabled select greys its row');
   delete globalThis.document;delete globalThis.MutationObserver;
 }
-{ // 1.5.4: no title and no Cancel in the menu; a row that opens one shows the up-down chevron
+{ // 1.6.0: no title and no Cancel in the menu; a row that opens one shows the up-down chevron
   const html=readFileSync(new URL('./index.html',import.meta.url),'utf8'),css=readFileSync(new URL('./src/style.css',import.meta.url),'utf8');
   assert.match(html,/<dialog id="picker" class="picker"><div id="picker-options" class="options" role="listbox"><\/div><\/dialog>/);
   assert.match(css,/\.select-row \.chev::before, \.select-row \.chev::after/);assert.match(css,/dialog\.picker::backdrop \{ background:transparent; \}/);
 }
-{ // 1.5.4: what the driver must act on is an alert (a title, one line, 好 / 前往设置); what the page handled by itself
+{ // 1.6.0: what the driver must act on is an alert (a title, one line, 好 / 前往设置); what the page handled by itself
   // is a one-line pill; no text the page shows carries an aside in brackets or middle dots between its phrases
   const html=readFileSync(new URL('./index.html',import.meta.url),'utf8'),i18n=readFileSync(new URL('./src/i18n.ts',import.meta.url),'utf8');
   const bc=readFileSync(new URL('./public/browser-check.js',import.meta.url),'utf8');
@@ -478,7 +478,7 @@ console.log('Compatible display: automatic below Chrome 120, neither low-latency
   assert.match(main,/if \(urgent !== 'manual'\) toast\(t\('autoFail'\)\)/);
   assert.match(i18n,/applyFail: \['无法应用设置', 'Couldn’t Apply Settings'\], applyFailHint: \['请检查与盒子的连接，再试一次。'/);
 }
-{ // 1.5.4: until a language is chosen, the car browser's own (Apple: detect what can be detected); it was zh for all
+{ // 1.6.0: until a language is chosen, the car browser's own (Apple: detect what can be detected); it was zh for all
   const {defaultLanguage}=await load('i18n');
   assert.deepEqual(['zh-CN','zh-TW','zh','en-US','en-AU','de-DE',''].map(defaultLanguage),['zh','zh','zh','en','en','en','zh']);
 }

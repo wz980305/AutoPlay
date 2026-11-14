@@ -1,9 +1,9 @@
-/** Option menu in place of native <select> popups (1.2.0, docs/UI-1.2.0.md; a menu since 1.5.4).
+/** Option menu in place of native <select> popups (1.2.0, docs/UI-1.2.0.md; a menu since 1.6.0).
  *
  *  A car browser draws a <select>'s list itself, at the OS size and outside this page's type scale: small rows, a
  *  thin scrollbar, nothing the car's own scale setting reaches, and on some builds the list opens where a finger
  *  cannot see it. This menu lists the options as the page's own rows (the primary touch target, the body size, a
- *  check mark on the current one). Since 1.5.4 it opens from the row the way Apple's pop-up button does - under the
+ *  check mark on the current one). Since 1.6.0 it opens from the row the way Apple's pop-up button does - under the
  *  row's value (above it when there is no room), no title and no Cancel: a tap outside or Esc closes it. Until then
  *  it was a sheet in the middle of the dimmed page with a Cancel row, opened from a row that showed a push chevron.
  *

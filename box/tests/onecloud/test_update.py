@@ -351,7 +351,7 @@ class SignedReleaseTests(unittest.TestCase):
             update.fetch(self.server.base + 'f.apk', target=target, sha256=sha(b'other'), size=7)
 
     def test_a_download_reports_how_far_it_is(self):
-        """1.5.4: the page shows a bar while downloading (Apple: a determinate indicator when the size is known)."""
+        """1.6.0: the page shows a bar while downloading (Apple: a determinate indicator when the size is known)."""
         body = bytes(200_000)
         self.server.put('big.apk', body)
         seen = []

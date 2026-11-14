@@ -255,7 +255,7 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             hevc = display.hevc,
             manufacturer = config.manufacturer,
             model = config.model,
-            // The icon opens the CarPlay page's settings panel, so it carries the panel's name (1.5.4: was "盒子设置").
+            // The icon opens the CarPlay page's settings panel, so it carries the panel's name (1.6.0: was "盒子设置").
             oemLabel = "AutoPlay 设置",
             icons = listOf(AirPlayIcon(180, 180, checkNotNull(javaClass.getResourceAsStream("/f50-settings.png")).use { it.readBytes() })),
             appearanceUpdates = appearanceUpdatesFor(selectedPhone),

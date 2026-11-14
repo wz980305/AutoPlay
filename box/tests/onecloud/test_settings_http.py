@@ -65,7 +65,7 @@ class PostFramingTests(unittest.TestCase):
 
 
 class WhereAResultGoesTests(unittest.TestCase):
-    """1.5.4: what the reset could not do comes back over the reset page, where the words were typed; everything else
+    """1.6.0: what the reset could not do comes back over the reset page, where the words were typed; everything else
     goes to the page, an update's to its category."""
 
     def setUp(self):

@@ -37,7 +37,7 @@ CHECK_LOG_EVERY = 60   # s: one diag line per car connectivity check and reply, 
 LOCAL_HOSTS = {state_files.LOCAL_NAME, "dashplay.lan", state_files.MDNS_NAME, "localhost"}
 BLUETOOTH_TEXT = {   # reason codes of the bluetooth domain (status_model) -> what the owner reads (S2)
     # Plain words since 1.4.1; the chip, rfkill and paths are in the diagnostics record. bluez-missing keeps its
-    # command: only whoever installed the box sees it, and it is the fix. Since 1.5.4 (title, what to do), as an
+    # command: only whoever installed the box sees it, and it is the fix. Since 1.6.0 (title, what to do), as an
     # alert has them: the reason is the title, without 「蓝牙未启动：」 in front of it (it said the same again), and
     # what the box does by itself is said instead of 「请重启盒子」 where it is restarting Bluetooth already.
     "helper-starting": ("蓝牙正在启动", ""),
@@ -96,7 +96,7 @@ def release_summary(notes):
 
 
 def check_failure(error):
-    """A failed check for updates in one sentence (1.5.4). The page showed update.check's whole error: the places it
+    """A failed check for updates in one sentence (1.6.0). The page showed update.check's whole error: the places it
     asked, their errors, and advice about a mirror setting this page does not have. The details went to the
     diagnostics (update.check), where they are read."""
     if "签名" in error:
@@ -109,7 +109,7 @@ def check_failure(error):
 
 
 def upgrade_failure(message):
-    """A failed upgrade's message as the page says it (1.5.4): a download's or a signature's places and errors are
+    """A failed upgrade's message as the page says it (1.6.0): a download's or a signature's places and errors are
     the update log's business, as a failed check's are the diagnostics' (check_failure)."""
     if message.startswith("下载失败") or "更新清单的签名" in message:
         return check_failure(message).replace("已忽略", "已停止")
@@ -212,7 +212,7 @@ class SettingsPage:
                     result = "错误：" + str(error)
                 # A message shows as a banner; a dict asks the page for a confirmation screen (ask=...).
                 params = result if isinstance(result, dict) else {"m": result}
-                # What the reset could not do is said over the reset page, where the words were typed (1.5.4).
+                # What the reset could not do is said over the reset page, where the words were typed (1.6.0).
                 where = "/reset" if self.path == "/reset" and str(params.get("m", "")).startswith("错误：") else "/"
                 self._send(303, "", extra={"Location": where + "?" + urllib.parse.urlencode(params) + PANE_AFTER.get(self.path, "")})
 
@@ -287,7 +287,7 @@ class SettingsPage:
                 return ""   # the phone leaves the list; the confirmation screen said what that means
             if action == "use":
                 self.pairing.use(form.get("phone", ""))
-                return ""   # the phone's row says 「正在接入…」 (1.5.4: 「已邀请。」 under the group)
+                return ""   # the phone's row says 「正在接入…」 (1.6.0: 「已邀请。」 under the group)
             if action in ("yes", "no"):
                 self.pairing.confirm(form.get("request_id", ""), action == "yes")
                 return "" if action == "yes" else {"m": "已拒绝此次配对。", "at": "phones"}
@@ -298,12 +298,12 @@ class SettingsPage:
                 self.start_check()
                 return ""   # the update group shows "checking" and the page refreshes itself until the result is in
             if form.get("action") == "install":
-                # At once (1.5.4; until then a confirmation screen first). Apple's guidelines keep confirmations for
+                # At once (1.6.0; until then a confirmation screen first). Apple's guidelines keep confirmations for
                 # what loses data unexpectedly: an upgrade loses none, is refused while CarPlay is in use, and goes
                 # back by itself when the new version does not start - as iOS starts on 「立即更新」.
                 message = update.launch(self.state.parent)
                 # Started (or running already): the group shows the upgrade running. Refused (CarPlay in use) or failed
-                # to start: an alert, as every action that could not be done (1.5.4: a line in the group).
+                # to start: an alert, as every action that could not be done (1.6.0: a line in the group).
                 if message.startswith(("已开始升级", "正在升级")):
                     return ""
                 # What the update service said when it would not start is the group's 「上次升级未完成」 row and the
@@ -363,7 +363,7 @@ class SettingsPage:
         if update.running(self.state.parent):
             share = progress.get("progress")
             if progress.get("phase") == "downloading" and isinstance(share, (int, float)):
-                # The size is known: a bar instead of the spinner (1.5.4, Apple's progress indicators).
+                # The size is known: a bar instead of the spinner (1.6.0, Apple's progress indicators).
                 percent = max(0, min(100, round(share * 100)))
                 return (f'<div class=cell>{ui.tile("blue", "download")}<span class=main><b>正在升级</b>'
                         f'<span>{escape(progress.get("message", ""))}</span>'
@@ -402,7 +402,7 @@ class SettingsPage:
             cells = current + cells + (
                 f'<div class="cell tall">{ui.tile("red", "download")}<span class=main><b>有新版本 {escape(found["latest"])}</b>'
                 f'{f"<span class=clamp>{notes}</span>" if notes else ""}</span></div>'
-                # A row of its own (1.5.4: a small link, 31-37 px high, under Apple's 44 pt)
+                # A row of its own (1.6.0: a small link, 31-37 px high, under Apple's 44 pt)
                 f'<a class=cell href="{escape(more)}">{ui.tile("gray", "doc")}<span class=main><b>完整更新说明</b></span>'
                 '<span class=chev></span></a>')
             if found.get("online"):
@@ -417,7 +417,7 @@ class SettingsPage:
         else:
             cells = mine + cells
         if self.check_stale(found):
-            # Opening 更新 checks by itself when the last check is old (1.5.4, as iOS's Software Update does on opening;
+            # Opening 更新 checks by itself when the last check is old (1.6.0, as iOS's Software Update does on opening;
             # Apple: don't make people start every update). The script submits this form; the button stays for a retry.
             check = check.replace("<form method=post action=/update>", "<form method=post action=/update data-auto>", 1)
         return cells + check, foot
@@ -482,7 +482,7 @@ class SettingsPage:
         if panel:
             return panel, refresh, devices, True
         # A phone being invited (接入 CarPlay, or a pairing that just finished) says so in its own row while the
-        # invitation holds (1.5.4; until then a line under the group, and before that a screen of its own).
+        # invitation holds (1.6.0; until then a line under the group, and before that a screen of its own).
         joining = self.pairing.joining()
         connecting = bool(joining) and joining in devices and presence.get("active") != joining
         rows = ui.phone_rows(devices, presence.get("active"), presence.get("last_phone"), nonce, not presence.get("active"),
@@ -497,7 +497,7 @@ class SettingsPage:
         else:
             # Nothing going on: no line (1.5.0). The steps of adding an iPhone are on the screen that adds it.
             foot = note
-        # No title: the category is 「iPhone」 already (1.5.4).
+        # No title: the category is 「iPhone」 already (1.6.0).
         return ui.group("", rows + add, escape(foot)), connecting, devices, False
 
     def entries(self, status, host=""):
@@ -554,11 +554,11 @@ class SettingsPage:
         identity = status.get("identity")
         if identity is False or (isinstance(identity, dict) and identity.get("state") == "missing"):
             # No credentials here: the F50's root password is the installer's, never 1234 (S3). How to put the files in
-            # place is the install guide's business (1.5.4: the banner retold it in three clauses).
+            # place is the install guide's business (1.6.0: the banner retold it in three clauses).
             html += ui.banner(("缺少 CarPlay 认证文件", "按「AI 安装说明」放置后将自动开始工作。"), "wait")
         # The network's warnings, one notice each (they come joined by 「；」, as LuCI shows them on one line). Each is
         # written "what：what to do" (supervisor_openwrt); a notice about the hotspot leads to OpenWrt's Wi-Fi page
-        # itself (1.5.4: it said where that page is). 2.4 GHz works, so it is not red.
+        # itself (1.6.0: it said where that page is). 2.4 GHz works, so it is not red.
         for warning in filter(None, (status.get("warning") or "").split("；")):
             link = ("在 OpenWrt 后台设置", self.admin_url()) if "AutoPlay 热点" in warning else None
             html += ui.banner(warning, "wait" if "2.4 GHz" in warning else "bad", link)
@@ -590,7 +590,7 @@ class SettingsPage:
 
     def confirm_screen(self, kind, params, nonce):
         """The question a destructive button used to put in the browser's confirm() box, as a screen of this page: a car
-        browser draws confirm() at the OS size, outside this page's scale, or suppresses it (1.2.0). Since 1.5.4 only
+        browser draws confirm() at the OS size, outside this page's scale, or suppresses it (1.2.0). Since 1.6.0 only
         removing a phone asks (an upgrade starts at once), and every one-task screen has one shape: the task is the title, 取消 is the bar's button, the body holds what it is about
         and the one button that does it (the question used to be the smallest text on the screen, a group's title).
         Returns (title, where 取消 goes, body), or None when there is nothing to ask (the phone is gone, an unknown
@@ -598,7 +598,7 @@ class SettingsPage:
 
         The button is a row of the list in the destructive style (red text) or the action style, as on the rest of this
         page and as Apple's guidelines give it: a destructive action is never the prominent (filled) button, and an
-        action sheet's message is left out when the title and the context say enough (1.5.4: until then a full-width
+        action sheet's message is left out when the title and the context say enough (1.6.0: until then a full-width
         red button, and a line under the phone)."""
         if kind == "remove":
             phone = params.get("phone", [""])[0]
@@ -616,7 +616,7 @@ class SettingsPage:
         params = urllib.parse.parse_qs(query)
         message, at = params.get("m", [""])[0], params.get("at", [""])[0]
         # An action's result is said in its own group (at=phones); a result with no place of its own (the factory
-        # reset) is a notice at the top; what an action could not do is an alert over the page (1.5.4: a red notice
+        # reset) is a notice at the top; what an action could not do is an alert over the page (1.6.0: a red notice
         # at the top, whose 「蓝牙未启动：」-style prefix said again what the line said).
         placed = at in ("phones", "update") and not message.startswith("错误：")
         notice = ("" if placed else ui.flash(message)) + self.notices()
@@ -633,7 +633,7 @@ class SettingsPage:
         if pairing:
             # Pairing in progress (1.2.0): the passkey and its buttons are the whole page. In the Tesla's windowed
             # browser (773x601 CSS px) they sat below the Wi-Fi group, off the screen. No categories and no chain
-            # here: the panel says itself what is happening. Its title is the task, 取消 in the bar (1.5.4).
+            # here: the panel says itself what is happening. Its title is the task, 取消 in the bar (1.6.0).
             return ui.page("添加 iPhone", ui.flow(notice + block), True, done=ui.pair_cancel(nonce), alert=alert)
         presence = self.pairing.presence()
         phase = self.pairing.status().get("phase", "closed")
@@ -653,9 +653,9 @@ class SettingsPage:
         panes = {
             "iphone": self.chain(devices, presence, phase) + block,
             "net": (ui.group("AutoPlay 热点", self.network_block()) + self.entries_block(entries)
-                    + (ui.group("自定义域名", reach) if reach else "")),   # 1.5.4: was 「自己的网址」 (Apple: possessives sparingly)
+                    + (ui.group("自定义域名", reach) if reach else "")),   # 1.6.0: was 「自己的网址」 (Apple: possessives sparingly)
             "update": ui.group("程序更新", updates, update_foot),
-            "more": ui.group("", advanced),   # no title: the category is 「高级」 already (1.5.4)
+            "more": ui.group("", advanced),   # no title: the category is 「高级」 already (1.6.0)
         }
         found = update.read(self.state / "update-check.json")
         marked = ("update",) if found.get("available") and not found.get("error") else ()
@@ -668,7 +668,7 @@ class SettingsPage:
                        alert=alert)
 
     def render_reset(self, query=""):
-        """The factory-reset page: what goes, two typed confirmations (no JS confirm() to bypass). 1.5.4: names only,
+        """The factory-reset page: what goes, two typed confirmations (no JS confirm() to bypass). 1.6.0: names only,
         no lines under them or under the groups; what to type for the identity files is the field's placeholder; the
         button is a red row, as Apple's guidelines give a destructive action (it was a full-width red button)."""
         nonce = self.pairing.nonce
@@ -682,17 +682,17 @@ class SettingsPage:
                            f'<input type=text name=identity autocomplete=off autocapitalize=off placeholder="输入「{factory_reset.IDENTITY_CONFIRMATION}」"></label>')
                 + ui.group("", '<button class="cell destructive">恢复出厂设置</button>')
                 + '</form>')
-        message = urllib.parse.parse_qs(query).get("m", [""])[0]   # what the reset could not do, as an alert (1.5.4)
+        message = urllib.parse.parse_qs(query).get("m", [""])[0]   # what the reset could not do, as an alert (1.6.0)
         return ui.page("恢复出厂设置", ui.flow(body), done=("取消", "/#more"), alert=ui.alert(message, "/reset"))
 
     @staticmethod
     def render_refused():
-        """403 (1.5.4: was the bare word "forbidden"): a browser that is not on the box's Wi-Fi, or came by a name the
+        """403 (1.6.0: was the bare word "forbidden"): a browser that is not on the box's Wi-Fi, or came by a name the
         page does not answer to. Nothing of the box on it, and no button: there is nowhere here to go back to."""
         return ui.page(TITLE, ui.flow(ui.banner(("无法通过此地址打开 AutoPlay 盒子", "请连接 AutoPlay 热点后，从「AutoPlay 设置 → 连接 → "
                                                  "AutoPlay 盒子」打开。"), "wait")))
 
     @staticmethod
     def render_missing():
-        """404 (1.5.4: was the bare words "not found"), with the bar's way back to the page."""
+        """404 (1.6.0: was the bare words "not found"), with the bar's way back to the page."""
         return ui.page(TITLE, ui.flow(ui.banner("找不到此页面。", "wait")), done=ui.back("/"))

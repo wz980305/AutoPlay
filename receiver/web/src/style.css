@@ -68,7 +68,7 @@ button.cell.static { cursor:default; } button.cell.static:active { background:va
 .cell .main { flex:1; min-width:0; }
 .cell .main b { display:block; font-weight:500; }
 .cell .main span { display:block; color:var(--secondary); font-size:1rem; line-height:1.45; margin-top:.25rem; }
-/* A row's value at the row's size, up to 55% of it, as on the box page (1.5.4; it was 1rem and 45%). */
+/* A row's value at the row's size, up to 55% of it, as on the box page (1.6.0; it was 1rem and 45%). */
 .cell .value { color:var(--secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; max-width:55%; margin-left:auto; }
 /* Icon tiles (iOS Settings): every row carries one, a white glyph on a coloured rounded square; the three categories on
    the left are plain words (1.3.2, asked for in the car). */
@@ -85,7 +85,7 @@ summary { list-style:none; } summary::-webkit-details-marker { display:none; }
 .foot { color:var(--secondary); font-size:1rem; line-height:1.45; margin:var(--space-1) var(--space-3) 0; }
 .gap { height:var(--space-4); }
 .foot + .group { margin-top:var(--space-4); }
-/* A page that starts with a group, not a heading (Connection, 1.5.4): its top where the box page puts a category's first
+/* A page that starts with a group, not a heading (Connection, 1.6.0): its top where the box page puts a category's first
    card (the chain, an untitled group). */
 .settings-page > .group:first-child { margin-top:.25rem; }
 .inner { padding:var(--space-2) var(--space-3) var(--space-3); }
@@ -101,7 +101,7 @@ summary { list-style:none; } summary::-webkit-details-marker { display:none; }
 .select-row .value { flex:1 1 auto; min-width:3em; margin-left:auto; text-align:right; font-size:var(--t-body); max-width:none; }
 .select-row:disabled { color:var(--secondary); }
 .select-row:disabled .chev { opacity:.4; }
-/* A row that opens a menu (1.5.4): the up-down chevron of Apple's pop-up button; › is for a row that opens a page. */
+/* A row that opens a menu (1.6.0): the up-down chevron of Apple's pop-up button; › is for a row that opens a page. */
 .select-row .chev { display:flex; flex-direction:column; align-items:center; gap:.2rem; margin-right:.2rem; }
 .select-row .chev::before, .select-row .chev::after { content:""; display:block; width:.4rem; height:.4rem; margin:0; border:solid var(--chev); border-width:2px 2px 0 0; }
 .select-row .chev::before { transform:rotate(-45deg); }
@@ -121,7 +121,7 @@ fieldset { border:0; padding:0; margin:0; min-width:0; }
 
 /* Notices over the live picture: a plain translucent fill with an edge, never a blur (a backdrop-filter above the
    canvas costs the low-latency path, media_performance_audit #8). The toast sits bottom-centre, away from CarPlay's
-   navigation banner at the top (viewer audit V12). Since 1.5.4 it is the pill for what the page handled by itself -
+   navigation banner at the top (viewer audit V12). Since 1.6.0 it is the pill for what the page handled by itself -
    one short line, gone by itself - and only that: a problem the driver must act on is an alert (dialog.alert). */
 .capsule { position:absolute; left:50%; transform:translateX(-50%); max-width:calc(100vw - 2rem); padding:var(--space-2) var(--space-4); border-radius:1.4rem;
   background:var(--overlay); border:1px solid var(--overlay-edge);
@@ -133,7 +133,7 @@ fieldset { border:0; padding:0; margin:0; min-width:0; }
   font:var(--t-mono)/1.45 ui-monospace,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums; }
 #debug-hud[hidden] { display:none; }
 @keyframes drop { from { opacity:0; transform:translate(-50%,10px); } }
-/* A problem that needs the driver (main.ts problem(), 1.5.4): Apple's alert - in the middle over a dimmed screen, a
+/* A problem that needs the driver (main.ts problem(), 1.6.0): Apple's alert - in the middle over a dimmed screen, a
    title, one line, the buttons side by side and the one that fixes it tinted. It replaced a card at the bottom with
    关闭 in its corner and the decoder's English under 详细信息. */
 dialog.alert { position:fixed; inset:0; margin:auto; width:min(24rem, calc(100% - 2 * var(--space-4))); height:fit-content; max-height:calc(100% - 2 * var(--space-4));
@@ -160,7 +160,7 @@ dialog::backdrop { background:#000; }
    the two together): the bar's colour and line cross the window, the title and the button end where the columns below
    end - 1440 px at most, centred - and the bar is --bar high plus its line. Before, the title and "Done" kept to the
    window's edges on a wide screen while the box page's stayed with its columns. */
-/* 1.5.4, Apple's guidelines on toolbars and sheets: the panel's changes apply at once, so its way out is the standard
+/* 1.6.0, Apple's guidelines on toolbars and sheets: the panel's changes apply at once, so its way out is the standard
    Close button (the cross alone, not the word 「完成」) on the leading edge, the title in the middle - as the box page's
    bar, whose way back is the chevron in the same place. */
 dialog header { flex:none; display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:var(--space-3); min-height:calc(var(--bar) + 1px);
@@ -200,7 +200,7 @@ button.text { border-radius:var(--radius); background:var(--cell); color:var(--l
 #display-status { overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
 #display-status:empty { display:none; }   /* the group's footer speaks only while something is happening (1.3.0) */
 
-/* Option menu (picker.ts, 1.5.4): Apple's pop-up button - the options open from the row, under its value, on a raised
+/* Option menu (picker.ts, 1.6.0): Apple's pop-up button - the options open from the row, under its value, on a raised
    surface with a shadow; no title, no Cancel, nothing dimmed (a tap outside closes it). */
 dialog.picker { position:fixed; inset:auto; margin:0; padding:0; border:0; height:fit-content; width:min(22rem, calc(100% - 2 * var(--space-3))); max-height:calc(100% - 2 * var(--space-4));
   border-radius:var(--radius-sheet); background:#2C2C2E; color:var(--label); box-shadow:0 12px 40px rgba(0,0,0,.55); overflow:hidden; }

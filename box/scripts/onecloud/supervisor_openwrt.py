@@ -136,7 +136,7 @@ def lan_warning(address):
         return ""
     if address.ip in state_files.SHARED_SPACE:
         return ""
-    # "what：what to do", one sentence for LuCI, a title and a line on the settings page (ui.parts, 1.5.4).
+    # "what：what to do", one sentence for LuCI, a title and a line on the settings page (ui.parts, 1.6.0).
     return (f"特斯拉无法访问局域网地址 {address}：它不在 100.64.0.0/10 内，请在 OpenWrt 后台「网络 → 接口 → LAN」"
             f"改回 {SHARED_LAN}，或重新安装 AutoPlay。")
 

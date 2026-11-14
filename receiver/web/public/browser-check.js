@@ -1,15 +1,15 @@
 /* ES5 classic script: independent of the modern player bundle, so an old car browser still gets a readable answer.
    Driver view first (viewer audit V10): one headline, the missing things in plain words, what to do in this car (a
-   Tesla). Since 1.5.4 in the settings panel's look: a title bar (「浏览器检测」, the chevron back to the panel when it was
+   Tesla). Since 1.6.0 in the settings panel's look: a title bar (「浏览器检测」, the chevron back to the panel when it was
    opened from there), the result as the first line, one row per check with its result as the value, the
    reason only under a check that failed, and the browser's own report only when something failed. The checks have
-   plain names (1.5.4: they were the web APIs' own, 「HTTPS 安全上下文」, 「Pointer Events」…) (until then the
+   plain names (1.6.0: they were the web APIs' own, 「HTTPS 安全上下文」, 「Pointer Events」…) (until then the
    list sat behind a "技术详情" disclosure, and a passed check still spoke of tapping before the first sound, which the
    page has not played since 1.3.0). Bilingual: zh unless this browser's saved language is en. */
 (function(w,d){
  'use strict';
  var lang='zh',saved=null;try{saved=w.localStorage&&w.localStorage.getItem('f50-language');}catch(e){}
- /* The language chosen in the panel; until one is, the browser's own (1.5.4; it was zh for every car). */
+ /* The language chosen in the panel; until one is, the browser's own (1.6.0; it was zh for every car). */
  if(saved==='en'||saved==='zh')lang=saved;else{var asked=((w.navigator.languages&&w.navigator.languages[0])||w.navigator.language||'').toLowerCase();if(asked&&asked.indexOf('zh')!==0)lang='en';}
  var T={
   title:['浏览器检测','Browser check'],back:['返回','Back'],

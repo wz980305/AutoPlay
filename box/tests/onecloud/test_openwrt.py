@@ -312,7 +312,7 @@ class SharedLanTests(unittest.TestCase):
         self.assertEqual(shared_lan_conflict(own, "br-lan", ""), "", "the LAN itself is no conflict")
 
     def test_every_warning_is_a_title_and_what_to_do(self):
-        """1.5.4: written "what：what to do", one sentence for LuCI and the settings page's notice as a title and a
+        """1.6.0: written "what：what to do", one sentence for LuCI and the settings page's notice as a title and a
         line (settings_ui.parts); no 「；」 inside one, which is what joins them."""
         import settings_ui as ui
         tailscale = ADDRESSES + "40: tailscale0    inet 100.64.5.6/32 scope global tailscale0\n"
@@ -446,12 +446,12 @@ class ManagedPageTests(unittest.TestCase):
                                                        "notes": "- 新功能<b>\n- 修复", "available": True, "online": True})
         html = self.page.render("")
         for text in ("程序更新", "有新版本 2026.10.20", "- 新功能&lt;b&gt;<br>- 修复", "立即升级", "检查更新",
-                     # the notes a tap away, as a row of their own (1.5.4: a small link)
+                     # the notes a tap away, as a row of their own (1.6.0: a small link)
                      '<a class=cell href="https://github.com/wz980305/AutoPlay/releases/tag/v2026.10.20"><span class="tile gray">',
                      '<b>完整更新说明</b></span><span class=chev></span></a>',
                      # this box's version is the row above the new one (1.5.0; a line "当前 …" inside it before)
                      "<b>本机程序</b></span><span class=value>2026.10.19.1</span>",
-                     # and the category carries a numbered badge while there is something to install (1.5.4: a red
+                     # and the category carries a numbered badge while there is something to install (1.6.0: a red
                      # dot, colour alone)
                      '<a href="#update">更新<i>1</i></a>'):
             self.assertIn(text, html)
@@ -506,7 +506,7 @@ class ManagedPageTests(unittest.TestCase):
         release = threading.Event()
         with patch.object(update, "launch", return_value="已开始升级") as launch, \
                 patch.object(update, "check", side_effect=lambda root: release.wait(5)) as check:
-            # Started at once (1.5.4; 1.2.0 asked first): nothing to say at the top, the group shows it running (1.4.1).
+            # Started at once (1.6.0; 1.2.0 asked first): nothing to say at the top, the group shows it running (1.4.1).
             self.assertEqual(self.page.apply("/update", {"action": "install", "nonce": nonce}), "")
             launch.assert_called_once_with(self.state.parent)
             # Checking: no banner asking to reload; the group says "checking" and the page refreshes itself (1.4.1).
@@ -524,7 +524,7 @@ class ManagedPageTests(unittest.TestCase):
                 time.sleep(.02)
             self.assertEqual(check.call_count, 1, "one check at a time")
             self.assertNotIn("正在检查更新", self.page.render(""))
-        # Refused (CarPlay in use) or not started: an alert, as every action that could not be done (1.5.4: a line in
+        # Refused (CarPlay in use) or not started: an alert, as every action that could not be done (1.6.0: a line in
         # the update group); the page under it holds still until 「好」.
         with patch.object(update, "launch", return_value="无法升级：CarPlay 正在使用中，请停车并断开后再试。"):
             with self.assertRaisesRegex(ValueError, "^无法升级：CarPlay 正在使用中，请停车并断开后再试。$"):
@@ -546,7 +546,7 @@ class ManagedPageTests(unittest.TestCase):
         self.assertNotIn("value=install", html)
 
     def test_a_network_warning_is_shown(self):
-        # one notice each, title and line (1.5.4); the warnings come joined by 「；」 as LuCI shows them
+        # one notice each, title and line (1.6.0); the warnings come joined by 「；」 as LuCI shows them
         self.status["warning"] = ("特斯拉无法访问局域网地址 192.168.77.1/24：它不在 100.64.0.0/10 内，请在 OpenWrt 后台「网络 → 接口 → LAN」"
                                   "改回 100.96.0.1/24，或重新安装 AutoPlay。；AutoPlay 热点使用 2.4 GHz：5 GHz 更稳定，国内请改用信道 149。")
         html = self.page.render("")
