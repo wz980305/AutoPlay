@@ -58,7 +58,7 @@ Tests use the standard library `unittest` only, no network:
 ```sh
 cd box
 python3 -m unittest discover -s tests/onecloud      # 238
-python3 -m unittest discover -s tests/bluetooth     # test_bluez / test_recovery need dbus-next
+python3 -m unittest discover -s tests/bluetooth     # test_bluez / test_recovery / test_power need dbus-next
 ```
 
 ## Layout

@@ -367,7 +367,7 @@ class BluetoothManager:
         return self.hci.exists()
 
     def power_once(self):
-        """One attempt to power the adapter (bluetoothctl, up to ~40 s): run off the main loop."""
+        """One attempt to power the adapter (D-Bus to bluetoothd, up to ~30 s): run off the main loop."""
         try:
             return bool(self.platform.power_bluetooth())
         except (subprocess.SubprocessError, OSError):
@@ -558,7 +558,7 @@ def main():
 
     os.umask(0o077)
     RUN.mkdir(mode=0o700, parents=True, exist_ok=True)
-    # The board helper puts its own bluetoothctl in RUN/bin; every child inherits PATH and the bus.
+    # The board helper puts a bluetoothctl wrapper in RUN/bin (for SSH diagnosis); every child inherits PATH and the bus.
     os.environ["PATH"] = f"{RUN / 'bin'}:{os.environ.get('PATH', '/usr/sbin:/usr/bin:/sbin:/bin')}"
     os.environ["DBUS_SYSTEM_BUS_ADDRESS"] = BLUETOOTH_BUS
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"   # no .pyc writes on the SD card from the children

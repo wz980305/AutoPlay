@@ -48,7 +48,7 @@ docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
   --memory 256m --pids-limit 128 f50-bt-bridge-test:local
 ```
 
-测试使用独立 dbus-daemon、模拟 org.bluez 服务和真实 Unix socketpair/fd 传递。测试数据均为合成字节，不能证明真实 SDP、射频、配对或 CarPlay 成功。`tests/bluetooth/test_bluez.py`、`test_recovery.py` 需要 dbus-next；`test_reason.py`（原因词）和 `test_relay.py` 不需要，`python3 -m unittest discover -s tests/bluetooth` 在没有 dbus-next 的机器上只跑这两个。
+测试使用独立 dbus-daemon、模拟 org.bluez 服务和真实 Unix socketpair/fd 传递。测试数据均为合成字节，不能证明真实 SDP、射频、配对或 CarPlay 成功。`tests/bluetooth/test_bluez.py`、`test_recovery.py`、`test_power.py`（盒子经 D-Bus 给适配器上电和命名）需要 dbus-next；`test_reason.py`（原因词）和 `test_relay.py` 不需要，`python3 -m unittest discover -s tests/bluetooth` 在没有 dbus-next 的机器上只跑这两个。
 
 若具备编译后的 PlayPort，可用 JDK 编译 `tests/bluetooth/JvmBridgeProbe.java`（`--release 21`，classpath 指向 server/lib/*），设置 `JAVA_BRIDGE_TEST_BIN`、`JAVA_BRIDGE_TEST_CLASSPATH` 后运行 unittest，启用实际 ProcessByteStream → 子进程 → D-Bus fd → socketpair 的往返测试。未设置时该项明确跳过。
 

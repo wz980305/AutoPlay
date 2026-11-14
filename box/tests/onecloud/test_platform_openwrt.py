@@ -72,29 +72,38 @@ class ChildTests(unittest.TestCase):
 
 
 class BluetoothTests(unittest.TestCase):
+    """Since 1.6.3 the adapter is powered and named over D-Bus (power_adapter); bluetoothctl crashed after mu300-linux
+    25.12.6 and left the box at adapter-not-powered. The D-Bus side itself is tested against a mock BlueZ on a private
+    bus in tests/bluetooth/test_power.py (needs dbus-daemon and dbus-next)."""
+
     def test_power_waits_for_the_board_helpers_bus(self):
         with patch.dict(os.environ, {'DBUS_SYSTEM_BUS_ADDRESS': 'unix:path=/nonexistent/bus'}), \
-                patch.object(ow.subprocess, 'run') as run:
+                patch.object(ow, 'power_adapter') as power:
             self.assertFalse(ow.OpenWrtPlatform().power_bluetooth())
-            run.assert_not_called()
+            power.assert_not_called()
 
-    def test_power_on_clears_a_stale_link_and_names_the_adapter(self):
-        calls = []
-
-        def run(argv, **kwargs):
-            calls.append(argv)
-            if argv[1:] == ['devices', 'Connected']:
-                return subprocess.CompletedProcess(argv, 0, stdout='Device AA:BB:CC:DD:EE:FF iPhone\n')
-            return subprocess.CompletedProcess(argv, 0, stdout='')
-        with patch.dict(os.environ, {'DBUS_SYSTEM_BUS_ADDRESS': ''}), patch.object(ow.subprocess, 'run', side_effect=run):
+    def test_power_on_is_d_bus_not_bluetoothctl(self):
+        async def powered(name):
+            self.assertEqual(name, ow.BLUETOOTH_NAME)
+            return True
+        with patch.dict(os.environ, {'DBUS_SYSTEM_BUS_ADDRESS': ''}), patch.object(ow, 'power_adapter', side_effect=powered), \
+                patch.object(ow.subprocess, 'run') as run:
             self.assertTrue(ow.OpenWrtPlatform().power_bluetooth())
-        self.assertEqual([c[1:] for c in calls], [['power', 'on'], ['devices', 'Connected'], ['power', 'off'],
-                                                  ['power', 'on'], ['system-alias', ow.BLUETOOTH_NAME]])
+            run.assert_not_called()
+        source = Path(ow.__file__).read_text()
+        self.assertNotIn('["bluetoothctl"', source, "no bluetoothctl in the power path (it crashed on 25.12.6)")
+        self.assertEqual(ow.BLUETOOTH_DEPS, Path(ow.__file__).resolve().parent / 'linux-bt-bridge/deps')
 
     def test_power_on_failure_is_false_not_an_exception(self):
-        with patch.dict(os.environ, {'DBUS_SYSTEM_BUS_ADDRESS': ''}), \
-                patch.object(ow.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, stdout='')):
-            self.assertFalse(ow.OpenWrtPlatform().power_bluetooth())
+        async def refused(name):
+            return False
+
+        async def broken(name):
+            raise ConnectionRefusedError('no bus yet')
+        for attempt in (refused, broken):
+            with self.subTest(attempt=attempt.__name__), patch.dict(os.environ, {'DBUS_SYSTEM_BUS_ADDRESS': ''}), \
+                    patch.object(ow, 'power_adapter', side_effect=attempt):
+                self.assertFalse(ow.OpenWrtPlatform().power_bluetooth())
 
 
 class StateTests(unittest.TestCase):

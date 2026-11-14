@@ -227,6 +227,7 @@ apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
    ```
    AutoPlay 的包互相依赖，第一遍可能只装回 `autoplay-jre`；这时再运行 `mu300-user-packages retry`（必要时两次），直到四个都回来。
 7. 打开「AutoPlay 设置」页（`:18080`）：「iPhone」分类顶部三个圆点应全绿、蓝牙在运行，再连一次 iPhone。蓝牙起不来时先「下载诊断记录」，不要急着改别的。
+   mu300-linux 25.12.6 上，AutoPlay 1.6.2 及更早的版本蓝牙会一直起不来（状态 `adapter-not-powered`）：它们用来上电的 `bluetoothctl` 在这个系统上崩溃。先把 AutoPlay 升到修正后的版本，不要手改盒子上的文件。
 8. 不行就退回原来的系统：`mu300-update rollback`。
 
 较新的 mu300-linux 默认打开 USB 调试（adb）且不设密码，插上盒子 USB 口的电脑能直接拿到管理员权限。不需要它时可以关掉：`mu300-usb adb off`（关过的设置在更新后保持）。

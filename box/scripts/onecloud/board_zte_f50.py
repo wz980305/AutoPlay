@@ -132,18 +132,20 @@ def main():
     if args.setup:
         return setup(args.runtime)
     runtime = args.runtime
-    for relative in ["usr/bin/dbus-daemon", "usr/bin/btattach", "usr/bin/bluetoothd", "usr/bin/bluetoothctl"]:
+    for relative in ["usr/bin/dbus-daemon", "usr/bin/btattach", "usr/bin/bluetoothd"]:
         if not (runtime / relative).is_file():
             raise SystemExit(f"missing {runtime / relative}: run {sys.argv[0]} --setup")
     libs = f"{runtime}/usr/lib:{runtime}/lib"
     env = dict(os.environ, LD_LIBRARY_PATH=libs, DBUS_SYSTEM_BUS_ADDRESS=f"unix:path={BUS}/system_bus_socket")
     BUS.mkdir(mode=0o700, parents=True, exist_ok=True)
-    # bluetoothctl for the supervisor and the settings page (supervisor_openwrt.py puts RUN/bin first on PATH).
+    # bluetoothctl on PATH for a person diagnosing over SSH (supervisor_openwrt.py puts RUN/bin first). AutoPlay itself
+    # no longer runs it: it crashed after mu300-linux 25.12.6 (2026-11-14), and power-on is D-Bus since 1.6.3.
     bin_dir = RUN / "bin"
     bin_dir.mkdir(mode=0o755, exist_ok=True)
-    wrapper = bin_dir / "bluetoothctl"
-    wrapper.write_text(f'#!/bin/sh\nLD_LIBRARY_PATH="{libs}" exec "{runtime}/usr/bin/bluetoothctl" "$@"\n')
-    wrapper.chmod(0o755)
+    if (runtime / "usr/bin/bluetoothctl").is_file():
+        wrapper = bin_dir / "bluetoothctl"
+        wrapper.write_text(f'#!/bin/sh\nLD_LIBRARY_PATH="{libs}" exec "{runtime}/usr/bin/bluetoothctl" "$@"\n')
+        wrapper.chmod(0o755)
 
     state = args.state
     address_file = state / "bdaddr"

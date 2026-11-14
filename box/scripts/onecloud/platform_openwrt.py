@@ -6,6 +6,7 @@ or joins networks.
 
 No operations run at import time; the parsers take command output so they are testable anywhere.
 """
+import asyncio
 import ipaddress
 import json
 import os
@@ -13,9 +14,12 @@ from pathlib import Path
 import re
 import signal
 import subprocess
+import sys
 
 RUN = Path("/var/run/autoplay")
-BLUETOOTH_NAME = "AutoPlay"   # what iPhones list under Bluetooth (bluetoothctl system-alias)
+BLUETOOTH_NAME = "AutoPlay"   # what iPhones list under Bluetooth (the adapter's Alias, power_adapter)
+# The Bluetooth bridge's private dbus-next (build-bundle.sh); pairing and the bridge reach BlueZ with it too.
+BLUETOOTH_DEPS = Path(__file__).resolve().parent / "linux-bt-bridge/deps"
 
 
 def boot_id():
@@ -310,31 +314,25 @@ class OpenWrtPlatform:
     @staticmethod
     def bluetooth_bus_ready():
         """The board helper's own D-Bus socket (DBUS_SYSTEM_BUS_ADDRESS) appears a few seconds into the boot;
-        bluetoothctl segfaults until it is there (2026-10-16), so callers wait for the socket instead of running it."""
+        bluetoothctl segfaulted until it was there (2026-10-16), and a D-Bus connect fails, so callers wait for it."""
         bus = os.environ.get("DBUS_SYSTEM_BUS_ADDRESS", "")
         if bus.startswith("unix:path="):
             return os.path.exists(bus[len("unix:path="):].split(",", 1)[0])
         return True
 
     def power_bluetooth(self):
-        """Power the adapter on and name it; False while bluetoothd is not ready. The address is the board
-        helper's business (mu300-bt-init at btattach), so there is no btmgmt identity step here."""
+        """Power the adapter on and name it; False while bluetoothd is not ready, or when it would not power on (the
+        supervisor tries again). The address is the board helper's business (mu300-bt-init at btattach), so there is
+        no btmgmt identity step here. Over D-Bus to bluetoothd (power_adapter), as pairing and the Bluetooth bridge
+        already do; until 1.6.3 it ran bluetoothctl, which crashed after mu300-linux 25.12.6 (2026-11-14: "Error
+        relocating: g_list_delete_link: symbol not found") while bluetoothd itself ran on, so the box stayed at
+        adapter-not-powered."""
         if not self.bluetooth_bus_ready():
             return False
-        if subprocess.run(["bluetoothctl", "power", "on"], capture_output=True, timeout=10).returncode != 0:
+        try:
+            return asyncio.run(asyncio.wait_for(power_adapter(BLUETOOTH_NAME), 30))
+        except Exception:   # noqa: BLE001 - a bus or BlueZ not ready yet; the supervisor tries again
             return False
-        # A phone link left over from the previous run (service restart, network rebuild) fails every
-        # invitation with br-connection-already-connected until the bridge's rate-limited recovery
-        # power-cycles the adapter (2026-10-11: 69 s). Nothing uses Bluetooth yet, so clear it now.
-        connected = subprocess.run(["bluetoothctl", "devices", "Connected"], capture_output=True, text=True, timeout=10)
-        if connected.stdout.lstrip().startswith("Device "):
-            subprocess.run(["bluetoothctl", "power", "off"], capture_output=True, timeout=10)
-            if subprocess.run(["bluetoothctl", "power", "on"], capture_output=True, timeout=10).returncode != 0:
-                return False
-        # BlueZ names the adapter after the host, which is what iPhones list under Bluetooth. Set on every
-        # start: a reset or a fresh image clears BlueZ's stored alias.
-        subprocess.run(["bluetoothctl", "system-alias", BLUETOOTH_NAME], capture_output=True, timeout=10)
-        return True
 
     def handoff(self, live=True):
         """(network dict with channel, address and device, reason when not ready).
@@ -385,3 +383,68 @@ class OpenWrtPlatform:
             data["peers"] = stations(subprocess.run(["iw", "dev", self.ap_interface, "station", "dump"],
                                                     capture_output=True, text=True, timeout=5).stdout, neighbours())
         return data
+
+
+async def power_adapter(name, bus_address=None, deps=BLUETOOTH_DEPS):
+    """Power BlueZ's adapter on, clear a phone link left over from the previous run, and set the name iPhones list:
+    what `bluetoothctl power on`, `devices Connected`, `power off/on` and `system-alias` did, as Properties.Set on
+    org.bluez.Adapter1 - the calls bluetoothctl makes, without its glib (it crashed on mu300-linux 25.12.6). True
+    when the adapter reports Powered; False with no adapter yet or when BlueZ refuses to power it (org.bluez.Error.*).
+
+    A phone link left over from the previous run (service restart, network rebuild) fails every invitation with
+    br-connection-already-connected until the bridge's rate-limited recovery power-cycles the adapter (2026-10-11:
+    69 s). Nothing uses Bluetooth yet, so it is cleared here. BlueZ names the adapter after the host; the alias is
+    set on every start, as a reset or a fresh image clears BlueZ's stored one."""
+    if str(deps) not in sys.path:
+        sys.path.insert(0, str(deps))
+    from dbus_next import BusType, Message, MessageType, Variant
+    from dbus_next.aio import MessageBus
+    bus = await (MessageBus(bus_address=bus_address) if bus_address else MessageBus(bus_type=BusType.SYSTEM)).connect()
+
+    async def call(path, interface, member, signature="", body=()):
+        reply = await bus.call(Message(destination="org.bluez", path=path, interface=interface, member=member,
+                                       signature=signature, body=list(body)))
+        if reply.message_type == MessageType.ERROR:
+            raise RuntimeError(f"{member}: {reply.error_name}")
+        return reply.body
+
+    async def managed():
+        return (await call("/", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects"))[0]
+
+    def set_property(adapter, key, value):
+        return call(adapter, "org.freedesktop.DBus.Properties", "Set", "ssv", ["org.bluez.Adapter1", key, value])
+
+    def on(props, key):
+        return props.get(key) is not None and props[key].value
+
+    try:
+        adapters = sorted(path for path, interfaces in (await managed()).items() if "org.bluez.Adapter1" in interfaces)
+        if not adapters:
+            return False
+        adapter = adapters[0]
+        try:
+            await set_property(adapter, "Powered", Variant("b", True))
+            stale = [path for path, interfaces in (await managed()).items()
+                     if "org.bluez.Device1" in interfaces and on(interfaces["org.bluez.Device1"], "Connected")
+                     and interfaces["org.bluez.Device1"].get("Adapter") is not None
+                     and interfaces["org.bluez.Device1"]["Adapter"].value == adapter]
+            if stale:
+                await set_property(adapter, "Powered", Variant("b", False))
+                await set_property(adapter, "Powered", Variant("b", True))
+            try:
+                await set_property(adapter, "Alias", Variant("s", name))
+            except RuntimeError:
+                pass   # as before (system-alias was best effort): bluez.conf's Name stands in, and power-on still counts
+            powered = (await call(adapter, "org.freedesktop.DBus.Properties", "Get", "ss", ["org.bluez.Adapter1", "Powered"]))[0]
+        except RuntimeError:
+            return False
+        return bool(powered.value)
+    finally:
+        bus.disconnect()
+        try:
+            await asyncio.wait_for(bus.wait_for_disconnect(), 2)
+        except Exception:   # noqa: BLE001 - closing below either way
+            pass
+        bus._stream.close()   # dbus-next 0.2.3 leaves its socket open (bridge.ManagedBus); the supervisor runs for weeks
+        bus._sock.close()
+

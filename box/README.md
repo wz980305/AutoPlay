@@ -58,7 +58,7 @@ AUTOPLAY_VERSION=1.6.2 sh box/scripts/build-bundle.sh autoplay-bundle.tar
 ```sh
 cd box
 python3 -m unittest discover -s tests/onecloud      # 238 个
-python3 -m unittest discover -s tests/bluetooth     # test_bluez / test_recovery 需要 dbus-next
+python3 -m unittest discover -s tests/bluetooth     # test_bluez / test_recovery / test_power 需要 dbus-next
 ```
 
 ## 目录
