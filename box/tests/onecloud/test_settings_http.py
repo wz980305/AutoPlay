@@ -21,14 +21,14 @@ class PostFramingTests(unittest.TestCase):
             self.page.start(0)
         self.handler_class = server.call_args.args[1]
 
-    def request(self, length='0', body=b'', transfer=None):
+    def request(self, length='0', body=b'', transfer=None, path='/pair'):
         handler = self.handler_class.__new__(self.handler_class)
         handler.headers = Message()
         for value in length if isinstance(length, list) else [length]:
             handler.headers.add_header('Content-Length', value)
         if transfer:
             handler.headers.add_header('Transfer-Encoding', transfer)
-        handler.path = '/pair'
+        handler.path = path
         handler._allowed = lambda: True
         handler._send = Mock()
         handler.rfile = Mock(wraps=io.BytesIO(body))
@@ -62,3 +62,28 @@ class PostFramingTests(unittest.TestCase):
         handler = self.request('1', b'\xff')
         self.assertEqual(handler._send.call_args.args[0], 400)
         self.page.apply.assert_not_called()
+
+
+class WhereAResultGoesTests(unittest.TestCase):
+    """1.5.4: what the reset could not do comes back over the reset page, where the words were typed; everything else
+    goes to the page, an update's to its category."""
+
+    def setUp(self):
+        PostFramingTests.setUp(self)
+
+    request = PostFramingTests.request
+
+    def location(self, path, result):
+        self.page.apply = Mock(side_effect=result) if isinstance(result, Exception) else Mock(return_value=result)
+        handler = self.request('7', b'nonce=x', path=path)
+        self.assertEqual(handler._send.call_args.args[0], 303)
+        return handler._send.call_args.kwargs['extra']['Location']
+
+    def test_the_reset_s_error_returns_to_the_reset_page(self):
+        import urllib.parse
+        where = self.location('/reset', ValueError('确认词不正确：请输入「重置」。'))
+        self.assertTrue(where.startswith('/reset?m='), where)
+        self.assertEqual(urllib.parse.parse_qs(where.partition('?')[2])['m'], ['错误：确认词不正确：请输入「重置」。'])
+        self.assertTrue(self.location('/reset', '已恢复出厂设置：盒子正在重新启动，之后请重新添加 iPhone。').startswith('/?m='))
+        self.assertTrue(self.location('/pair', ValueError('无法添加 iPhone：CarPlay 正在使用中，请先断开。')).startswith('/?m='))
+        self.assertTrue(self.location('/update', ValueError('页面已过期：请再试一次。')).endswith('#update'))

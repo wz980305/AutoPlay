@@ -727,7 +727,7 @@ def install(root, openwrt=None, key=KEY):
             raise UpdateError(f"{found.get('reason') or '此版本改动了系统'}，无法在线升级 {manifest['version']}："
                               "请按安装说明手动升级")
         if carplay_in_use(root):
-            raise UpdateError("正在使用 CarPlay：停车、断开后再升级")
+            raise UpdateError("CarPlay 正在使用中，请停车并断开后再升级。")
         if shutil.disk_usage(tempfile.gettempdir()).free < 200 << 20:
             raise UpdateError("临时空间不足 200 MB，无法下载")
         status("backup", "正在备份配对、证书和设置")
@@ -766,7 +766,7 @@ def launch(root, openwrt=None):
     if running(root):
         return "正在升级，请稍候"
     if carplay_in_use(root):
-        return "正在使用 CarPlay：停车、断开后再升级"
+        return "无法升级：CarPlay 正在使用中，请停车并断开后再试。"   # the page's alert: title：line (1.5.4)
     install = [sys.executable, str(Path(__file__).resolve()), "install", "--root", str(root)]
     service = {"name": "autoplay-update", "instances": {"update": {"command": install, "stdout": True, "stderr": True}}}
     command = ["ubus", "call", "service", "set", json.dumps(service)]

@@ -59,7 +59,9 @@ def make(fields, devices=None, presence=None, pair=None, cert=None, query="", up
         check.write_text(json.dumps(update_check))
     try:
         with patch.object(own_domain, "message", lambda s, n: "证书有效期至 2027-01-28"):
-            return page.render_reset() if query == "reset" else page.render(query, "car.example.com:18080")
+            if query.startswith("reset"):
+                return page.render_reset(query.partition("?")[2])
+            return page.render(query, "car.example.com:18080")
     finally:
         if update_check is not None:
             check.unlink()
@@ -106,6 +108,13 @@ states["available"] = make({}, devices=PHONES, presence={"last_phone": "02:00:00
                            update_check={"available": True, "online": True, "latest": "1.5.1", "current": "1.5.0",
                                          "checked_at": 1_793_500_000, "notes": NOTES})
 states["reset"] = make({}, query="reset")
+# 1.5.4: what an action could not do, as an alert over the page; the notices as a title and a line.
+states["alert"] = make({}, devices=ONE, presence={"active": "02:00:00:00:00:01"}, cert=LIVE,
+                       query="m=错误：无法添加 iPhone：CarPlay 正在使用中，请先断开。")
+states["notices"] = make({"warning": "特斯拉不支持信道 52：请将 AutoPlay 热点改为信道 149 或 36，国家代码选 CN。", "tesla_upstream": "offline"},
+                         devices=ONE, cert={"bluetooth": ("failed", "hci-busy"), "identity": ("provided", None),
+                                            "phone": ("pairing-lost", None), "uplink": ("online", None),
+                                            "certificate": ("ok", None, {"not_after": "2027-01-28"})})
 for name, html in states.items():
     (OUT / f"box-{name}.html").write_text(html)
     print(f"wrote {OUT / f'box-{name}.html'} ({len(html)} bytes)")

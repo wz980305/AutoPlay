@@ -62,7 +62,7 @@ class PairingWindow:
     def start(self):
         with self.lock:
             if read_json(self.root / 'state/receiver/phone-presence.json').get('active'):
-                raise ValueError('CarPlay 正在使用中，请先断开再添加。')
+                raise ValueError('无法添加 iPhone：CarPlay 正在使用中，请先断开。')
             if self.process and self.process.poll() is None:
                 return
             self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -77,7 +77,7 @@ class PairingWindow:
         with self.lock:
             status = self.status()
             if status.get('phase') != 'confirm' or not request_id or status.get('request_id') != request_id:
-                raise ValueError('配对请求已变化，请刷新页面后重新核对。')
+                raise ValueError('配对请求已变化：请重新核对配对码。')
             save_json(self.confirm_file, {'request_id': request_id, 'accepted': accepted})
 
     def pick(self, address):
@@ -85,9 +85,9 @@ class PairingWindow:
         with self.lock:
             status = self.status()
             if self.presence().get('active'):
-                raise ValueError('CarPlay 正在使用中，请先断开再添加。')
+                raise ValueError('无法添加 iPhone：CarPlay 正在使用中，请先断开。')
             if status.get('phase') != 'waiting' or address not in {d['address'] for d in status.get('found', [])}:
-                raise ValueError('此 iPhone 已不在列表中，请刷新页面。')
+                raise ValueError('此 iPhone 已不在附近：请让它停留在「设置 → 蓝牙」。')
             save_json(self.pick_file, {'address': address})
 
     def presence(self):
@@ -105,9 +105,9 @@ class PairingWindow:
         """Give one already-paired phone the next bounded invitation, e.g. on a new hotspot."""
         with self.lock:
             if self.presence().get('active'):
-                raise ValueError('CarPlay 正在使用中，请先断开。')
+                raise ValueError('无法接入此 iPhone：CarPlay 正在使用中，请先断开。')
             if not PHONE.fullmatch(phone) or phone not in self.devices():
-                raise ValueError('此 iPhone 尚未配对，请先添加。')
+                raise ValueError('无法接入此 iPhone：它尚未配对，请先添加。')
             save_json(self.root / 'state/receiver/pairing-request.json', {
                 'phone': phone, 'boot': get_platform().boot_id(),
                 'expires': time.monotonic() + GRANT_SECONDS})
@@ -126,9 +126,9 @@ class PairingWindow:
         """Forget a phone on the box too: BlueZ pairing, Wi-Fi identities, back-off and any grant."""
         with self.lock:
             if not PHONE.fullmatch(phone) or phone not in self.devices():
-                raise ValueError('此 iPhone 已不在已配对列表中，请刷新页面。')
+                raise ValueError('此 iPhone 已不在列表中')
             if self.presence().get('active') == phone:
-                raise ValueError('此 iPhone 正在使用 CarPlay，请先断开再删除。')
+                raise ValueError('无法删除此 iPhone：它正在使用 CarPlay，请先断开。')
             import asyncio
             asyncio.run(asyncio.wait_for(remove_device(self.root, phone), 5))
             state_path = self.root / 'state/receiver/phone-presence.json'
@@ -318,7 +318,7 @@ async def run_incoming(root, timeout):
             # reply from this attempt cannot confirm or clear the next phone's request.
             attempt_generation += 1
             selected, confirmed = None, False
-            error = '配对已取消或超时，请重试。'
+            error = '配对已取消或超时：请再点一次 iPhone 的名称。'
             save_json(status_file, {'phase': 'waiting', 'found': [], 'error': error})
             confirm_file.unlink(missing_ok=True)
 

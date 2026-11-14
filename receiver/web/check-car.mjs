@@ -471,6 +471,12 @@ console.log('Compatible display: automatic below Chrome 120, neither low-latency
   const shown=[...i18n.matchAll(/\['([^']*)', (?:'[^']*'|"[^"]*")\]/g)].map(m=>m[1]).concat([...bc.split('var T={')[1].split('};')[0].matchAll(/:\['([^']*)'/g)].map(m=>m[1]));
   assert(shown.length>80,'the texts were found');
   for(const text of shown){assert.doesNotMatch(text,/[（）]/,text);assert.doesNotMatch(text,/ · /,text);}
+  // a change made by hand that did not take is an alert too (it was 「应用失败，请重试。」 in the footer); one the page made
+  // by itself keeps the pill and the footer
+  const main=readFileSync(new URL('./src/main.ts',import.meta.url),'utf8');
+  assert.match(main,/if \(how\.reason === 'manual'\) \{ setDisplayStatus\(null\); problem\(t\('applyFail'\), t\('applyFailHint'\)\); \} else setDisplayStatus\('applyFail'\);/);
+  assert.match(main,/if \(urgent !== 'manual'\) toast\(t\('autoFail'\)\)/);
+  assert.match(i18n,/applyFail: \['无法应用设置', 'Couldn’t Apply Settings'\], applyFailHint: \['请检查与盒子的连接，再试一次。'/);
 }
 { // 1.5.4: until a language is chosen, the car browser's own (Apple: detect what can be detected); it was zh for all
   const {defaultLanguage}=await load('i18n');

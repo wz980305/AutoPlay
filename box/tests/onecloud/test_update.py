@@ -382,8 +382,8 @@ class SignedReleaseTests(unittest.TestCase):
         (self.root / 'state/receiver/phone-presence.json').write_text(json.dumps({'active': '02:00:00:00:00:01'}))
         with patch.object(update, 'apk_version', lambda name: '2026.10.19.1-r1'):
             self.assertEqual(update.install(self.root, True, self.pub), 1)
-            self.assertIn('正在使用 CarPlay', json.loads((self.root / 'state/update-status.json').read_text())['message'])
-            self.assertIn('正在使用 CarPlay', update.launch(self.root, True))
+            self.assertIn('CarPlay 正在使用中', json.loads((self.root / 'state/update-status.json').read_text())['message'])
+            self.assertEqual(update.launch(self.root, True), '无法升级：CarPlay 正在使用中，请停车并断开后再试。')
             (self.root / 'state/receiver/phone-presence.json').write_text('{}')
             self.publish({'format': 1, 'version': '2026.10.20', 'online': False})
             self.assertEqual(update.install(self.root, True, self.pub), 1)

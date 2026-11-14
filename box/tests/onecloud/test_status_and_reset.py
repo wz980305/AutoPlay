@@ -113,8 +113,10 @@ class PageBannerTests(unittest.TestCase):
     def test_bluetooth_failure_is_a_red_bar_with_the_reason(self):
         self.status.set("bluetooth", "failed", "controller-init-failed", retry_in=60)
         html = self.page.render("")
-        self.assertIn("蓝牙未启动：蓝牙芯片初始化失败", html)
-        self.assertIn("请重启盒子。", html)
+        # 1.5.4: the reason is the title, what to do the line under it (it was 「蓝牙未启动：蓝牙芯片初始化失败。请重启盒子。」)
+        self.assertIn('<p class="banner bad" role=status><span><b>蓝牙芯片初始化失败</b><span>请重启盒子。</span></span></p>', html)
+        self.assertNotIn("蓝牙未启动：", html)
+        self.assertIn("<div class=state>蓝牙未启动</div>", html, "the box's state in the chain stays, a word beside it")
         self.assertNotIn("数据线", html)
         self.assertIn("蓝牙就绪后才能添加", html)
         self.status.set("bluetooth", "on")
@@ -127,13 +129,12 @@ class PageBannerTests(unittest.TestCase):
         self.status.set("certificate", "expiring_soon", None, not_after="2026-11-20")
         self.status.set("uplink", "offline")
         html = self.page.render("")
-        self.assertIn("证书 2026-11-20 到期", html)
+        self.assertIn("<b>证书将于 2026-11-20 到期</b>", html)
         self.assertIn("请插入可上网的 SIM 卡。", html)
         self.status.set("certificate", "expired", None, not_after="2026-10-01")
         self.status.set("uplink", "online")
         html = self.page.render("")
-        self.assertIn("已于 2026-10-01 过期", html)
-        self.assertIn("联网后会自动续签", html)
+        self.assertIn("<b>证书已于 2026-10-01 过期</b><span>车机会提示不安全。联网后会自动续签。</span>", html)
         self.status.set("certificate", "ok", None, not_after="2027-01-01")
         self.assertNotIn("过期", self.page.render(""))
 
@@ -168,9 +169,10 @@ class PageBannerTests(unittest.TestCase):
         self.assertNotIn("<p class=foot>", self.page.render(""))
         self.page.pairing.stop = lambda: None
         self.assertEqual(self.page.apply("/pair", {"nonce": nonce, "action": "cancel"}), "")
-        html = self.page.render(urllib.parse.urlencode({"m": "错误：页面已过期，请刷新后重试。", "at": "phones"}))
-        self.assertIn('class="banner bad"', html)
-        self.assertIn("页面已过期", html)
+        # What an action could not do is an alert over the page (1.5.4: a red banner at the top)
+        html = self.page.render(urllib.parse.urlencode({"m": "错误：页面已过期：请再试一次。", "at": "phones"}))
+        self.assertNotIn('class="banner', html)
+        self.assertIn('<h2 id=alert-title tabindex=-1>页面已过期</h2><p id=alert-line>请再试一次。</p><a class=ok href="/">好</a>', html)
 
     def test_rows_carry_icons_and_no_lines_under_links(self):
         html = self.page.render("")
@@ -251,19 +253,81 @@ class PageBannerTests(unittest.TestCase):
         self.assertIn("添加 iPhone", self.page.render("ask=install"), "an old link to the question shows the page")
 
 
+    def test_a_notice_is_a_title_and_a_line(self):
+        """1.5.4: what happened in bold, what to do under it, as an alert has them; one sentence where the words also
+        stand alone (LuCI, the diagnostics), split at its first 「：」 or before 「，请」."""
+        import settings_page
+        import settings_ui as ui
+        self.assertEqual(ui.parts("AutoPlay 热点尚未就绪：「Car-5G」尚未开启。"), ("AutoPlay 热点尚未就绪", "「Car-5G」尚未开启。"))
+        self.assertEqual(ui.parts("iPhone 未确认配对：请让 iPhone 停留在「设置 → 蓝牙」，再点一次它的名称。"),
+                         ("iPhone 未确认配对", "请让 iPhone 停留在「设置 → 蓝牙」，再点一次它的名称。"))
+        self.assertEqual(ui.parts("配对已取消，请重试。"), ("配对已取消", "请重试。"))
+        self.assertEqual(ui.parts("找不到此页面。"), ("找不到此页面", ""))
+        self.assertEqual(ui.banner(("蓝牙被另一个程序占用", "请重启盒子。"), "bad"),
+                         '<p class="banner bad" role=status><span><b>蓝牙被另一个程序占用</b><span>请重启盒子。</span></span></p>')
+        self.assertEqual(ui.banner("找不到此页面。", "wait"), '<p class="banner wait" role=status><span><b>找不到此页面</b></span></p>')
+        # every notice the page can show has a title of its own and no 「蓝牙未启动：」-style prefix before it
+        for reason, (title, line) in settings_page.BLUETOOTH_TEXT.items():
+            self.assertNotIn("：", title + line.replace("python3 ", ""), reason)
+            self.assertFalse(title.startswith("蓝牙未启动"), reason)
+        self.assertEqual(settings_page.BLUETOOTH_TEXT["hci-lost"][1], "正在重新启动蓝牙，也可以重启盒子。",
+                         "where the box restarts Bluetooth by itself it says so, not only 「请重启盒子」")
+
+    def test_what_an_action_could_not_do_is_an_alert(self):
+        """1.5.4: Apple's alert over the page (title, line, 「好」), not a red notice at the top: on the 高级 category
+        the notice was out of sight above the category's own rows. It works without JS: 「好」 is a link."""
+        import settings_ui as ui
+        self.page.pairing.presence = lambda: {"active": "02:00:00:00:00:01"}
+        nonce = self.page.pairing.nonce
+        import pairing_window
+        with patch.object(pairing_window, "read_json", return_value={"active": "02:00:00:00:00:01"}):
+            with self.assertRaisesRegex(ValueError, "^无法添加 iPhone：CarPlay 正在使用中，请先断开。$"):
+                pairing_window.PairingWindow.start(self.page.pairing)
+        html = self.page.render(urllib.parse.urlencode({"m": "错误：无法添加 iPhone：CarPlay 正在使用中，请先断开。"}))
+        self.assertIn('<div class=scrim><div class=alert role=alertdialog aria-modal=true aria-labelledby=alert-title '
+                      'aria-describedby=alert-line><h2 id=alert-title tabindex=-1>无法添加 iPhone</h2>'
+                      '<p id=alert-line>CarPlay 正在使用中，请先断开。</p><a class=ok href="/">好</a></div></div>', html)
+        self.assertNotIn('class="banner bad"', html)
+        self.assertLess(html.index("<div class=scrim>"), html.index(ui.SCRIPT), "the script finds the alert")
+        # a result is no alert, and an alert with no line has no description
+        self.assertNotIn("class=scrim", self.page.render(urllib.parse.urlencode({"m": "已拒绝此次配对。", "at": "phones"})))
+        self.assertIn("<h2 id=alert-title tabindex=-1>此 iPhone 已不在列表中</h2><a class=ok",
+                      self.page.render(urllib.parse.urlencode({"m": "错误：此 iPhone 已不在列表中"})))
+        # the pairing screen reloads itself every 3 s, but not under an alert (it would flash); 「好」 loads it afresh
+        self.page.pairing.status = lambda: {"phase": "waiting", "found": []}
+        html = self.page.render(urllib.parse.urlencode({"m": "错误：配对请求已变化：请重新核对配对码。"}))
+        self.assertIn("<h1>添加 iPhone</h1>", html)
+        self.assertIn("<h2 id=alert-title tabindex=-1>配对请求已变化</h2>", html)
+        self.assertNotIn("http-equiv=refresh", html)
+        self.assertNotIn("http-equiv=refresh", ui.page("x", "", True, alert=ui.alert("错误：a：b", "/")))
+        self.assertIn("http-equiv=refresh", ui.page("x", "", True))
+        # the reset's error over the reset page, 「好」 back to it
+        html = self.page.render_reset(urllib.parse.urlencode({"m": "错误：确认词不正确：请输入「重置」。"}))
+        self.assertIn("<h2 id=alert-title tabindex=-1>确认词不正确</h2><p id=alert-line>请输入「重置」。</p>"
+                      '<a class=ok href="/reset">好</a>', html)
+        self.assertNotIn("class=scrim", self.page.render_reset(""))
+        # the script: the title takes the focus (no ring on 好), 「好」 keeps the category, Escape is 「好」
+        for part in ('var t=document.getElementById("alert-title");t.focus();addEventListener("load"', 'ok.href=ok.getAttribute("href").split("#")[0]+location.hash',
+                     'if(e.key==="Escape")ok.click()',
+                     # a page opened at a category starts at the top, where the notices are (a reload keeps its place)
+                     'if(location.hash&&(!n||n.type==="navigate"))setTimeout(function(){scrollTo(0,0)},0)'):
+            self.assertIn(part, ui.SCRIPT)
+        for rule in (".scrim{position:fixed;inset:0;", ".alert .ok{", "--raised:#2C2C2E", "--raised:#FFF", ".alert h2:focus{outline:none}"):
+            self.assertIn(rule, ui.CSS)
+
     def test_the_page_demands_the_typed_words(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); (root / "state").mkdir()
             changes = []
             page = SettingsPage(root / "state", lambda: {"mode": "openwrt", "home": "http://x/"}, changes.append, lambda: [], root=root)
             nonce = page.pairing.nonce
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "^确认词不正确：请输入「重置」。$"):
                 page.apply("/reset", {"nonce": nonce, "confirm": "yes"})
             (root / "state/receiver").mkdir(); (root / "state/receiver/browser-token").write_text("t")
             page.uci = lambda *a, **k: None
             with patch.object(page.pairing, "reset_all"), patch("settings_page.threading.Timer") as timer:
                 message = page.apply("/reset", {"nonce": nonce, "confirm": "重置"})
-            self.assertIn("已重置", message)
+            self.assertEqual(message, "已恢复出厂设置：盒子正在重新启动，之后请重新添加 iPhone。")
             self.assertFalse((root / "state/receiver").exists())
             timer.assert_called_once()
             html = page.render_reset()
@@ -401,10 +465,11 @@ class PageLayoutTests(unittest.TestCase):
         self.assertIn('function auto(){if(location.hash!=="#update")return;var f=document.querySelector("form[data-auto]")', ui.SCRIPT)
         self.assertIn('sessionStorage.setItem(k,n)}catch(e){}var b=f.querySelector("button[name=action]");if(b)b.click()}', ui.SCRIPT)
         # a notice about the hotspot leads to OpenWrt's Wi-Fi page instead of saying where it is
-        self.status.update(warning="特斯拉看不到 AutoPlay 热点的信道 44，请改为 149 或 36，国家选 CN。")
+        self.status.update(warning="特斯拉不支持信道 44：请将 AutoPlay 热点改为信道 149 或 36，国家代码选 CN。")
         html = self.page.render("")
-        self.assertIn('<p class="banner bad" role=status><span>特斯拉看不到 AutoPlay 热点的信道 44，请改为 149 或 36，国家选 CN。'
-                      '<a href="http://100.96.0.1/cgi-bin/luci/admin/network/wireless">在 OpenWrt 后台设置</a></span></p>', html)
+        self.assertIn('<p class="banner bad" role=status><span><b>特斯拉不支持信道 44</b><span>请将 AutoPlay 热点改为信道 149 或 36，'
+                      '国家代码选 CN。</span><a href="http://100.96.0.1/cgi-bin/luci/admin/network/wireless">在 OpenWrt 后台设置</a>'
+                      '</span></p>', html)
         self.assertNotIn("「网络 → 无线」", html)
         self.status.update(warning="")
         # pairing says what it is doing, not 「请稍候」
@@ -485,7 +550,7 @@ class PageLayoutTests(unittest.TestCase):
         self.assertIn("请连接 AutoPlay 热点后，从「AutoPlay 设置 → 连接 → AutoPlay 盒子」打开。", refused)
         self.assertNotIn("class=done", refused)
         self.assertNotIn("Car-5G", refused, "nothing of the box for a browser that may not see it")
-        self.assertIn("找不到此页面。", missing)
+        self.assertIn("<b>找不到此页面</b>", missing)
         self.assertIn('<a class="done icon" href="/" aria-label="返回"><svg', missing)
 
     def test_colours_follow_carplay_or_the_browser(self):

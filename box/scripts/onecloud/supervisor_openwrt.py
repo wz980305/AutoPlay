@@ -136,17 +136,18 @@ def lan_warning(address):
         return ""
     if address.ip in state_files.SHARED_SPACE:
         return ""
-    return (f"局域网地址是 {address}，不在 100.64.0.0/10 内，特斯拉浏览器无法访问。请在 OpenWrt 后台「网络 → 接口 → LAN」"
+    # "what：what to do", one sentence for LuCI, a title and a line on the settings page (ui.parts, 1.5.4).
+    return (f"特斯拉无法访问局域网地址 {address}：它不在 100.64.0.0/10 内，请在 OpenWrt 后台「网络 → 接口 → LAN」"
             f"改回 {SHARED_LAN}，或重新安装 AutoPlay。")
 
 
 def channel_warning(channel):
     """A Tesla sees 5 GHz channels 36-48 and 149-165 only (tesla_only_box_delta.md 6.1, platform_audit #9)."""
     if channel is None or channel <= 14:
-        return "AutoPlay 热点使用 2.4 GHz：可以使用，但 5 GHz 更稳定，国内请用信道 149。" if channel else ""
+        return "AutoPlay 热点使用 2.4 GHz：5 GHz 更稳定，国内请改用信道 149。" if channel else ""
     if 36 <= channel <= 48 or 149 <= channel <= 165:
         return ""
-    return f"特斯拉不支持 AutoPlay 热点当前的信道 {channel}，请改为 149 或 36，国家选 CN。"
+    return f"特斯拉不支持信道 {channel}：请将 AutoPlay 热点改为信道 149 或 36，国家代码选 CN。"
 
 
 def trusted_networks(network):
@@ -197,14 +198,14 @@ def shared_lan_conflict(ip_addresses, lan_device, ruleset=None):
             continue
         device = fields[1]
         if device.startswith("tailscale") and (ruleset is None or tailscale):
-            return ("Tailscale 的防火墙会丢弃来自其他网口的 100.64.0.0/10 地址：请先在路由器上运行 "
-                    "tailscale set --netfilter-mode=off，并在 OpenWrt 防火墙中放行 tailscale0 的区域")
+            return ("Tailscale 的防火墙会拦截特斯拉：它丢弃来自其他网口的 100.64.0.0/10 地址，请在路由器上运行 "
+                    "tailscale set --netfilter-mode=off，并在 OpenWrt 防火墙中放行 tailscale0 的区域。")
         try:
             theirs = ipaddress.IPv4Interface(fields[3]).network
         except ValueError:
             continue
         if device != lan_device and theirs.overlaps(SHARED_LAN.network):
-            return f"{device} 已在用 {theirs}，与 {SHARED_LAN.network} 冲突"
+            return f"{device} 与特斯拉的网段冲突：{device} 已在用 {theirs}，与 {SHARED_LAN.network} 重叠，请检查运营商或上游网络。"
     return ""
 
 
@@ -221,10 +222,8 @@ def refresh_network_warning(lan_device, status, base_warning="", path=None):
         except (OSError, subprocess.SubprocessError):
             ruleset = None
         warning = shared_lan_conflict(addresses.stdout, lan_device, ruleset)
-        if warning:
-            warning += "。请检查运营商/上游网络。"
     except (OSError, subprocess.SubprocessError):
-        warning = "暂时无法检查特斯拉网段冲突，请检查系统网络状态。"
+        warning = "暂时无法检查特斯拉网段冲突：稍后会自动重试。"
     status["warning"] = "；".join(x for x in (base_warning, warning) if x)
     path = path or RUN / "network-status.json"
     current = state_files.load_json(path, {})

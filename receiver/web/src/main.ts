@@ -401,9 +401,10 @@ async function loadDisplay() {
   display = loaded; showDisplay(); showLocation(loaded); fit(); scheduleAuto();
 }
 let statusTimer = 0;
-function setDisplayStatus(key: Key) {
+function setDisplayStatus(key: Key | null) {
   const status = el('display-status');
   window.clearTimeout(statusTimer);
+  if (!key) { delete status.dataset.i18n; status.textContent = ''; return; }   // quiet (what went wrong is an alert)
   status.dataset.i18n = key; status.textContent = t(key);
   // "Saved, reconnecting" has said its piece once CarPlay is back (about 5 s): the footer goes quiet again, as in iOS.
   if (key === 'applied') statusTimer = window.setTimeout(() => {
@@ -449,7 +450,13 @@ async function saveDisplay(target: Display, how: { defer?: boolean; reason: stri
     if (!ok || !body?.ok) throw new Error();
     if (body.deferred) { if (display) display.pending = true; setDisplayStatus('deferred'); return true; }
     display = { ...target, pending: false }; setDisplayStatus('applied'); return true;
-  } catch { if (restart) { endExpectRestart(); fit(); } setDisplayStatus('applyFail'); return false; }
+  } catch {
+    if (restart) { endExpectRestart(); fit(); }
+    // A change made by hand that did not take is an alert, as on the box page (1.5.4: 「应用失败，请重试。」 in the
+    // group's footer); one the page made by itself keeps its pill (the caller's) and says it in the footer.
+    if (how.reason === 'manual') { setDisplayStatus(null); problem(t('applyFail'), t('applyFailHint')); } else setDisplayStatus('applyFail');
+    return false;
+  }
   finally { displayBusy=false; el<HTMLButtonElement>('apply').disabled=false; el<HTMLFieldSetElement>('display-fields').disabled=false;
     for (const id of ['codec', 'performance-mode']) el<HTMLInputElement | HTMLSelectElement>(id).disabled = false;
     render(); }
@@ -478,7 +485,7 @@ async function adapt() {
   if (sameStream(display,next)) return;
   // Every window size (and a codec this browser proved it can or cannot handle) renegotiates now: each size is its
   // own CarPlay session at its sharpest resolution (2026-10-23).
-  if (!(await saveDisplay(next, { reason: urgent || 'shape' }))) { toast(t('autoFail')); return; }
+  if (!(await saveDisplay(next, { reason: urgent || 'shape' }))) { if (urgent !== 'manual') toast(t('autoFail')); return; }
   fit();
 }
 /** The window's own size, at the sharpest the box offers: the CSS size times the pixels used (the device pixel ratio

@@ -7,6 +7,7 @@ import sys
 import tempfile
 import time
 import unittest
+import urllib.parse
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/onecloud'))
@@ -310,6 +311,30 @@ class SharedLanTests(unittest.TestCase):
         own = ADDRESSES.replace("192.168.77.1/24", "100.96.0.1/24")
         self.assertEqual(shared_lan_conflict(own, "br-lan", ""), "", "the LAN itself is no conflict")
 
+    def test_every_warning_is_a_title_and_what_to_do(self):
+        """1.5.4: written "what：what to do", one sentence for LuCI and the settings page's notice as a title and a
+        line (settings_ui.parts); no 「；」 inside one, which is what joins them."""
+        import settings_ui as ui
+        tailscale = ADDRESSES + "40: tailscale0    inet 100.64.5.6/32 scope global tailscale0\n"
+        mifi = ADDRESSES + "41: usb0    inet 100.96.0.50/24 scope global usb0\n"
+        warnings = {
+            lan_warning(ipaddress.IPv4Interface("192.168.77.1/24")): "特斯拉无法访问局域网地址 192.168.77.1/24",
+            supervisor_openwrt.channel_warning(6): "AutoPlay 热点使用 2.4 GHz",
+            supervisor_openwrt.channel_warning(52): "特斯拉不支持信道 52",
+            waiting_warning("Wi-Fi Car-5G is not up yet"): "AutoPlay 热点尚未就绪",
+            shared_lan_conflict(tailscale, "br-lan", None): "Tailscale 的防火墙会拦截特斯拉",
+            shared_lan_conflict(mifi, "br-lan", ""): "usb0 与特斯拉的网段冲突",
+        }
+        for warning, title in warnings.items():
+            self.assertEqual(ui.parts(warning)[0], title, warning)
+            self.assertTrue(ui.parts(warning)[1].endswith("。"), warning)
+            self.assertNotIn("；", warning)
+        with patch.object(supervisor_openwrt.subprocess, "run", side_effect=OSError("no ip")):
+            status = {}
+            with tempfile.TemporaryDirectory() as tmp:
+                supervisor_openwrt.refresh_network_warning("br-lan", status, "", Path(tmp) / "n.json")
+        self.assertEqual(ui.parts(status["warning"]), ("暂时无法检查特斯拉网段冲突", "稍后会自动重试。"))
+
     def test_the_warning_file_is_written_only_on_change(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "network-status.json"
@@ -409,7 +434,7 @@ class ManagedPageTests(unittest.TestCase):
         self.assertNotIn("过热", self.page.render(""), "the processor's own cooling is what counts")
         self.page.thermal = lambda: ({"soc": 74, "nr": 55}, {"cpufreq-0": "2/9"})
         html = self.page.render("")
-        self.assertIn("盒子温度已达 74 °C，正在降速", html)
+        self.assertIn("<b>盒子温度已达 74 °C</b><span>正在降速，CarPlay 可能卡顿，请移至阴凉处。</span>", html)
         self.assertIn("<span>过热，正在降速</span></span><span class=value>74 °C</span>", html)
         def broken(): raise OSError("sensor")
         self.page.thermal = broken
@@ -475,7 +500,7 @@ class ManagedPageTests(unittest.TestCase):
     def test_update_actions_need_the_page_and_start_apart(self):
         import update
         nonce = self.page.pairing.nonce
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "^页面已过期：请再试一次。$"):
             self.page.apply("/update", {"action": "install", "nonce": "stale"})
         import threading
         release = threading.Event()
@@ -499,21 +524,35 @@ class ManagedPageTests(unittest.TestCase):
                 time.sleep(.02)
             self.assertEqual(check.call_count, 1, "one check at a time")
             self.assertNotIn("正在检查更新", self.page.render(""))
-        # Refused (CarPlay in use): said in the update group, not at the top.
-        with patch.object(update, "launch", return_value="正在使用 CarPlay：停车、断开后再升级"):
-            reply = self.page.apply("/update", {"action": "install", "nonce": nonce, "confirmed": "1"})
-        self.assertEqual(reply, {"m": "正在使用 CarPlay：停车、断开后再升级", "at": "update"})
-        html = self.page.render("m=正在使用 CarPlay：停车、断开后再升级&at=update")
-        self.assertIn('<p class=foot>正在使用 CarPlay：停车、断开后再升级</p>', html)
+        # Refused (CarPlay in use) or not started: an alert, as every action that could not be done (1.5.4: a line in
+        # the update group); the page under it holds still until 「好」.
+        with patch.object(update, "launch", return_value="无法升级：CarPlay 正在使用中，请停车并断开后再试。"):
+            with self.assertRaisesRegex(ValueError, "^无法升级：CarPlay 正在使用中，请停车并断开后再试。$"):
+                self.page.apply("/update", {"action": "install", "nonce": nonce})
+        with patch.object(update, "launch", return_value="无法启动升级：Command failed: ubus (Permission denied)"):
+            with self.assertRaisesRegex(ValueError, "^无法启动升级：请稍后再试。$"):
+                self.page.apply("/update", {"action": "install", "nonce": nonce})
+        with patch.object(update, "launch", return_value="正在升级，请稍候"):
+            self.assertEqual(self.page.apply("/update", {"action": "install", "nonce": nonce}), "")
+        update.save(self.state / "update-status.json", {"phase": "installing", "message": "正在安装", "at": time.time()})
+        html = self.page.render(urllib.parse.urlencode({"m": "错误：无法升级：CarPlay 正在使用中，请停车并断开后再试。"}))
+        self.assertIn('<h2 id=alert-title tabindex=-1>无法升级</h2><p id=alert-line>CarPlay 正在使用中，请停车并断开后再试。</p>', html)
+        self.assertNotIn("http-equiv=refresh", html, "an upgrade reloads the page every 3 s, but not under an alert")
         self.assertNotIn('class="banner', html)
+        update.save(self.state / "update-status.json", {})
         update.save(self.state / "update-status.json", {"phase": "installing", "message": "正在安装", "at": time.time()})
         html = self.page.render("")
         self.assertIn("正在升级", html)
         self.assertNotIn("value=install", html)
 
     def test_a_network_warning_is_shown(self):
-        self.status["warning"] = "局域网地址是 192.168.77.1/24"
-        self.assertIn("局域网地址是 192.168.77.1/24", self.page.render(""))
+        # one notice each, title and line (1.5.4); the warnings come joined by 「；」 as LuCI shows them
+        self.status["warning"] = ("特斯拉无法访问局域网地址 192.168.77.1/24：它不在 100.64.0.0/10 内，请在 OpenWrt 后台「网络 → 接口 → LAN」"
+                                  "改回 100.96.0.1/24，或重新安装 AutoPlay。；AutoPlay 热点使用 2.4 GHz：5 GHz 更稳定，国内请改用信道 149。")
+        html = self.page.render("")
+        self.assertIn('<p class="banner bad" role=status><span><b>特斯拉无法访问局域网地址 192.168.77.1/24</b><span>它不在', html)
+        self.assertIn('<p class="banner wait" role=status><span><b>AutoPlay 热点使用 2.4 GHz</b><span>5 GHz 更稳定，国内请改用信道 149。'
+                      '</span><a href=', html)
 
 
 if __name__ == "__main__":

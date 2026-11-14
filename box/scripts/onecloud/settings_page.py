@@ -37,19 +37,21 @@ CHECK_LOG_EVERY = 60   # s: one diag line per car connectivity check and reply, 
 LOCAL_HOSTS = {state_files.LOCAL_NAME, "dashplay.lan", state_files.MDNS_NAME, "localhost"}
 BLUETOOTH_TEXT = {   # reason codes of the bluetooth domain (status_model) -> what the owner reads (S2)
     # Plain words since 1.4.1; the chip, rfkill and paths are in the diagnostics record. bluez-missing keeps its
-    # command: only whoever installed the box sees it, and it is the fix.
-    "helper-starting": "蓝牙正在启动",
-    "powering": "蓝牙正在上电",
-    "adapter-not-powered": "蓝牙未上电",
-    "controller-init-failed": "蓝牙芯片初始化失败",
-    "controller-timeout": "蓝牙芯片无响应",
-    "bluez-missing": "安装未完成，请在盒子上运行 python3 /opt/autoplay/board_zte_f50.py --setup",
-    "rfkill": "蓝牙被系统关闭，无法开启",
-    "rfkill-hard": "蓝牙被硬件开关关闭",
-    "hci-busy": "蓝牙被另一个程序占用",
-    "hci-lost": "蓝牙芯片复位了，正在重新启动",
-    "storage-conflict": "蓝牙的数据被另一个程序占用",
-    "daemon-exit": "蓝牙程序退出了，正在重启",
+    # command: only whoever installed the box sees it, and it is the fix. Since 1.5.4 (title, what to do), as an
+    # alert has them: the reason is the title, without 「蓝牙未启动：」 in front of it (it said the same again), and
+    # what the box does by itself is said instead of 「请重启盒子」 where it is restarting Bluetooth already.
+    "helper-starting": ("蓝牙正在启动", ""),
+    "powering": ("蓝牙正在上电", ""),
+    "adapter-not-powered": ("蓝牙未上电", "请重启盒子。"),
+    "controller-init-failed": ("蓝牙芯片初始化失败", "请重启盒子。"),
+    "controller-timeout": ("蓝牙芯片无响应", "请重启盒子。"),
+    "bluez-missing": ("安装未完成", "请在盒子上运行 python3 /opt/autoplay/board_zte_f50.py --setup"),
+    "rfkill": ("蓝牙被系统关闭", "请重启盒子。"),
+    "rfkill-hard": ("蓝牙被硬件开关关闭", "请重启盒子。"),
+    "hci-busy": ("蓝牙被另一个程序占用", "请重启盒子。"),
+    "hci-lost": ("蓝牙芯片已复位", "正在重新启动蓝牙，也可以重启盒子。"),
+    "storage-conflict": ("蓝牙数据被另一个程序占用", "请重启盒子。"),
+    "daemon-exit": ("蓝牙程序已退出", "正在重新启动蓝牙，也可以重启盒子。"),
 }
 
 
@@ -179,7 +181,7 @@ class SettingsPage:
                 if self.path == "/status.json":
                     return self._send(200, json.dumps(page.status(), ensure_ascii=False), "application/json")
                 if self.path.split("?")[0] == "/reset":
-                    return self._send(200, page.render_reset())
+                    return self._send(200, page.render_reset(self.path.partition("?")[2]))
                 if self.path.split("?")[0] != "/":
                     return self._send(404, page.render_missing())
                 self._send(200, page.render(self.path.partition("?")[2], self.headers.get("Host", "")))
@@ -210,7 +212,9 @@ class SettingsPage:
                     result = "错误：" + str(error)
                 # A message shows as a banner; a dict asks the page for a confirmation screen (ask=...).
                 params = result if isinstance(result, dict) else {"m": result}
-                self._send(303, "", extra={"Location": "/?" + urllib.parse.urlencode(params) + PANE_AFTER.get(self.path, "")})
+                # What the reset could not do is said over the reset page, where the words were typed (1.5.4).
+                where = "/reset" if self.path == "/reset" and str(params.get("m", "")).startswith("错误：") else "/"
+                self._send(303, "", extra={"Location": where + "?" + urllib.parse.urlencode(params) + PANE_AFTER.get(self.path, "")})
 
         self.server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
         threading.Thread(target=self.server.serve_forever, name="settings-page", daemon=True).start()
@@ -257,7 +261,7 @@ class SettingsPage:
 
     def check_nonce(self, form):
         if not secrets.compare_digest(form.get("nonce", ""), self.pairing.nonce):
-            raise ValueError("页面已过期，请刷新后重试。")
+            raise ValueError("页面已过期：请再试一次。")
 
     def apply(self, path, form):
         if path == "/pair":
@@ -287,7 +291,7 @@ class SettingsPage:
             if action in ("yes", "no"):
                 self.pairing.confirm(form.get("request_id", ""), action == "yes")
                 return "" if action == "yes" else {"m": "已拒绝此次配对。", "at": "phones"}
-            raise ValueError("未知操作。")
+            raise ValueError("无法完成此操作：请再试一次。")
         if path == "/update":
             self.check_nonce(form)
             if form.get("action") == "check":
@@ -298,20 +302,25 @@ class SettingsPage:
                 # what loses data unexpectedly: an upgrade loses none, is refused while CarPlay is in use, and goes
                 # back by itself when the new version does not start - as iOS starts on 「立即更新」.
                 message = update.launch(self.state.parent)
-                # Started: the group shows the upgrade running. Refused (CarPlay in use) or failed: said in the group.
-                return "" if message.startswith("已开始升级") else {"m": message, "at": "update"}
-            raise ValueError("未知操作。")
+                # Started (or running already): the group shows the upgrade running. Refused (CarPlay in use) or failed
+                # to start: an alert, as every action that could not be done (1.5.4: a line in the group).
+                if message.startswith(("已开始升级", "正在升级")):
+                    return ""
+                # What the update service said when it would not start is the group's 「上次升级未完成」 row and the
+                # update's state file; the alert says what to do.
+                raise ValueError("无法启动升级：请稍后再试。" if message.startswith("无法启动升级") else message)
+            raise ValueError("无法完成此操作：请再试一次。")
         if path == "/reset":
             self.check_nonce(form)
             return self.reset(form)
-        raise ValueError("网络在 OpenWrt 后台设置。")
+        raise ValueError("无法在此设置网络：请在 OpenWrt 后台设置。")
 
     def reset(self, form):
         """Factory reset (reliability_audit #24): the typed word confirms; the identity needs its own words."""
         if form.get("confirm", "").strip() != factory_reset.RESET_CONFIRMATION:
-            raise ValueError(f"请在确认框里输入「{factory_reset.RESET_CONFIRMATION}」。")
+            raise ValueError(f"确认词不正确：请输入「{factory_reset.RESET_CONFIRMATION}」。")
         if self.pairing.presence().get("active"):
-            raise ValueError("当前有人使用 CarPlay，请先断开再重置。")
+            raise ValueError("无法恢复出厂设置：CarPlay 正在使用中，请先断开。")
         identity = form.get("identity", "").strip() == factory_reset.IDENTITY_CONFIRMATION
         self.pairing.stop()
         try:
@@ -320,8 +329,8 @@ class SettingsPage:
             pass
         removed = factory_reset.wipe(self.root, identity=identity, uci=self.uci)
         threading.Timer(1.0, self.on_change, args=("factory reset",)).start()
-        return ("已重置" + ("，认证文件也已删除" if identity else "")
-                + "。盒子正在重新启动，之后重新添加 iPhone。")
+        return ("已恢复出厂设置" + ("并删除认证文件" if identity else "")
+                + "：盒子正在重新启动，之后请重新添加 iPhone。")
 
     # Blocks ----------------------------------------------------------------------------------
 
@@ -526,45 +535,46 @@ class SettingsPage:
         html = ""
         bluetooth = status.get("bluetooth") or {}
         if bluetooth.get("state") in ("failed", "starting") and bluetooth.get("reason") not in (None, "helper-starting", "powering"):
-            # S2: the real reason at the top of the chain, never a cable story.
-            reason = BLUETOOTH_TEXT.get(bluetooth["reason"], bluetooth["reason"])
-            html += ui.banner(f"蓝牙未启动：{reason}。请重启盒子。", "bad")
+            # S2: the real reason at the top of the chain, never a cable story. A code without words of its own is
+            # in the diagnostics record, not here.
+            html += ui.banner(BLUETOOTH_TEXT.get(bluetooth["reason"], ("蓝牙未能启动", "请重启盒子。")), "bad")
         elif bluetooth.get("state") == "failed":
-            html += ui.banner("蓝牙未启动，正在重试，也可以重启盒子。", "bad")
+            html += ui.banner(("蓝牙未能启动", "正在重试，也可以重启盒子。"), "bad")
         phone = status.get("phone") or {}
         if phone.get("state") == "pairing-lost":
-            html += ui.banner("有一部 iPhone 已不再与此盒子配对，请删除后重新添加。", "bad")
+            html += ui.banner(("有一部 iPhone 已不再与此盒子配对", "请删除后重新添加。"), "bad")
         certificate = status.get("certificate") or {}
         if certificate.get("state") in ("expiring_soon", "expired", "failed"):
             until = certificate.get("not_after")
-            text = {"expiring_soon": f"证书 {until} 到期",
-                    "expired": f"证书已于 {until} 过期，车机会提示不安全",
-                    "failed": "证书尚未申请成功"}[certificate["state"]]
+            title = {"expiring_soon": f"证书将于 {until} 到期", "expired": f"证书已于 {until} 过期",
+                     "failed": "证书尚未申请成功"}[certificate["state"]]
             uplink = (status.get("uplink") or {}).get("state")
             advice = "盒子未联网，无法续签，请插入可上网的 SIM 卡。" if uplink == "offline" else "联网后会自动续签。"
-            html += ui.banner(text + "。" + advice, "wait")
+            html += ui.banner((title, ("车机会提示不安全。" if certificate["state"] == "expired" else "") + advice), "wait")
         identity = status.get("identity")
         if identity is False or (isinstance(identity, dict) and identity.get("state") == "missing"):
             # No credentials here: the F50's root password is the installer's, never 1234 (S3). How to put the files in
             # place is the install guide's business (1.5.4: the banner retold it in three clauses).
-            html += ui.banner("缺少 CarPlay 认证文件，按「AI 安装说明」放置后将自动开始工作。", "wait")
-        if status.get("warning"):
-            # A notice about the hotspot leads to OpenWrt's Wi-Fi page itself (1.5.4: it said where that page is).
-            link = ("在 OpenWrt 后台设置", self.admin_url()) if "AutoPlay 热点" in status["warning"] else None
-            html += ui.banner(status["warning"], "bad", link)
+            html += ui.banner(("缺少 CarPlay 认证文件", "按「AI 安装说明」放置后将自动开始工作。"), "wait")
+        # The network's warnings, one notice each (they come joined by 「；」, as LuCI shows them on one line). Each is
+        # written "what：what to do" (supervisor_openwrt); a notice about the hotspot leads to OpenWrt's Wi-Fi page
+        # itself (1.5.4: it said where that page is). 2.4 GHz works, so it is not red.
+        for warning in filter(None, (status.get("warning") or "").split("；")):
+            link = ("在 OpenWrt 后台设置", self.admin_url()) if "AutoPlay 热点" in warning else None
+            html += ui.banner(warning, "wait" if "2.4 GHz" in warning else "bad", link)
         # Only an upstream that is down is news (1.3.0): "online" said nothing a driver could act on, and the
         # first seconds of probing are no problem either.
         # The page's own words since 1.4.1 ("上游" was ours, not the owner's); tesla_internet stays in the diagnostics.
         if status.get("tesla_upstream") == "offline":
-            html += ui.banner("盒子无 4G 网络：CarPlay 不受影响，车机自带的音乐、地图无法联网。", "wait")
+            html += ui.banner(("盒子无 4G 网络", "CarPlay 不受影响，车机自带的音乐、地图无法联网。"), "wait")
         error = status.get("tesla_error", "")
         if error:
-            html += ui.banner("车机网络设置失败：" + error + "。CarPlay 不受影响。", "bad")
+            html += ui.banner(("车机网络设置失败", error.rstrip("。") + "。CarPlay 不受影响。"), "bad")
         hottest, slowed = self.heat()
         if slowed:
             # 1.5.0: said only while the system is really holding the processor back for heat, which the owner can
             # do something about. The drive of 2026-11-10 reached 72 C parked in the sun with nobody told.
-            html += ui.banner(f"盒子温度已达 {hottest} °C，正在降速，CarPlay 可能卡顿。请移至阴凉处。", "wait")
+            html += ui.banner((f"盒子温度已达 {hottest} °C", "正在降速，CarPlay 可能卡顿，请移至阴凉处。"), "wait")
         return html
 
     def heat(self):
@@ -605,24 +615,26 @@ class SettingsPage:
         """host: the request's Host header, which says under which of its names this browser knows the box."""
         params = urllib.parse.parse_qs(query)
         message, at = params.get("m", [""])[0], params.get("at", [""])[0]
-        # An action's result is said in its own group (at=phones / at=update); only an error, or a result with no
-        # place of its own (the factory reset), is an alert at the top.
+        # An action's result is said in its own group (at=phones); a result with no place of its own (the factory
+        # reset) is a notice at the top; what an action could not do is an alert over the page (1.5.4: a red notice
+        # at the top, whose 「蓝牙未启动：」-style prefix said again what the line said).
         placed = at in ("phones", "update") and not message.startswith("错误：")
         notice = ("" if placed else ui.flash(message)) + self.notices()
+        alert = ui.alert(message, "/")
         nonce = self.pairing.nonce
         ask = params.get("ask", [""])[0]
         if ask:
             screen = self.confirm_screen(ask, params, nonce)
             if screen:
                 title, back, body = screen
-                return ui.page(title, ui.flow(notice + body), done=("取消", back))
+                return ui.page(title, ui.flow(notice + body), done=("取消", back), alert=alert)
         status = self.status()
         block, connecting, devices, pairing = self.phones_block(nonce, message if placed and at == "phones" else "")
         if pairing:
             # Pairing in progress (1.2.0): the passkey and its buttons are the whole page. In the Tesla's windowed
             # browser (773x601 CSS px) they sat below the Wi-Fi group, off the screen. No categories and no chain
             # here: the panel says itself what is happening. Its title is the task, 取消 in the bar (1.5.4).
-            return ui.page("添加 iPhone", ui.flow(notice + block), True, done=ui.pair_cancel(nonce))
+            return ui.page("添加 iPhone", ui.flow(notice + block), True, done=ui.pair_cancel(nonce), alert=alert)
         presence = self.pairing.presence()
         phase = self.pairing.status().get("phase", "closed")
         entries = self.entries(status, host)
@@ -652,9 +664,10 @@ class SettingsPage:
         refresh = True if update.running(self.state.parent) else 2 if self.check_running() else connecting
         # The bar's button is this page's way out, as 完成 is the panel's: back to where the visit began on the
         # CarPlay page (settings_ui.page), at the address this browser knows it by.
-        return ui.page(TITLE, ui.alerts(notice) + ui.layout(panes, marked), refresh, out=entries[0] if entries else None)
+        return ui.page(TITLE, ui.alerts(notice) + ui.layout(panes, marked), refresh, out=entries[0] if entries else None,
+                       alert=alert)
 
-    def render_reset(self):
+    def render_reset(self, query=""):
         """The factory-reset page: what goes, two typed confirmations (no JS confirm() to bypass). 1.5.4: names only,
         no lines under them or under the groups; what to type for the identity files is the field's placeholder; the
         button is a red row, as Apple's guidelines give a destructive action (it was a full-width red button)."""
@@ -669,14 +682,15 @@ class SettingsPage:
                            f'<input type=text name=identity autocomplete=off autocapitalize=off placeholder="输入「{factory_reset.IDENTITY_CONFIRMATION}」"></label>')
                 + ui.group("", '<button class="cell destructive">恢复出厂设置</button>')
                 + '</form>')
-        return ui.page("恢复出厂设置", ui.flow(body), done=("取消", "/#more"))
+        message = urllib.parse.parse_qs(query).get("m", [""])[0]   # what the reset could not do, as an alert (1.5.4)
+        return ui.page("恢复出厂设置", ui.flow(body), done=("取消", "/#more"), alert=ui.alert(message, "/reset"))
 
     @staticmethod
     def render_refused():
         """403 (1.5.4: was the bare word "forbidden"): a browser that is not on the box's Wi-Fi, or came by a name the
         page does not answer to. Nothing of the box on it, and no button: there is nowhere here to go back to."""
-        return ui.page(TITLE, ui.flow(ui.banner("无法通过此地址打开 AutoPlay 盒子。请连接 AutoPlay 热点后，从「AutoPlay 设置 → 连接 → "
-                                                "AutoPlay 盒子」打开。", "wait")))
+        return ui.page(TITLE, ui.flow(ui.banner(("无法通过此地址打开 AutoPlay 盒子", "请连接 AutoPlay 热点后，从「AutoPlay 设置 → 连接 → "
+                                                 "AutoPlay 盒子」打开。"), "wait")))
 
     @staticmethod
     def render_missing():
