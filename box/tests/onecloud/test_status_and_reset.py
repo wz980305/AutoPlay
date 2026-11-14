@@ -373,7 +373,7 @@ class PageLayoutTests(unittest.TestCase):
         self.assertIn("<nav", html, "the normal page, the line under the iPhone group")
         self.assertIn("CarPlay 画面", html)
         self.assertIn("http-equiv=refresh content=3", html, "until the iPhone is there")
-        self.assertIn("<p class=foot>", self.pane(html, "iphone"))
+        self.assertIn("<p class=foot>配对完成，iPhone 正在连上 AutoPlay 热点并打开 CarPlay。</p>", self.pane(html, "iphone"))
         self.page.pairing.status = lambda: {"phase": "paired", "at": int(now) - 600}
         html = self.page.render("")
         self.assertNotIn("http-equiv=refresh", html)

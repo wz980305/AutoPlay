@@ -462,7 +462,7 @@ class SettingsPage:
             # Bluetooth is not up: say so instead of inventing a cable (the alert at the top says why).
             foot = "蓝牙就绪后才能添加或接入 iPhone。"
         elif connecting:
-            foot = "配对完成，iPhone 正在连上 Wi-Fi 并打开 CarPlay。"
+            foot = "配对完成，iPhone 正在连上 AutoPlay 热点并打开 CarPlay。"
         else:
             # Nothing going on: no line (1.5.0). The steps of adding an iPhone are on the screen that adds it.
             foot = note

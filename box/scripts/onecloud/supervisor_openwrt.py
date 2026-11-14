@@ -146,7 +146,7 @@ def channel_warning(channel):
         return "AutoPlay 热点在 2.4 GHz：能用，但 5 GHz（国内信道 149）更稳。" if channel else ""
     if 36 <= channel <= 48 or 149 <= channel <= 165:
         return ""
-    return f"Wi-Fi 信道 {channel} 特斯拉看不到（它只认 36–48 和 149–165）。请在 OpenWrt 后台「网络 → 无线」改成 149（国家 CN）或 36。"
+    return f"AutoPlay 热点的信道 {channel} 特斯拉看不到（它只认 36–48 和 149–165）。请在 OpenWrt 后台「网络 → 无线」改成 149（国家 CN）或 36。"
 
 
 def trusted_networks(network):
