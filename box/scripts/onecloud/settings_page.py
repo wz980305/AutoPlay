@@ -558,25 +558,29 @@ class SettingsPage:
         one-task screen has one shape: the task is the title, 取消 is the bar's button, the body holds what it is about
         and the one button that does it (the question used to be the smallest text on the screen, a group's title).
         Returns (title, where 取消 goes, body), or None when there is nothing to ask (the phone is gone, an unknown
-        kind): the normal page follows."""
+        kind): the normal page follows.
+
+        The button is a row of the list in the destructive style (red text) or the action style, as on the rest of this
+        page and as Apple's guidelines give it: a destructive action is never the prominent (filled) button, and an
+        action sheet's message is left out when the title and the context say enough (1.5.4: until then a full-width
+        red button, and a line under the phone)."""
         if kind == "remove":
             phone = params.get("phone", [""])[0]
             name = self.pairing.devices().get(phone)
             if not name:
                 return None
-            return ("删除 iPhone", "/", ui.group("", f'<div class=cell>{ui.tile("gray", "phone")}<span class=main><b>{escape(name)}</b>'
-                                                   f'<span>蓝牙 …{escape(phone[-5:])}</span></span></div>', "删除后要再用，需要重新添加。")
+            twins = ui.same_names(self.pairing.devices().values())   # the address only tells two of one name apart
+            return ("删除 iPhone", "/", ui.group("", f'<div class=cell>{ui.tile("gray", "phone")}{ui.device_name(name, phone, twins)}</div>')
                     + f'<form method=post action=/pair>{ui.hidden(nonce, phone=phone, confirmed="1")}'
-                    '<button class="btn destructive" name=action value=remove>删除</button></form>')
+                    + ui.group("", '<button class="cell destructive" name=action value=remove>删除此 iPhone</button>') + '</form>')
         if kind == "install":
             found = update.read(self.state / "update-check.json")
             if not found.get("available") or not found.get("online"):
                 return None
             return (f'升级到 {found.get("latest", "")}', "/#update",
-                    ui.group("", f'<div class=cell>{ui.tile("red", "download")}<span class=main><b>约 2–5 分钟，期间 CarPlay 会断开</b>'
-                                 '<span>会先备份配对和设置；新版本起不来会自动退回。</span></span></div>')
-                    + f'<form method=post action=/update>{ui.hidden(nonce, confirmed="1")}'
-                    '<button class=btn name=action value=install>立即升级</button></form>')
+                    f'<form method=post action=/update>{ui.hidden(nonce, confirmed="1")}'
+                    + ui.group("", '<button class="cell action" name=action value=install>立即升级</button>', "约 2–5 分钟，期间 CarPlay 断开。")
+                    + '</form>')
         return None
 
     def render(self, query, host=""):
@@ -633,19 +637,20 @@ class SettingsPage:
         return ui.page(TITLE, ui.alerts(notice) + ui.layout(panes, marked), refresh, out=entries[0] if entries else None)
 
     def render_reset(self):
-        """The factory-reset page: what goes, two typed confirmations (no JS confirm() to bypass)."""
+        """The factory-reset page: what goes, two typed confirmations (no JS confirm() to bypass). 1.5.4: names only,
+        no lines under them or under the groups; what to type for the identity files is the field's placeholder; the
+        button is a red row, as Apple's guidelines give a destructive action (it was a full-width red button)."""
         nonce = self.pairing.nonce
-        body = (ui.group("会被删除", f'<div class=cell>{ui.tile("gray", "phone")}<span class=main><b>已添加的 iPhone</b><span>蓝牙配对、CarPlay 配对记录、上次使用的记录</span></span></div>'
-                           f'<div class=cell>{ui.tile("orange", "lock")}<span class=main><b>证书与密钥</b><span>正式证书、DuckDNS 申请账户、网页访问令牌</span></span></div>'
-                           f'<div class=cell>{ui.tile("gray", "doc")}<span class=main><b>设置与记录</b><span>自己的网址、画面端口、诊断记录和日志；OpenWrt 的 Wi-Fi 不变</span></span></div>',
-                           "删除后盒子以出厂状态重新启动。")
+        body = (ui.group("会被删除", f'<div class=cell>{ui.tile("gray", "phone")}<span class=main><b>已添加的 iPhone</b></span></div>'
+                           f'<div class=cell>{ui.tile("orange", "lock")}<span class=main><b>证书与密钥</b></span></div>'
+                           f'<div class=cell>{ui.tile("gray", "doc")}<span class=main><b>设置与记录</b></span></div>')
                 + f'<form method=post action=/reset>{ui.hidden(nonce)}'
-                + ui.group("确认", f'<label class=cell><span class=main><b>输入「{factory_reset.RESET_CONFIRMATION}」</b></span>'
+                + ui.group("", f'<label class=cell><span class=main><b>输入「{factory_reset.RESET_CONFIRMATION}」</b></span>'
                            '<input type=text name=confirm autocomplete=off autocapitalize=off placeholder="在此输入" required></label>'
-                           f'<label class=cell><span class=main><b>同时删除认证文件</b><span>只有在转让或出售盒子时才需要；输入「{factory_reset.IDENTITY_CONFIRMATION}」</span></span>'
-                           '<input type=text name=identity autocomplete=off autocapitalize=off placeholder="可不填"></label>',
-                           "不删认证文件的话，重置后只需重新添加 iPhone。")
-                + '<button class="btn destructive">恢复出厂设置</button></form>')
+                           '<label class=cell><span class=main><b>同时删除认证文件</b></span>'
+                           f'<input type=text name=identity autocomplete=off autocapitalize=off placeholder="输入「{factory_reset.IDENTITY_CONFIRMATION}」"></label>')
+                + ui.group("", '<button class="cell destructive">恢复出厂设置</button>')
+                + '</form>')
         return ui.page("恢复出厂设置", ui.flow(body), done=("取消", "/#more"))
 
     @staticmethod

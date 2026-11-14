@@ -124,6 +124,7 @@ summary{list-style:none} summary::-webkit-details-marker{display:none}
 /* A field in a row keeps to the right and leaves the line to its label. */
 input[type=text],input[type=password]{flex:0 1 8rem;min-width:5rem;border:0;background:none;color:var(--label);font:inherit;padding:0;outline:none;min-height:2rem;text-align:right}
 input::placeholder{color:var(--secondary)}
+@media (min-width:481px){.flow input[type=text]{flex-basis:13rem}}   /* the reset's placeholder says what to type (1.5.4) */
 
 /* The connection chain: three stations on one track. A station's colour is its state; a stretch of track is green
    when what it joins is up, moving dashes while it is being set up. */
@@ -147,13 +148,12 @@ input::placeholder{color:var(--secondary)}
 .flow>.group-title:first-child,.flow>section:first-child>.group-title{margin-top:var(--s2)}
 .flow>.banner{margin-bottom:var(--s2)}
 
-.btn{display:block;width:100%;min-height:var(--hit);margin:var(--s3) 0 0;padding:var(--s2) var(--s3);border:0;border-radius:var(--radius);background:var(--btn);
-color:#fff;font:inherit;font-weight:600;line-height:1.3;text-align:center;text-decoration:none;cursor:pointer;transition:transform .1s ease-out}
-.btn:active{transform:scale(.97)}
-.btn.plain{background:var(--fill);color:var(--tint);font-weight:500}
-.btn.destructive{background:var(--red)}
-.pair{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2)} .pair .btn{display:flex;align-items:center;justify-content:center}
-ol.steps{margin:0;padding:var(--s2) var(--s3) var(--s2) 2.6rem;background:var(--cell);border-radius:var(--radius)} ol.steps li{margin:.3rem 0}
+
+
+
+
+ 
+ 
 .code{font:600 3.2rem/1.1 -apple-system,"SF Pro Display",system-ui,sans-serif;letter-spacing:.15em;text-align:center;
 font-variant-numeric:tabular-nums;padding:var(--s3) var(--s3) var(--s2);margin:0}
 
@@ -174,7 +174,7 @@ label.cell{flex-direction:column;align-items:stretch;gap:.5rem} label.cell input
 /* A window too low to hold the bar and the four categories at once (a phone on its side): nothing stays put, the
    page scrolls as a whole. The Tesla's lowest window is 560 px. */
 @media (max-height:479px){header,.nav{position:static}}
-@media (prefers-reduced-motion:reduce){.link.wait,.spin{animation:none}.btn{transition:none}}
+@media (prefers-reduced-motion:reduce){.link.wait,.spin{animation:none}}
 """
 # What a page carries: the sheet without its comments, which are for whoever reads this file (they were a seventh of
 # every page, and a test could "find" a sentence that only a comment said).
@@ -386,15 +386,21 @@ def pairing_panel(pair, nonce, address=""):
 
     iOS shows an incoming pairing request only while Settings > Bluetooth is open, so the iPhone stays
     there and this page is operated on another screen, normally the head unit's browser.
+
+    1.5.4, after Apple's guidelines (buttons, alerts, action sheets): one action per screen as a row of the list, the
+    way the rest of this page acts (「配对」, the word the iPhone's own request uses; 取消 is the bar's button), no
+    yes/no pair (一致 / 不一致), no line that explains the buttons, no numbered steps: the one thing to do on the
+    iPhone is the list's footer.
     """
     phase = pair.get("phase", "closed")
     if phase == "confirm":
-        # The code and its two buttons first, within one Tesla window (773x601 CSS px); the explanation under them.
+        # The code and its button first, within one Tesla window (773x601 CSS px).
+        name = escape(pair.get("name", ""))
         return (f'<p class=group-title>配对码</p><div class=group><p class=code>{escape(pair.get("passkey", ""))}</p></div>'
-                f'<form method=post action=/pair>{hidden(nonce, request_id=pair.get("request_id", ""))}<div class=pair>'
-                '<button class="btn plain" name=action value=no>不一致</button>'
-                '<button class=btn name=action value=yes>一致</button></div></form>'
-                f'<p class=foot>和「{escape(pair.get("name", ""))}」上的数字一致时，在 iPhone 上点「配对」，这里点「一致」。</p>', True)
+                f'<form method=post action=/pair>{hidden(nonce, request_id=pair.get("request_id", ""))}'
+                + group("", '<button class="cell action" name=action value=yes>配对</button>',
+                        f'和「{name}」上的数字相同时，两边都点「配对」。')
+                + '</form>', True)
     if phase == "waiting":
         twins = same_names(f["name"] for f in pair.get("found", []))
         found = "".join(
@@ -404,18 +410,13 @@ def pairing_panel(pair, nonce, address=""):
             for f in pair.get("found", []))
         found = found or '<div class="cell empty" aria-busy=true><span class=spin></span><span class=main><b>正在寻找附近的 iPhone…</b></span></div>'
         error = banner(pair["error"], "bad") if pair.get("error") else ""
-        # The list to tap first, the three steps under it: in the Tesla's windowed browser the list sat below the fold.
         # Before the first iPhone, where to do this (address): the iPhone stays on its Bluetooth page, so this page is
-        # opened on the car or another device (1.5.4: until then a standing group of the iPhone category said so).
-        where = (f'<p class=foot>iPhone 要停在蓝牙页，所以本页在车机或另一台设备上打开：{url(address)}</p>'
-                 if address else '')
-        return (f'{error}{group("附近的 iPhone", found)}'
-                '<p class=group-title>怎么做</p><ol class=steps>'
-                '<li>在 iPhone 上打开「设置 → 蓝牙」，<b>停在这一页</b>。</li>'
-                f'<li>在上面的列表里点它的名字。</li><li>核对两边的六位数字。</li></ol>{where}', True)
+        # opened on the car or another device.
+        tip = "在 iPhone 上打开「设置 → 蓝牙」并停在那一页。" + (f"本页在车机或另一台设备上打开：{url(address)}" if address else "")
+        return f'{error}{group("附近的 iPhone", found, tip)}', True
     if phase == "pairing":
         return (group("", f'<div class=cell aria-busy=true><span class=spin></span><span class=main><b>正在连接「{escape(pair.get("name", ""))}」</b>'
-                      '<span>请留意 iPhone 上的配对请求。</span></span></div>'), True)
+                      '</span></div>'), True)
     if phase in ("starting", "finishing"):
         return group("", '<div class="cell empty" aria-busy=true><span class=spin></span><span class=main><b>请稍候…</b></span></div>'), True
     return None, False

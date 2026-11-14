@@ -221,9 +221,12 @@ class PageBannerTests(unittest.TestCase):
         self.assertIn('<a class=done href="/">取消</a>', html)
         self.assertNotIn("class=group-title", html, "the question was the smallest text on the screen")
         self.assertIn("小王的 iPhone", html)
-        self.assertIn("删除后要再用，需要重新添加。", html)
+        self.assertNotIn("<p class=foot>", html, "the title and the phone say enough (an action sheet's message is optional)")
+        self.assertNotIn("蓝牙 …", html, "the address only where two phones share a name")
         self.assertIn('name=confirmed value="1"', html)
         self.assertEqual(html.count("<button"), 1, "取消 is the bar's")
+        # Apple's guidelines: a destructive action is red text, never the prominent filled button
+        self.assertIn('<button class="cell destructive" name=action value=remove>删除此 iPhone</button>', html)
         self.assertNotIn("添加 iPhone", html, "the question is the whole screen")
         # second press carries the confirmation; the phone leaving the list says it all (no banner, 1.4.1)
         reply = self.page.apply("/pair", {"nonce": nonce, "action": "remove", "phone": "02:00:00:00:00:01", "confirmed": "1"})
@@ -241,7 +244,9 @@ class PageBannerTests(unittest.TestCase):
         html = self.page.render("ask=install")
         self.assertIn("<h1>升级到 1.4.0</h1>", html)
         self.assertIn('<a class=done href="/#update">取消</a>', html)
-        self.assertIn("立即升级", html)
+        self.assertIn('<button class="cell action" name=action value=install>立即升级</button>', html)
+        self.assertIn("<p class=foot>约 2–5 分钟，期间 CarPlay 断开。</p>", html)
+        self.assertNotIn("<span>", html.split("<main", 1)[1], "no line under a row")
         self.assertEqual(html.count("<button"), 1)
         self.assertNotIn("confirm(", html)
         with patch("settings_page.update.launch", return_value="正在升级，请稍候") as launch:
@@ -270,7 +275,14 @@ class PageBannerTests(unittest.TestCase):
             timer.assert_called_once()
             html = page.render_reset()
             self.assertIn("恢复出厂设置", html)
-            self.assertIn("删除认证文件", html)
+            self.assertIn('placeholder="输入「删除认证文件」"', html)
+            # 1.5.4: names only (no line under a row or a group), the button a red row (Apple: never a filled
+            # destructive button)
+            main = html.split("<main", 1)[1]
+            self.assertNotIn("<p class=foot>", main)
+            self.assertNotIn("<span>", main)
+            self.assertNotIn("class=sub", main)
+            self.assertIn('<button class="cell destructive">恢复出厂设置</button>', main)
 
 
 class PageLayoutTests(unittest.TestCase):
@@ -334,9 +346,14 @@ class PageLayoutTests(unittest.TestCase):
         self.assertNotIn("<p class=foot>", html)
         self.page.pairing.status = lambda: {"phase": "waiting", "found": []}
         html = self.page.render("")
-        self.assertIn("iPhone 要停在蓝牙页，所以本页在车机或另一台设备上打开：http://100.96.0.1<wbr>:18080/", html)
+        # 1.5.4: one line under the list (three numbered steps under a 怎么做 title until then)
+        self.assertIn("<p class=foot>在 iPhone 上打开「设置 → 蓝牙」并停在那一页。本页在车机或另一台设备上打开："
+                      "http://100.96.0.1<wbr>:18080/</p>", html)
+        self.assertNotIn("怎么做", html)
+        self.assertNotIn("<ol", html)
         self.page.pairing.devices = lambda: {"02:00:00:00:00:01": "小王的 iPhone"}
         self.assertNotIn("车机或另一台设备", self.page.render(""))
+        self.assertIn("<p class=foot>在 iPhone 上打开「设置 → 蓝牙」并停在那一页。</p>", self.page.render(""))
 
     def test_the_bars_button_leads_to_the_carplay_page_this_browser_came_from(self):
         # The CarPlay page keeps its settings per address: back to the one on the name this browser used here. The
@@ -357,6 +374,11 @@ class PageLayoutTests(unittest.TestCase):
         self.page.pairing.status = lambda: {"phase": "confirm", "name": "iPhone", "passkey": "123456", "request_id": "r"}
         html = self.page.render("")
         self.assertIn("<h1>添加 iPhone</h1>", html)
+        # 1.5.4: 「配对」, the iPhone's own word, as the one row; no yes/no pair and no line explaining two buttons
+        self.assertIn('<button class="cell action" name=action value=yes>配对</button>', html)
+        self.assertNotIn("不一致", html)
+        self.assertNotIn("value=no", html)
+        self.assertIn("<p class=foot>和「iPhone」上的数字相同时，两边都点「配对」。</p>", html)
         self.assertIn('<form method=post action=/pair>', html.split("</header>")[0])
         self.assertIn('<button class=done name=action value=cancel>取消</button>', html.split("</header>")[0])
         self.assertNotIn("CarPlay 画面", html)
@@ -401,6 +423,22 @@ class PageLayoutTests(unittest.TestCase):
         record = json.loads(lines[-1])
         self.assertEqual(record["event"], "update_check")
         self.assertIn("github: timed out", record["error"])
+
+    def test_no_filled_buttons_on_any_screen(self):
+        """1.5.4: every action on this page is a row of a list, blue (action) or red (destructive), as the rest of the
+        page and the CarPlay page's panel act; the full-width filled buttons are gone with their styles."""
+        import settings_ui as ui
+        self.assertNotIn(".btn", ui.CSS)
+        screens = [self.page.render(""), self.page.render_reset()]
+        (self.state / "update-check.json").write_text(json.dumps({"available": True, "online": True, "latest": "1.6.0", "current": "1.5.4", "checked_at": 1}))
+        screens.append(self.page.render("ask=install"))
+        screens.append(self.page.render("ask=remove&phone=02%3A00%3A00%3A00%3A00%3A01"))
+        for phase in ({"phase": "waiting", "found": []}, {"phase": "confirm", "name": "iPhone", "passkey": "123456", "request_id": "r"},
+                      {"phase": "pairing", "name": "iPhone"}):
+            self.page.pairing.status = lambda phase=phase: phase
+            screens.append(self.page.render(""))
+        for html in screens:
+            self.assertNotRegex(html, r'class="?btn')
 
     def test_refused_and_missing_pages_are_pages_of_the_box(self):
         """1.5.4: a bare English "forbidden" / "not found" was all a browser got."""
