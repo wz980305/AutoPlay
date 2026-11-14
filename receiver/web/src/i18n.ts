@@ -40,7 +40,7 @@ const messages = {
   loadFail: ['无法载入设置，请检查与盒子的连接。', 'Couldn’t load settings. Check the connection to the box.'],
   applyFail: ['无法连接盒子，设置未应用', 'Couldn’t reach the box; settings not applied'],
   autoFail: ['无法自动调整画面尺寸', 'Couldn’t adjust the picture size'],
-  diagnostics: ['连接与兼容性', 'Connection and compatibility'], browserCheck: ['浏览器兼容性检测', 'Browser check'],
+  diagnostics: ['连接与兼容性', 'Connection and compatibility'], browserCheck: ['兼容性检测', 'Compatibility check'],
   decoding: ['解码能力', 'Decoding'], decodingOk: ['可用', 'Available'], decodingInsecure: ['需要 HTTPS', 'Needs HTTPS'],
   decodingMissing: ['不支持', 'Not supported'], picture: ['当前画面', 'Picture'], unsupported: ['此浏览器不支持视频解码，请更新车辆软件', 'This browser can’t decode video; update the car software'],
   insecure: ['不是安全连接，请用盒子的 https:// 地址打开本页', 'Not a secure connection; open this page at the box’s https:// address'],

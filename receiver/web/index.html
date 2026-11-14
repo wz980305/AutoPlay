@@ -4,7 +4,7 @@
   <style>
    /* The browser check (1.6.0): drawn before the player bundle, so it carries its own few rules, the settings panel's
       look and its day and night (the <head> script has set data-theme). It shows when this browser cannot run the
-      player, or from Settings > Connection > Browser check. */
+      player, or from Settings > Connection > Compatibility check. */
    .bc{position:fixed;top:0;right:0;bottom:0;left:0;z-index:99999;overflow:auto;background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC",system-ui,sans-serif;font-size:20px;font-size:clamp(20px,2.78vmin,24px);line-height:1.45;--cell:#1C1C1E;--sep:rgba(84,84,88,.65);--sub:rgba(235,235,245,.6);--ok:#30D158;--bad:#FF4245;--warn:#FF9230}
    :root[data-theme=light] .bc{background:#F2F2F7;color:#000;--cell:#FFF;--sep:rgba(60,60,67,.29);--sub:rgba(60,60,67,.6);--ok:#34C759;--bad:#FF383C;--warn:#FF8D28}
    /* In em of the panel's root size (the bundle's style sheet may be what failed): the bar, the title, a row and its
@@ -28,7 +28,7 @@
    .bc li.ok span{color:var(--ok)}.bc li.missing span{color:var(--bad)}.bc li.limited span{color:var(--warn)}
    .bc li small{display:block;color:var(--sub);font-size:.8333em;margin-top:.2083em}
   </style>
-  <header><button id="browser-check-continue" type="button" hidden aria-label="返回"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><h2 id="browser-check-title">浏览器检测</h2></header>
+  <header><button id="browser-check-continue" type="button" hidden aria-label="返回"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><h2 id="browser-check-title">兼容性检测</h2></header>
   <div class="bc-body">
    <p id="browser-check-status" class="bc-status">正在检测 / Checking…</p>
    <p id="browser-check-note"></p>

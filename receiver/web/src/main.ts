@@ -714,7 +714,7 @@ panel.querySelectorAll<HTMLDetailsElement>('details').forEach(details => {
     details.scrollIntoView({ block: own.height > view.height ? 'start' : 'end', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   });
 });
-// 「浏览器兼容性检测」 replaces the panel; its ‹ brings the panel back as it was (the same page, 「连接与兼容性」 still
+// 「兼容性检测」 replaces the panel; its ‹ brings the panel back as it was (the same page, 「连接与兼容性」 still
 // open) with this row in view, as a pushed iOS page returns to its list (owner, 2026-11-14: it went back to CarPlay).
 const browserCheckRow = el('browser-check-show');
 browserCheckRow.onclick = () => {

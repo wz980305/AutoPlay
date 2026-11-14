@@ -1,6 +1,7 @@
 /* ES5 classic script: independent of the modern player bundle, so an old car browser still gets a readable answer.
    Driver view first (viewer audit V10): one headline, the missing things in plain words, what to do in this car (a
-   Tesla). Since 1.6.0 in the settings panel's look: a title bar (「浏览器检测」, the chevron back to the panel when it was
+   Tesla). Since 1.6.0 in the settings panel's look: a title bar (「兼容性检测」 since 1.6.4, the name of the panel's row
+   that opens it, as an iOS page is titled after its row; 「浏览器检测」 before; the chevron back to the panel when it was
    opened from there), the result as the first line, one row per check with its result as the value, the
    reason only under a check that failed, and the browser's own report only when something failed. The checks have
    plain names (1.6.0: they were the web APIs' own, 「HTTPS 安全上下文」, 「Pointer Events」…) (until then the
@@ -12,10 +13,10 @@
  /* The language chosen in the panel; until one is, the browser's own (1.6.0; it was zh for every car). */
  if(saved==='en'||saved==='zh')lang=saved;else{var asked=((w.navigator.languages&&w.navigator.languages[0])||w.navigator.language||'').toLowerCase();if(asked&&asked.indexOf('zh')!==0)lang='en';}
  var T={
-  title:['浏览器检测','Browser check'],back:['返回','Back'],
+  title:['兼容性检测','Compatibility check'],back:['返回','Back'],
   checking:['正在检测车机浏览器…','Checking this car browser…'],
   checkingNote:['如长时间无响应，请刷新页面。','If this stays, reload the page.'],
-  passTitle:['浏览器检测通过','Browser check passed'],passNote:['正在加载播放器…','Loading the player…'],
+  passTitle:['兼容性检测通过','Compatibility check passed'],passNote:['正在加载播放器…','Loading the player…'],
   failTitle:['此浏览器无法显示 CarPlay 画面','This browser can’t show the CarPlay picture'],
   failNote:['缺少：','Missing: '],
   advice:['请在「控制 › 软件」更新车辆软件后再试。','Update the car software in Controls › Software and try again.'],

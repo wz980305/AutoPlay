@@ -107,7 +107,7 @@ if (want('viewer')) for (const vp of SHAPES) {
   await page.keyboard.press('Escape'); await settle(page);   // a menu has no Cancel (1.6.0): Esc or a tap outside
   await page.click('[data-settings-page="connection"]'); await settle(page); await shot(page, 'viewer-settings-connection', vp);
   await page.locator('#settings-connection details > summary').first().click(); await page.waitForTimeout(700); await shot(page, 'viewer-settings-connection-diagnostics', vp);
-  // 「浏览器兼容性检测」 and its ‹: back to the panel as it was, the row in view (2026-11-14: it went back to CarPlay).
+  // 「兼容性检测」 and its ‹: back to the panel as it was, the row in view (2026-11-14: it went back to CarPlay).
   await page.click('#browser-check-show'); await settle(page); await shot(page, 'viewer-browser-check', vp);
   await page.click('#browser-check-continue'); await page.waitForTimeout(500); await shot(page, 'viewer-browser-check-back', vp);
   const back = await page.evaluate(() => { const row = document.getElementById('browser-check-show').getBoundingClientRect();

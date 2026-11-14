@@ -10,7 +10,7 @@ The three packages of [AutoPlay](../box/README.en.md) for the ZTE F50 (OpenWrt 2
 
 > **Not an Apple-certified product.** It needs the accessory identity you supply: [box/README.en.md](../box/README.en.md#accessory-identity).
 
-Prerequisite: an F50 already flashed to OpenWrt following [mu300-linux](https://github.com/dikeckaan/mu300-linux)'s own documentation (the unit we verified shipped with stock B13; this repository gives no flashing steps). Packages are installed by hand as below; the full procedure is in the [install guide](../交付资料/AutoPlay-1.6.3-安装使用说明.md) (Chinese).
+Prerequisite: an F50 already flashed to OpenWrt following [mu300-linux](https://github.com/dikeckaan/mu300-linux)'s own documentation (the unit we verified shipped with stock B13; this repository gives no flashing steps). Packages are installed by hand as below; the full procedure is in the [install guide](../交付资料/AutoPlay-1.6.4-安装使用说明.md) (Chinese).
 
 ## Installing by hand
 
