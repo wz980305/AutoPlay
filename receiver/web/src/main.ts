@@ -77,13 +77,16 @@ let sentNight: boolean | null = null;
  *  main city of the browser's time zone (sun.ts); otherwise 18:30-06:30. Today's two times are kept too, for
  *  index.html's head, which decides day or night before this bundle runs. */
 const SUN_PLACE = 'f50-sun-place', SUN_TIMES = 'f50-sun-times';
-function storedPlace(): Place | null {
+function storedPlace(): (Place & { at?: number }) | null {
   try {
-    const kept = JSON.parse(localStorage.getItem(SUN_PLACE) ?? 'null') as Place | null;
+    const kept = JSON.parse(localStorage.getItem(SUN_PLACE) ?? 'null') as (Place & { at?: number }) | null;
     return kept && Number.isFinite(kept.lat) && Number.isFinite(kept.lon) && Math.abs(kept.lat) <= 90 && Math.abs(kept.lon) <= 180 ? kept : null;
   } catch { return null; }
 }
-let carPlace = storedPlace();
+const kept = storedPlace();
+let carPlace: Place | null = kept ? { lat: kept.lat, lon: kept.lon } : null;
+/** When the kept place was last confirmed; a day on, start-up asks again where the browser allows it (a long trip). */
+let placeAt = kept?.at ?? 0;
 const zoneSun = zonePlace(browserZone());
 const sunPlace = (): Place | null => carPlace ?? zoneSun;
 const sunOn = (day: Date): SunTimes | null => { const place = sunPlace(); return place ? sunTimes(day, place) : null; };
@@ -103,17 +106,17 @@ function sunStats(): Record<string, number> {
 }
 /** A position from this browser (WGS-84 as the browser gives it): kept when it moves the rounded place. */
 function rememberPlace(lat: number, lon: number) {
-  const place = roughPlace(lat, lon);
-  if (carPlace && carPlace.lat === place.lat && carPlace.lon === place.lon) return;
-  carPlace = place;
-  try { localStorage.setItem(SUN_PLACE, JSON.stringify(place)); } catch { /* used for this visit only */ }
-  syncNight(); applyTheme();
+  const place = roughPlace(lat, lon), same = carPlace?.lat === place.lat && carPlace?.lon === place.lon;
+  if (same && Date.now() - placeAt < 3_600_000) return;   // a fix a second from the location feed: write rarely
+  carPlace = place; placeAt = Date.now();
+  try { localStorage.setItem(SUN_PLACE, JSON.stringify({ ...place, at: placeAt })); } catch { /* used for this visit only */ }
+  if (!same) { syncNight(); applyTheme(); }
 }
 /** One position for the sun, at low accuracy (a day old will do). prompt: the owner just picked 「日落到日出」, so the
  *  browser may ask; otherwise only where it has been allowed already (no prompt at start-up). */
 function placeForSun(prompt: boolean) {
   const geo = navigator.geolocation;
-  if (!geo || carPlace) return;
+  if (!geo || (carPlace && Date.now() - placeAt < 86_400_000)) return;
   const ask = () => { try { geo.getCurrentPosition(p => rememberPlace(p.coords.latitude, p.coords.longitude), () => { /* the zone's city stands in */ }, { enableHighAccuracy: false, maximumAge: 86_400_000, timeout: 20_000 }); } catch { /* none */ } };
   if (prompt) { ask(); return; }
   const permissions = (navigator as Navigator & { permissions?: Permissions }).permissions;
@@ -557,7 +560,7 @@ function pageEvent(ev: number) {
   connection.send({type:'stats',stats:{ev,hidden:document.hidden?1:0,borderless:teslaBorderless()?1:0,width:screen.clientWidth,height:screen.clientHeight,...viewport()}});
 }
 /** Which page build runs (raised with each build tried in the car). */
-const BUILD = 202611142000;
+const BUILD = 202611142100;
 /** What the browser says of the space it gives the page, to find the car's bar over a fullscreen page (2026-10-13):
  *  window, visual viewport (and its offset), screen, available screen, outer window, pixel ratio. */
 function viewport(): Record<string, number> {

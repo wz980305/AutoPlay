@@ -38,8 +38,8 @@
 在自己电脑上做同样的事（需要 JDK 21、Node、Docker、`gh`）：
 
 ```sh
-sh box/scripts/release.sh 1.6.4                      # 只构建到 out/release-1.6.4，不发布
-AUTOPLAY_RELEASE_KEY_FILE=~/autoplay-release.key sh box/scripts/release.sh 1.6.4 --publish
+sh box/scripts/release.sh 1.6.5                      # 只构建到 out/release-1.6.5，不发布
+AUTOPLAY_RELEASE_KEY_FILE=~/autoplay-release.key sh box/scripts/release.sh 1.6.5 --publish
 ```
 
 ## 四、盒子那边发生什么
@@ -65,7 +65,7 @@ ssh root@100.96.0.1 'cd /tmp/autoplay-upgrade && apk update && apk add --upgrade
     autoplay-jre-*_$(cat /etc/apk/arch).apk autoplay-[0-9]*.apk luci-app-autoplay-*.apk luci-i18n-autoplay-zh-cn-*.apk'
 ```
 
-之后的 1.3.2、1.4.0、1.4.1、1.4.2、1.4.3、1.5.0、1.5.1、1.5.2、1.5.3、1.6.0、1.6.1、1.6.2、1.6.3、1.6.4……都在设置页点一下。`apk` 的包签名（`--allow-untrusted`）仍未做：安全性由清单里的哈希和清单的签名保证，这是 WP9 剩下的一项。
+之后的 1.3.2、1.4.0、1.4.1、1.4.2、1.4.3、1.5.0、1.5.1、1.5.2、1.5.3、1.6.0、1.6.1、1.6.2、1.6.3、1.6.4、1.6.5……都在设置页点一下。`apk` 的包签名（`--allow-untrusted`）仍未做：安全性由清单里的哈希和清单的签名保证，这是 WP9 剩下的一项。
 
 ## 六、常见问题
 
