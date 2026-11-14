@@ -133,10 +133,10 @@ if (want('viewer')) for (const vp of SHAPES.slice(0, 2)) {
   await page.click('[data-settings-page="connection"]'); await settle(page);
   await page.locator('#settings-connection details > summary').first().click(); await page.waitForTimeout(700); await shot(page, 'viewer-settings-connection-day', vp);
   await page.click('[data-settings-page="general"]'); await settle(page);
-  // The location switch without the browser's permission (headless refuses it): an alert over the panel since the
-  // review before 1.6.1 (a line under the group until then); 好 closes it and leaves the panel as it was.
-  await page.click('#car-location-on'); await page.waitForTimeout(900); await shot(page, 'viewer-settings-general-day-alert', vp);
-  await page.click('#alert-ok'); await settle(page);
+  // The location switch without the browser's permission (headless refuses it): a capsule at the panel's top (1.6.2;
+  // an alert in 1.6.1, a line under the group before), gone by itself; the switch goes back.
+  await page.click('#car-location-on'); await page.waitForTimeout(900); await shot(page, 'viewer-settings-general-day-capsule', vp);
+  await page.waitForTimeout(6500);
   await page.click('[data-picker="night-mode"]'); await settle(page);
   await page.click('#picker-options .option:nth-child(4)'); await settle(page); await shot(page, 'viewer-settings-general-day-to-night', vp);
   console.log('   ', JSON.stringify(await page.evaluate(() => ({ theme: document.documentElement.dataset.theme, panel: getComputedStyle(document.getElementById('settings')).backgroundColor,

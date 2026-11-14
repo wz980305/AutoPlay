@@ -20,10 +20,10 @@ from html import escape
 # The two sets of colours. Dark is the CarPlay page's (style.css :root); light is iOS's light set of the same roles.
 DARK = ("--bg:#000;--cell:#1C1C1E;--press:#3A3A3C;--sep:rgba(84,84,88,.6);--label:#FFF;--secondary:rgba(235,235,245,.72);"
         "--tint:#0091FF;--btn:#0066D6;--green:#30D158;--orange:#FF9230;--red:#FF4245;--fill:rgba(120,120,128,.24);"
-        "--chev:rgba(235,235,245,.55);--raised:#2C2C2E;--scrim:rgba(0,0,0,.45);color-scheme:dark")
+        "--chev:rgba(235,235,245,.55);color-scheme:dark")
 LIGHT = ("--bg:#F2F2F7;--cell:#FFF;--press:#D1D1D6;--sep:rgba(60,60,67,.24);--label:#000;--secondary:rgba(60,60,67,.7);"
          "--tint:#0088FF;--btn:#007AFF;--green:#34C759;--orange:#FF8D28;--red:#FF383C;--fill:rgba(120,120,128,.14);"
-         "--chev:rgba(60,60,67,.45);--raised:#FFF;--scrim:rgba(0,0,0,.25);color-scheme:light")
+         "--chev:rgba(60,60,67,.45);color-scheme:light")
 
 STYLE = """
 /* Which colours: the theme the CarPlay page handed over (data-theme, set by THEME below) wins; without one the
@@ -158,20 +158,18 @@ progress{display:block;width:100%;height:.4rem;margin-top:.55rem;-webkit-appeara
 progress::-webkit-progress-bar{background:var(--fill)} progress::-webkit-progress-value{background:var(--tint);border-radius:.2rem} progress::-moz-progress-bar{background:var(--tint)}
 .value.busy{display:inline-flex;align-items:center}
 .value.busy .spin{width:1.1rem;height:1.1rem;border-width:2px;margin:0 .45rem 0 0}
-/* A notice reads as an alert does (1.6.0): what happened in bold, what to do under it in the secondary colour. */
+/* A notice: what happened in bold, what to do under it in the secondary colour (1.6.0). */
 .banner>span{display:flex;flex-direction:column;gap:.1rem;min-width:0}
 .banner b{font-weight:600} .banner span span{color:var(--secondary)}
 .banner a{display:block;padding:.35rem 0 .1rem;color:var(--tint);font-weight:600;text-decoration:none}
-/* What an action could not do (alert(), 1.6.0): the CarPlay page's dialog.alert, in the middle over a dimmed page. */
-.scrim{position:fixed;inset:0;z-index:10;display:grid;place-items:center;padding:var(--s4);background:var(--scrim)}
-.alert{display:flex;flex-direction:column;gap:var(--s1);width:min(24rem,100%);max-height:100%;overflow:auto;
-padding:var(--s4) var(--s4) var(--s3);border-radius:1.75rem;background:var(--raised);text-align:center;
-box-shadow:0 16px 50px rgba(0,0,0,.35);animation:pop .16s cubic-bezier(.2,.8,.2,1)}
-.alert h2{margin:0;font-size:1.2rem;line-height:1.35} .alert h2:focus{outline:none}
-.alert p{margin:0;color:var(--secondary);font-size:1rem;line-height:1.45}
-.alert .ok{display:flex;align-items:center;justify-content:center;min-height:var(--hit2);margin-top:var(--s3);border-radius:999px;
-background:var(--fill);color:var(--label);font-weight:600;text-decoration:none}
-@keyframes pop{from{opacity:0;transform:scale(.94)}}
+/* What an action could not do (capsule(), 1.6.2): one sentence in a capsule at the page's foot, as the CarPlay page's
+   notices, gone by itself after 6 s - by CSS alone, so without JS too. 1.6.0-1.6.1: Apple's alert in the middle. */
+.capsule{position:fixed;left:50%;bottom:max(var(--s4),env(safe-area-inset-bottom));z-index:10;transform:translateX(-50%);
+width:max-content;max-width:calc(100% - 2 * var(--s4));margin:0;padding:var(--s2) var(--s4);border-radius:1.4rem;
+background:rgba(20,20,22,.88);border:1px solid rgba(255,255,255,.28);color:#fff;font-size:1.05rem;line-height:1.4;text-align:center;
+box-shadow:0 8px 30px rgba(0,0,0,.35);animation:rise .3s cubic-bezier(.2,.8,.2,1),fade .3s 6s forwards}
+@keyframes rise{from{opacity:0;transform:translate(-50%,10px)}}
+@keyframes fade{to{opacity:0;visibility:hidden}}
 
 
 
@@ -199,7 +197,7 @@ label.cell{flex-direction:column;align-items:stretch;gap:.5rem} label.cell input
 /* A window too low to hold the bar and the four categories at once (a phone on its side): nothing stays put, the
    page scrolls as a whole. The Tesla's lowest window is 560 px. */
 @media (max-height:479px){header,.nav{position:static}}
-@media (prefers-reduced-motion:reduce){.link.wait,.spin,.alert{animation:none}}
+@media (prefers-reduced-motion:reduce){.link.wait,.spin{animation:none}.capsule{animation:fade 0s 6s forwards}}
 """
 # What a page carries: the sheet without its comments, which are for whoever reads this file (they were a seventh of
 # every page, and a test could "find" a sentence that only a comment said).
@@ -227,12 +225,10 @@ VISIT = ('(function(){var d=document.documentElement,q=location.search,n=Date.no
 # "back" leaves the page instead of walking through the categories looked at; the chosen one is also marked for a
 # screen reader.
 SCRIPT = ('<script>(function(){var out=document.querySelector("a.done.back");'
-          # An alert (alert()): its title takes the focus, as the CarPlay page's does (a focused 好 drew its ring);
-          # 「好」 goes back to the category it was on; Escape is 「好」.
-          'var ok=document.querySelector(".alert .ok");if(ok){ok.href=ok.getAttribute("href").split("#")[0]+location.hash;'
-          # again after the load: the browser's jump to the category's fragment comes after this script and blurs it
-          'var t=document.getElementById("alert-title");t.focus();addEventListener("load",function(){setTimeout(function(){t.focus()},0)});'
-          'addEventListener("keydown",function(e){if(e.key==="Escape")ok.click()})}'
+          # A capsule (capsule()) has said its piece once: the message leaves the address, so a reload does not say it
+          # again (the page's own reload after it, see page(), and the owner's).
+          'if(document.querySelector(".capsule")){var q=location.search.replace(/([?&])(m|at)=[^&]*&?/g,"$1").replace(/[?&]$/,"");'
+          'history.replaceState(null,"",location.pathname+q+location.hash)}'
           # A visit that began in the settings panel goes back to it (the CarPlay page opens the panel at 连接 for this
           # fragment); one that began on the waiting screen, to the page as it is.
           'if(out&&document.documentElement.getAttribute("data-from")==="panel")out.href=out.href.split("#")[0]+"#settings=connection";'
@@ -293,21 +289,23 @@ def back(href):
     return f'<a class="done icon" href="{escape(href)}" aria-label="返回">{CHEVRON}</a>'
 
 
-def page(title, body, refresh=False, done=None, out=None, alert=""):
+def page(title, body, refresh=False, done=None, out=None, capsule=""):
     """The title bar and what is under it. refresh: True reloads every 3 s, a number every that many seconds;
     done: the bar's leading button - (label, address) for 取消, or HTML (back(), a form's button); out: instead of
     done, the CarPlay page's address - the way out of the box page: the chevron on the leading edge for a visit that
     came from the CarPlay page (to the settings panel when it began there, see SCRIPT), 「CarPlay 画面」 on the
-    trailing edge for a browser that came by itself. alert: alert()'s HTML; the page then does not reload itself, so
-    the alert stays until 「好」, which loads the page afresh."""
+    trailing edge for a browser that came by itself. capsule: capsule()'s HTML; a page that reloads itself then waits
+    until the capsule has gone (6 s) and does it by script alone, at the address without the message (SCRIPT), as a
+    refresh tag would reload the message too."""
     body = keep_words(body)
-    refresh = False if alert else refresh
     seconds = 3 if refresh is True else refresh
+    if capsule and refresh:
+        seconds = max(seconds, 6)
     # The refresh tag, and a script that reloads half a second after it would have (1.5.3): the owner had to open the
     # page again to see what a check had found. A browser may leave the tag alone for an address with a fragment
     # (/?m=#update after a button): it only scrolls. Where the tag works the page is gone before the script's turn.
-    meta = (f'<meta http-equiv=refresh content={seconds}>'
-            f'<script>setTimeout(function(){{location.reload()}},{int(seconds * 1000) + 500})</script>') if refresh else ''
+    meta = (('' if capsule else f'<meta http-equiv=refresh content={seconds}>')
+            + f'<script>setTimeout(function(){{location.reload()}},{int(seconds * 1000) + 500})</script>') if refresh else ''
     lead = (done if isinstance(done, str) else f'<a class=done href="{escape(done[1])}">{escape(done[0])}</a>') if done else ''
     trail = ''
     if out:
@@ -317,7 +315,7 @@ def page(title, body, refresh=False, done=None, out=None, alert=""):
             f'<meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
             f'<meta name=color-scheme content="light dark">{meta}'
             f'<title>{escape(title)}</title><script>{VISIT}</script><style>{CSS}</style></head>'
-            f'<body><header><div>{lead}<h1>{escape(title)}</h1>{trail}</div></header>{body}{keep_words(alert)}{SCRIPT}</body></html>')
+            f'<body><header><div>{lead}<h1>{escape(title)}</h1>{trail}</div></header>{body}{keep_words(capsule)}{SCRIPT}</body></html>')
 
 
 def alerts(banners):
@@ -408,24 +406,19 @@ def banner(text, kind="ok", link=None):
 
 
 def flash(message):
-    """An action's result with no place of its own (the factory reset) as a banner; an error is an alert()."""
+    """An action's result with no place of its own (the factory reset) as a banner; an error is a capsule()."""
     if not message or message.startswith("错误："):
         return ""
     return banner(message)
 
 
-def alert(message, back):
-    """What an action just tried and could not do (1.6.0), as Apple's alert and the CarPlay page's dialog.alert: in
-    the middle over a dimmed page, a title, one line, 「好」. Without JS too: 「好」 is a link to the page without the
-    message (back), the fragment added by SCRIPT; a page under an alert does not reload itself (page()). Until 1.6.0
-    a red banner at the top, where a page of the 高级 category showed it out of sight."""
+def capsule(message):
+    """What an action just tried and could not do (1.6.2, owner's call): one sentence in a capsule at the page's foot,
+    gone by itself after 6 s, as on the CarPlay page (1.6.0-1.6.1: Apple's alert with 「好」; before: a red banner at
+    the top, where a page of the 高级 category showed it out of sight). Written as one sentence where it is raised."""
     if not message.startswith("错误："):
         return ""
-    title, line = parts(message.removeprefix("错误："))
-    described = " aria-describedby=alert-line" if line else ""
-    return (f'<div class=scrim><div class=alert role=alertdialog aria-modal=true aria-labelledby=alert-title{described}>'
-            f'<h2 id=alert-title tabindex=-1>{escape(title)}</h2>' + (f'<p id=alert-line>{escape(line)}</p>' if line else '')
-            + f'<a class=ok href="{escape(back)}">好</a></div></div>')
+    return f'<p class=capsule role=status>{escape(message.removeprefix("错误：").strip().rstrip("。"))}</p>'
 
 
 def hidden(nonce, **values):

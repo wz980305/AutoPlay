@@ -766,7 +766,7 @@ def launch(root, openwrt=None):
     if running(root):
         return "正在升级，请稍候"
     if carplay_in_use(root):
-        return "无法升级：CarPlay 正在使用中，请停车并断开后再试。"   # the page's alert: title：line (1.6.0)
+        return "CarPlay 正在使用中，请停车并断开后再升级。"   # the page's capsule: one sentence (1.6.2)
     install = [sys.executable, str(Path(__file__).resolve()), "install", "--root", str(root)]
     service = {"name": "autoplay-update", "instances": {"update": {"command": install, "stdout": True, "stderr": True}}}
     command = ["ubus", "call", "service", "set", json.dumps(service)]

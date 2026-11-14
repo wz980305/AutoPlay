@@ -81,9 +81,9 @@ class WhereAResultGoesTests(unittest.TestCase):
 
     def test_the_reset_s_error_returns_to_the_reset_page(self):
         import urllib.parse
-        where = self.location('/reset', ValueError('确认词不正确：请输入「重置」。'))
+        where = self.location('/reset', ValueError('确认词不正确，请输入「重置」。'))
         self.assertTrue(where.startswith('/reset?m='), where)
-        self.assertEqual(urllib.parse.parse_qs(where.partition('?')[2])['m'], ['错误：确认词不正确：请输入「重置」。'])
+        self.assertEqual(urllib.parse.parse_qs(where.partition('?')[2])['m'], ['错误：确认词不正确，请输入「重置」。'])
         self.assertTrue(self.location('/reset', '已恢复出厂设置：盒子正在重新启动，之后请重新添加 iPhone。').startswith('/?m='))
-        self.assertTrue(self.location('/pair', ValueError('无法添加 iPhone：CarPlay 正在使用中，请先断开。')).startswith('/?m='))
-        self.assertTrue(self.location('/update', ValueError('页面已过期：请再试一次。')).endswith('#update'))
+        self.assertTrue(self.location('/pair', ValueError('CarPlay 正在使用中，请先断开再添加 iPhone。')).startswith('/?m='))
+        self.assertTrue(self.location('/update', ValueError('页面已过期，请再试一次。')).endswith('#update'))

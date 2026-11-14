@@ -1,3 +1,4 @@
+import { capsule } from './capsule';
 import { startup, startupStats } from './startup';
 import { InputController } from './input';
 import { VideoPlayer } from './video';
@@ -115,21 +116,10 @@ function fit() {
   surface.style.width = `${size.width}px`; surface.style.height = `${size.height}px`;
   screen.classList.toggle('area', !!area);
 }
-/** A problem that needs the driver (1.6.0, Apple's alerts): only when there can be no picture until something is
- *  changed. A title, one short line, 好 and - where a setting fixes it - 前往设置, which goes there. Until then a card at
- *  the bottom with 关闭, the decoder's English under 详细信息, and the setting's place in words. The decoder's own text
- *  goes to the box's log (viewer stats ev 17), not on the screen. Everything the page handled by itself is a pill
- *  instead (toast). */
-const alertBox = el<HTMLDialogElement>('alert');
-let alertAction: (() => void) | null = null;
-function problem(title: string, message: string, action: (() => void) | null = null) {
-  el('alert-title').textContent = title; el('alert-message').textContent = message;
-  alertAction = action; el('alert-action').hidden = !action;
-  if (!alertBox.open) { if (typeof alertBox.showModal === 'function') alertBox.showModal(); else alertBox.setAttribute('open', ''); }
-}
-function closeProblem() { if (alertBox.open) alertBox.close(); }
-el('alert-ok').onclick = closeProblem;
-el('alert-action').onclick = () => { const go = alertAction; closeProblem(); go?.(); };
+/** Every notice on this page is a capsule (capsule.ts, 1.6.2). The decoder's own words go to the box's log (viewer
+ *  stats ev 17), not on the screen. */
+const notices = capsule(el('toast'));
+const { stay, unstay, toast } = notices;
 /** What the decoder reports, said for this page; its own words go to the box's log. Viewer log: ev 17 decoder
  *  (1 H.265 failed, auto went back to H.264; 2 H.265 failed, picked by hand; 3 no VideoDecoder; 4 not a secure page;
  *  5 a frame failed to decode). */
@@ -137,16 +127,16 @@ function decoderError(message: string) {
   if (!message) return;
   if (message.includes('H.265/HEVC')) {
     // This browser said it decodes H.265 but cannot: auto goes back to H.264 for good (on this browser); a codec
-    // picked by hand stays as picked, and the alert leads to it.
+    // picked by hand stays as picked, and the capsule stays until it is changed, a tap on it going there.
     saveFlag('f50-hevc-failed', '1'); lastAutoTarget = ''; urgentChange = 'codec'; scheduleAuto();
     if (el<HTMLSelectElement>('codec').value === 'h265') {
-      lifeEvent(17, { decoder: 2 }); problem(t('hevcTitle'), t('hevcManual'), () => openSetting('display', 'codec'));
+      lifeEvent(17, { decoder: 2 }); stay(t('hevcManual'), () => openSetting('display', 'codec'));
     } else { lifeEvent(17, { decoder: 1 }); toast(t('hevcAuto')); }
     return;
   }
   if (message.startsWith('VideoDecoder is not available')) {
     lifeEvent(17, { decoder: isSecureContext ? 3 : 4 });
-    if (isSecureContext) problem(t('unsupportedTitle'), t('unsupported')); else problem(t('insecureTitle'), t('insecure'));
+    stay(t(isSecureContext ? 'unsupported' : 'insecure'));
     return;
   }
   lifeEvent(17, { decoder: 5 }); toast(t('decodeFail'));
@@ -189,7 +179,7 @@ const compatDisplay = compatDisplayOn(readFlag('f50-compat-display'), navigator.
 const video = new VideoPlayer(canvas, decoderError, () => {
   if (!active) return;
   if (!shownOnce) { startup.mark('firstFrameMs'); connection.send({type:'stats', stats:{ev:16,...startupStats()}}); }
-  frames++; reportFrames++; hudFrames++; painted = true; shownOnce = true; el('overlay').hidden = true; el('app').dataset.live = 'true';
+  frames++; reportFrames++; hudFrames++; if (!painted) unstay(); painted = true; shownOnce = true; el('overlay').hidden = true; el('app').dataset.live = 'true';
   if (holding) { holding = false; hideRecovering(); fit(); }
   if (wokeAt) { lifeEvent(14, { pictureMs: Math.round(performance.now() - wokeAt) }); wokeAt = 0; }
   const now = performance.now();
@@ -383,11 +373,6 @@ async function toggleFullscreen() {
 }
 el('fullscreen').onclick = () => { void toggleFullscreen(); };
 el('welcome-fullscreen').onclick = () => { void toggleFullscreen(); };
-let toastTimer = 0;
-function toast(message: string) {
-  el('toast').textContent = message; el('toast').hidden = false;
-  window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => { el('toast').hidden = true; }, 6000);
-}
 /** The box's display as it is now: another page may have changed it (it sent back that page's fps, 2026-10-16). */
 async function fetchDisplay(): Promise<Display | null> {
   try { const { ok, body } = await askBox<Display>('/api/display', { cache: 'no-store' }, READ_MS); return ok ? body : null; }
@@ -404,7 +389,7 @@ let statusTimer = 0;
 function setDisplayStatus(key: Key | null) {
   const status = el('display-status');
   window.clearTimeout(statusTimer);
-  if (!key) { delete status.dataset.i18n; status.textContent = ''; return; }   // quiet (what went wrong is an alert)
+  if (!key) { delete status.dataset.i18n; status.textContent = ''; return; }   // quiet (what went wrong is a capsule)
   status.dataset.i18n = key; status.textContent = t(key);
   // "Saved, reconnecting" has said its piece once CarPlay is back (about 5 s): the footer goes quiet again, as in iOS.
   if (key === 'applied') statusTimer = window.setTimeout(() => {
@@ -452,9 +437,9 @@ async function saveDisplay(target: Display, how: { defer?: boolean; reason: stri
     display = { ...target, pending: false }; setDisplayStatus('applied'); return true;
   } catch {
     if (restart) { endExpectRestart(); fit(); }
-    // A change made by hand that did not take is an alert, as on the box page (1.6.0: 「应用失败，请重试。」 in the
-    // group's footer); one the page made by itself keeps its pill (the caller's) and says it in the footer.
-    if (how.reason === 'manual') { setDisplayStatus(null); problem(t('applyFail'), t('applyFailHint')); } else setDisplayStatus('applyFail');
+    // A change made by hand that did not take is a capsule (1.6.2; an alert in 1.6.0-1.6.1, a line in the group's
+    // footer before); one the page made by itself keeps its own capsule (the caller's) and says it in the footer.
+    if (how.reason === 'manual') { setDisplayStatus(null); toast(t('applyFail')); } else setDisplayStatus('applyFail');
     return false;
   }
   finally { displayBusy=false; el<HTMLButtonElement>('apply').disabled=false; el<HTMLFieldSetElement>('display-fields').disabled=false;
@@ -498,7 +483,7 @@ function autoTarget() {
   return performanceOn() ? suggestedResolution(width,height,max) : windowResolution(width,height,max);
 }
 el<HTMLSelectElement>('codec').value = readFlag('f50-codec') || 'auto';
-el<HTMLSelectElement>('codec').onchange=() => { saveFlag('f50-codec', el<HTMLSelectElement>('codec').value); lastAutoTarget=''; urgentChange='manual'; scheduleAuto(); };
+el<HTMLSelectElement>('codec').onchange=() => { unstay(); saveFlag('f50-codec', el<HTMLSelectElement>('codec').value); lastAutoTarget=''; urgentChange='manual'; scheduleAuto(); };
 performanceMode.onchange=() => { saveFlag('f50-performance-mode',performanceMode.checked?'1':'0'); lastAutoTarget=''; urgentChange='manual'; scheduleAuto(); };
 el<HTMLFormElement>('display-form').onsubmit=event => {
   event.preventDefault();
@@ -635,7 +620,7 @@ function datumInUse(): string {
 const locationFeed = new LocationFeed(fix => {
   lastFix = fix; hudFixes++; showDatumChoices();
   send({ type: 'location', location: zone ? { ...fix, zone } : fix });
-}, navigator.geolocation, () => !document.hidden, () => locationNote('locationDenied'));
+}, navigator.geolocation, () => !document.hidden, () => toast(t('locationDenied')));
 let locationTimer = 0;
 /** What a location change came to (1.6.0): under the 导航 group while the panel is open, as the picture settings say
  *  theirs under 画质 (it was a capsule across the top of the panel); a toast over the picture otherwise (the browser
@@ -676,15 +661,16 @@ async function setLocation(on: boolean, datum: string, picked = false) {
   try {
     if (on && !was.on) {
       const permission = await askLocation(navigator.geolocation);
-      // What the tap could not do is an alert, as for 「应用」 (after 1.6.0: a line under the group, and the switch went back)
-      if (permission !== 'granted') { applyLocation(false, was.datum); problem(t('locationOnFail'), t(permission === 'denied' ? 'locationDenied' : 'locationUnavailable')); return; }
+      // What the tap could not do is a capsule, as for 「应用」 (1.6.2; an alert in 1.6.1, a line under the group before);
+      // the switch goes back.
+      if (permission !== 'granted') { applyLocation(false, was.datum); toast(t(permission === 'denied' ? 'locationOnDenied' : 'locationOnUnavailable')); return; }
     }
     const { ok, body } = await askBox<{ ok?: boolean; restarting?: boolean }>(`/api/location?token=${encodeURIComponent(token)}`,
       { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(picked ? { enabled: on, datum } : { enabled: on }) }, WRITE_MS);
     if (!ok || !body?.ok) throw new Error();
     applyLocation(on, datum);
     if (body.restarting) locationNote('locationReconnecting');
-  } catch { applyLocation(was.on, was.datum); problem(t('locationFail'), t('applyFailHint')); }
+  } catch { applyLocation(was.on, was.datum); toast(t('locationFail')); }
   finally { locationBusy = false; locationSwitch.disabled = false; }
 }
 locationSwitch.onchange = () => { void setLocation(locationSwitch.checked, datumSelect.value); };

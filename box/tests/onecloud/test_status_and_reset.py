@@ -169,10 +169,11 @@ class PageBannerTests(unittest.TestCase):
         self.assertNotIn("<p class=foot>", self.page.render(""))
         self.page.pairing.stop = lambda: None
         self.assertEqual(self.page.apply("/pair", {"nonce": nonce, "action": "cancel"}), "")
-        # What an action could not do is an alert over the page (1.6.0: a red banner at the top)
-        html = self.page.render(urllib.parse.urlencode({"m": "错误：页面已过期：请再试一次。", "at": "phones"}))
+        # What an action could not do is a capsule at the page's foot (1.6.2; an alert in 1.6.0-1.6.1, a red banner
+        # at the top before)
+        html = self.page.render(urllib.parse.urlencode({"m": "错误：页面已过期，请再试一次。", "at": "phones"}))
         self.assertNotIn('class="banner', html)
-        self.assertIn('<h2 id=alert-title tabindex=-1>页面已过期</h2><p id=alert-line>请再试一次。</p><a class=ok href="/">好</a>', html)
+        self.assertIn('<p class=capsule role=status>页面已过期，请再试一次</p>', html)
 
     def test_rows_carry_icons_and_no_lines_under_links(self):
         html = self.page.render("")
@@ -273,47 +274,46 @@ class PageBannerTests(unittest.TestCase):
         self.assertEqual(settings_page.BLUETOOTH_TEXT["hci-lost"][1], "正在重新启动蓝牙，也可以重启盒子。",
                          "where the box restarts Bluetooth by itself it says so, not only 「请重启盒子」")
 
-    def test_what_an_action_could_not_do_is_an_alert(self):
-        """1.6.0: Apple's alert over the page (title, line, 「好」), not a red notice at the top: on the 高级 category
-        the notice was out of sight above the category's own rows. It works without JS: 「好」 is a link."""
+    def test_what_an_action_could_not_do_is_a_capsule(self):
+        """1.6.2 (owner's call): one sentence in a capsule at the page's foot, gone by itself after 6 s, as on the
+        CarPlay page - by CSS, so without JS too. 1.6.0-1.6.1 had Apple's alert with 「好」; before, a red notice at
+        the top, out of sight on the 高级 category."""
         import settings_ui as ui
-        self.page.pairing.presence = lambda: {"active": "02:00:00:00:00:01"}
-        nonce = self.page.pairing.nonce
         import pairing_window
         with patch.object(pairing_window, "read_json", return_value={"active": "02:00:00:00:00:01"}):
-            with self.assertRaisesRegex(ValueError, "^无法添加 iPhone：CarPlay 正在使用中，请先断开。$"):
+            with self.assertRaisesRegex(ValueError, "^CarPlay 正在使用中，请先断开再添加 iPhone。$"):
                 pairing_window.PairingWindow.start(self.page.pairing)
-        html = self.page.render(urllib.parse.urlencode({"m": "错误：无法添加 iPhone：CarPlay 正在使用中，请先断开。"}))
-        self.assertIn('<div class=scrim><div class=alert role=alertdialog aria-modal=true aria-labelledby=alert-title '
-                      'aria-describedby=alert-line><h2 id=alert-title tabindex=-1>无法添加 iPhone</h2>'
-                      '<p id=alert-line>CarPlay 正在使用中，请先断开。</p><a class=ok href="/">好</a></div></div>', html)
+        html = self.page.render(urllib.parse.urlencode({"m": "错误：CarPlay 正在使用中，请先断开再添加 iPhone。"}))
+        self.assertIn("<p class=capsule role=status>CarPlay 正在使用中，请先断开再添加 iPhone</p>", html)
         self.assertNotIn('class="banner bad"', html)
-        self.assertLess(html.index("<div class=scrim>"), html.index(ui.SCRIPT), "the script finds the alert")
-        # a result is no alert, and an alert with no line has no description
-        self.assertNotIn("class=scrim", self.page.render(urllib.parse.urlencode({"m": "已拒绝此次配对。", "at": "phones"})))
-        self.assertIn("<h2 id=alert-title tabindex=-1>此 iPhone 已不在列表中</h2><a class=ok",
-                      self.page.render(urllib.parse.urlencode({"m": "错误：此 iPhone 已不在列表中"})))
-        # the pairing screen reloads itself every 3 s, but not under an alert (it would flash); 「好」 loads it afresh
+        self.assertNotIn("scrim", html); self.assertNotIn("alertdialog", html)
+        self.assertLess(html.index("<p class=capsule"), html.index(ui.SCRIPT), "the script finds the capsule")
+        # a result is no capsule
+        self.assertNotIn("class=capsule", self.page.render(urllib.parse.urlencode({"m": "已拒绝此次配对。", "at": "phones"})))
+        # a page that reloads itself waits for the capsule (6 s) and does it by script, at the address without the
+        # message; a refresh tag would bring the message back
         self.page.pairing.status = lambda: {"phase": "waiting", "found": []}
-        html = self.page.render(urllib.parse.urlencode({"m": "错误：配对请求已变化：请重新核对配对码。"}))
+        html = self.page.render(urllib.parse.urlencode({"m": "错误：配对请求已变化，请重新核对配对码。"}))
         self.assertIn("<h1>添加 iPhone</h1>", html)
-        self.assertIn("<h2 id=alert-title tabindex=-1>配对请求已变化</h2>", html)
+        self.assertIn("<p class=capsule role=status>配对请求已变化，请重新核对配对码</p>", html)
         self.assertNotIn("http-equiv=refresh", html)
-        self.assertNotIn("http-equiv=refresh", ui.page("x", "", True, alert=ui.alert("错误：a：b", "/")))
-        self.assertIn("http-equiv=refresh", ui.page("x", "", True))
-        # the reset's error over the reset page, 「好」 back to it
-        html = self.page.render_reset(urllib.parse.urlencode({"m": "错误：确认词不正确：请输入「重置」。"}))
-        self.assertIn("<h2 id=alert-title tabindex=-1>确认词不正确</h2><p id=alert-line>请输入「重置」。</p>"
-                      '<a class=ok href="/reset">好</a>', html)
-        self.assertNotIn("class=scrim", self.page.render_reset(""))
-        # the script: the title takes the focus (no ring on 好), 「好」 keeps the category, Escape is 「好」
-        for part in ('var t=document.getElementById("alert-title");t.focus();addEventListener("load"', 'ok.href=ok.getAttribute("href").split("#")[0]+location.hash',
-                     'if(e.key==="Escape")ok.click()',
-                     # a page opened at a category starts at the top, where the notices are (a reload keeps its place)
-                     'if(location.hash&&(!n||n.type==="navigate"))setTimeout(function(){scrollTo(0,0)},0)'):
-            self.assertIn(part, ui.SCRIPT)
-        for rule in (".scrim{position:fixed;inset:0;", ".alert .ok{", "--raised:#2C2C2E", "--raised:#FFF", ".alert h2:focus{outline:none}"):
+        self.assertIn("<script>setTimeout(function(){location.reload()},6500)</script>", html)
+        self.assertIn("http-equiv=refresh content=3", ui.page("x", "", True))
+        self.assertNotIn("location.reload", ui.page("x", "", False, capsule=ui.capsule("错误：a，b")))
+        # the reset's capsule is on the reset page
+        html = self.page.render_reset(urllib.parse.urlencode({"m": "错误：确认词不正确，请输入「重置」。"}))
+        self.assertIn("<p class=capsule role=status>确认词不正确，请输入「重置」</p>", html)
+        self.assertNotIn("class=capsule", self.page.render_reset(""))
+        # the script takes the message out of the address; the capsule rises, and fades after 6 s
+        self.assertIn('if(document.querySelector(".capsule")){var q=location.search.replace(/([?&])(m|at)=[^&]*&?/g,"$1").replace(/[?&]$/,"");', ui.SCRIPT)
+        self.assertIn("history.replaceState(null,\"\",location.pathname+q+location.hash)", ui.SCRIPT)
+        self.assertIn('if(location.hash&&(!n||n.type==="navigate"))setTimeout(function(){scrollTo(0,0)},0)', ui.SCRIPT)
+        for rule in (".capsule{position:fixed;left:50%;bottom:", "animation:rise .3s cubic-bezier(.2,.8,.2,1),fade .3s 6s forwards}",
+                     "@keyframes fade{to{opacity:0;visibility:hidden}}", ".capsule{animation:fade 0s 6s forwards}",
+                     "background:rgba(20,20,22,.88);border:1px solid rgba(255,255,255,.28);"):
             self.assertIn(rule, ui.CSS)
+        for gone in (".scrim", ".alert{", ".alert ", "--raised", "alert-title"):
+            self.assertNotIn(gone, ui.CSS + ui.SCRIPT)
 
     def test_the_page_demands_the_typed_words(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -321,7 +321,7 @@ class PageBannerTests(unittest.TestCase):
             changes = []
             page = SettingsPage(root / "state", lambda: {"mode": "openwrt", "home": "http://x/"}, changes.append, lambda: [], root=root)
             nonce = page.pairing.nonce
-            with self.assertRaisesRegex(ValueError, "^确认词不正确：请输入「重置」。$"):
+            with self.assertRaisesRegex(ValueError, "^确认词不正确，请输入「重置」。$"):
                 page.apply("/reset", {"nonce": nonce, "confirm": "yes"})
             (root / "state/receiver").mkdir(); (root / "state/receiver/browser-token").write_text("t")
             page.uci = lambda *a, **k: None

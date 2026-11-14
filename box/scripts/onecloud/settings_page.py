@@ -262,7 +262,7 @@ class SettingsPage:
 
     def check_nonce(self, form):
         if not secrets.compare_digest(form.get("nonce", ""), self.pairing.nonce):
-            raise ValueError("页面已过期：请再试一次。")
+            raise ValueError("页面已过期，请再试一次。")
 
     def apply(self, path, form):
         if path == "/pair":
@@ -292,7 +292,7 @@ class SettingsPage:
             if action in ("yes", "no"):
                 self.pairing.confirm(form.get("request_id", ""), action == "yes")
                 return "" if action == "yes" else {"m": "已拒绝此次配对。", "at": "phones"}
-            raise ValueError("无法完成此操作：请再试一次。")
+            raise ValueError("无法完成此操作，请再试一次。")
         if path == "/update":
             self.check_nonce(form)
             if form.get("action") == "check":
@@ -304,24 +304,25 @@ class SettingsPage:
                 # back by itself when the new version does not start - as iOS starts on 「立即更新」.
                 message = update.launch(self.state.parent)
                 # Started (or running already): the group shows the upgrade running. Refused (CarPlay in use) or failed
-                # to start: an alert, as every action that could not be done (1.6.0: a line in the group).
+                # to start: a capsule, as every action that could not be done (1.6.2; an alert in 1.6.0-1.6.1, a line in
+                # the group before).
                 if message.startswith(("已开始升级", "正在升级")):
                     return ""
                 # What the update service said when it would not start is the group's 「上次升级未完成」 row and the
-                # update's state file; the alert says what to do.
-                raise ValueError("无法启动升级：请稍后再试。" if message.startswith("无法启动升级") else message)
-            raise ValueError("无法完成此操作：请再试一次。")
+                # update's state file; the capsule says what to do.
+                raise ValueError("无法启动升级，请稍后再试。" if message.startswith("无法启动升级") else message)
+            raise ValueError("无法完成此操作，请再试一次。")
         if path == "/reset":
             self.check_nonce(form)
             return self.reset(form)
-        raise ValueError("无法在此设置网络：请在 OpenWrt 后台设置。")
+        raise ValueError("网络请在 OpenWrt 后台设置。")
 
     def reset(self, form):
         """Factory reset (reliability_audit #24): the typed word confirms; the identity needs its own words."""
         if form.get("confirm", "").strip() != factory_reset.RESET_CONFIRMATION:
-            raise ValueError(f"确认词不正确：请输入「{factory_reset.RESET_CONFIRMATION}」。")
+            raise ValueError(f"确认词不正确，请输入「{factory_reset.RESET_CONFIRMATION}」。")
         if self.pairing.presence().get("active"):
-            raise ValueError("无法恢复出厂设置：CarPlay 正在使用中，请先断开。")
+            raise ValueError("CarPlay 正在使用中，请先断开再恢复出厂设置。")
         identity = form.get("identity", "").strip() == factory_reset.IDENTITY_CONFIRMATION
         self.pairing.stop()
         try:
@@ -617,25 +618,26 @@ class SettingsPage:
         params = urllib.parse.parse_qs(query)
         message, at = params.get("m", [""])[0], params.get("at", [""])[0]
         # An action's result is said in its own group (at=phones); a result with no place of its own (the factory
-        # reset) is a notice at the top; what an action could not do is an alert over the page (1.6.0: a red notice
+        # reset) is a notice at the top; what an action could not do is a capsule at the page's foot (1.6.2; Apple's
+        # alert in 1.6.0-1.6.1, before that a red notice
         # at the top, whose 「蓝牙未启动：」-style prefix said again what the line said).
         placed = at in ("phones", "update") and not message.startswith("错误：")
         notice = ("" if placed else ui.flash(message)) + self.notices()
-        alert = ui.alert(message, "/")
+        capsule = ui.capsule(message)
         nonce = self.pairing.nonce
         ask = params.get("ask", [""])[0]
         if ask:
             screen = self.confirm_screen(ask, params, nonce)
             if screen:
                 title, back, body = screen
-                return ui.page(title, ui.flow(notice + body), done=("取消", back), alert=alert)
+                return ui.page(title, ui.flow(notice + body), done=("取消", back), capsule=capsule)
         status = self.status()
         block, connecting, devices, pairing = self.phones_block(nonce, message if placed and at == "phones" else "")
         if pairing:
             # Pairing in progress (1.2.0): the passkey and its buttons are the whole page. In the Tesla's windowed
             # browser (773x601 CSS px) they sat below the Wi-Fi group, off the screen. No categories and no chain
             # here: the panel says itself what is happening. Its title is the task, 取消 in the bar (1.6.0).
-            return ui.page("添加 iPhone", ui.flow(notice + block), True, done=ui.pair_cancel(nonce), alert=alert)
+            return ui.page("添加 iPhone", ui.flow(notice + block), True, done=ui.pair_cancel(nonce), capsule=capsule)
         presence = self.pairing.presence()
         phase = self.pairing.status().get("phase", "closed")
         entries = self.entries(status, host)
@@ -666,7 +668,7 @@ class SettingsPage:
         # The bar's button is this page's way out, as 完成 is the panel's: back to where the visit began on the
         # CarPlay page (settings_ui.page), at the address this browser knows it by.
         return ui.page(TITLE, ui.alerts(notice) + ui.layout(panes, marked), refresh, out=entries[0] if entries else None,
-                       alert=alert)
+                       capsule=capsule)
 
     def render_reset(self, query=""):
         """The factory-reset page: what goes, two typed confirmations (no JS confirm() to bypass). 1.6.0: names only,
@@ -683,8 +685,8 @@ class SettingsPage:
                            f'<input type=text name=identity autocomplete=off autocapitalize=off placeholder="输入「{factory_reset.IDENTITY_CONFIRMATION}」"></label>')
                 + ui.group("", '<button class="cell destructive">恢复出厂设置</button>')
                 + '</form>')
-        message = urllib.parse.parse_qs(query).get("m", [""])[0]   # what the reset could not do, as an alert (1.6.0)
-        return ui.page("恢复出厂设置", ui.flow(body), done=("取消", "/#more"), alert=ui.alert(message, "/reset"))
+        message = urllib.parse.parse_qs(query).get("m", [""])[0]   # what the reset could not do, as a capsule (1.6.2)
+        return ui.page("恢复出厂设置", ui.flow(body), done=("取消", "/#more"), capsule=ui.capsule(message))
 
     @staticmethod
     def render_refused():

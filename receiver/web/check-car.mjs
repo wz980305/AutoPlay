@@ -462,25 +462,32 @@ console.log('Compatible display: automatic below Chrome 120, neither low-latency
   assert.match(html,/<dialog id="picker" class="picker"><div id="picker-options" class="options" role="listbox"><\/div><\/dialog>/);
   assert.match(css,/\.select-row \.chev::before, \.select-row \.chev::after/);assert.match(css,/dialog\.picker::backdrop \{ background:transparent; \}/);
 }
-{ // 1.6.0: what the driver must act on is an alert (a title, one line, 好 / 前往设置); what the page handled by itself
-  // is a one-line pill; no text the page shows carries an aside in brackets or middle dots between its phrases
+{ // 1.6.2: every notice is a capsule (owner's call; 1.6.0-1.6.1 had Apple's alert for problems that leave no
+  // picture and for taps that did not take); no text the page shows carries an aside in brackets or middle dots
   const html=readFileSync(new URL('./index.html',import.meta.url),'utf8'),i18n=readFileSync(new URL('./src/i18n.ts',import.meta.url),'utf8');
-  const bc=readFileSync(new URL('./public/browser-check.js',import.meta.url),'utf8');
-  assert.match(html,/<dialog id="alert" class="alert" role="alertdialog"[^>]*><h2 id="alert-title" tabindex="-1" autofocus><\/h2><p id="alert-message"><\/p><div class="alert-buttons"><button id="alert-ok"[^>]*data-i18n="ok"><\/button><button id="alert-action" class="prominent"[^>]*data-i18n="goToSetting" hidden><\/button><\/div><\/dialog>/);
+  const bc=readFileSync(new URL('./public/browser-check.js',import.meta.url),'utf8'),css=readFileSync(new URL('./src/style.css',import.meta.url),'utf8');
+  const main=readFileSync(new URL('./src/main.ts',import.meta.url),'utf8');
+  assert.match(html,/<div id="toast" class="capsule" role="status" hidden><\/div>/);
+  assert.doesNotMatch(html+css+main,/id="alert"|dialog\.alert|alertdialog|problem\(|alert-ok/);
   assert.doesNotMatch(html,/error-banner|详细信息/);
   const shown=[...i18n.matchAll(/\['([^']*)', (?:'[^']*'|"[^"]*")\]/g)].map(m=>m[1]).concat([...bc.split('var T={')[1].split('};')[0].matchAll(/:\['([^']*)'/g)].map(m=>m[1]));
   assert(shown.length>80,'the texts were found');
   for(const text of shown){assert.doesNotMatch(text,/[（）]/,text);assert.doesNotMatch(text,/ · /,text);}
-  // a change made by hand that did not take is an alert too (it was 「应用失败，请重试。」 in the footer); one the page made
-  // by itself keeps the pill and the footer
-  const main=readFileSync(new URL('./src/main.ts',import.meta.url),'utf8');
-  assert.match(main,/if \(how\.reason === 'manual'\) \{ setDisplayStatus\(null\); problem\(t\('applyFail'\), t\('applyFailHint'\)\); \} else setDisplayStatus\('applyFail'\);/);
+  // no picture until something changes: a capsule that stays; H.265 picked by hand leads to the codec row, and goes when
+  // the codec changes or a picture comes
+  assert.match(main,/stay\(t\('hevcManual'\), \(\) => openSetting\('display', 'codec'\)\)/);
+  assert.match(main,/stay\(t\(isSecureContext \? 'unsupported' : 'insecure'\)\)/);
+  assert.match(main,/codec'\)\.onchange=\(\) => \{ unstay\(\);/);assert.match(main,/if \(!painted\) unstay\(\);/);
+  assert.match(css,/#toast\.tap \{ pointer-events:auto;/);
+  // a tap that did not take: a passing capsule, one sentence (what happened, what was left as it was)
+  assert.match(main,/if \(how\.reason === 'manual'\) \{ setDisplayStatus\(null\); toast\(t\('applyFail'\)\); \} else setDisplayStatus\('applyFail'\);/);
   assert.match(main,/if \(urgent !== 'manual'\) toast\(t\('autoFail'\)\)/);
-  // the location switch too: what the tap could not do is an alert (a line under the group until 1.6.0); a refusal
-  // that comes later, while the feed runs, stays a line or the pill
-  assert.match(main,/problem\(t\('locationOnFail'\), t\(permission === 'denied' \? 'locationDenied' : 'locationUnavailable'\)\)/);
-  assert.match(main,/catch \{ applyLocation\(was\.on, was\.datum\); problem\(t\('locationFail'\), t\('applyFailHint'\)\); \}/);
-  assert.match(main,/\(\) => locationNote\('locationDenied'\)\);/);
+  assert.match(main,/toast\(t\(permission === 'denied' \? 'locationOnDenied' : 'locationOnUnavailable'\)\)/);
+  assert.match(main,/catch \{ applyLocation\(was\.on, was\.datum\); toast\(t\('locationFail'\)\); \}/);
+  assert.match(main,/\(\) => toast\(t\('locationDenied'\)\)\);/);
+  for (const [key, zh] of [['applyFail','无法连接盒子，设置未应用'],['locationFail','无法连接盒子，车辆定位未更改'],['locationOnDenied','车机浏览器未允许使用位置，车辆定位未开启'],
+      ['hevcManual','此车机不支持 H.265 解码，请将视频编码改为「自动」'],['unsupported','此浏览器不支持视频解码，请更新车辆软件']])
+    assert.match(i18n,new RegExp(`${key}: \\['${zh}'`),key);
   assert.doesNotMatch(main,/（自动）/);
   // 1.6.1: the panel is 「AutoPlay」 and the box page 「AutoPlay 设置」; the row that opens the panel shows the AutoPlay icon
   // itself (as iOS's Settings shows an app's icon), so it is not mistaken for the box page's row
@@ -488,7 +495,28 @@ console.log('Compatible display: automatic below Chrome 120, neither low-latency
   assert.match(i18n,/boxLink: \['AutoPlay 设置', 'AutoPlay settings'\]/);
   assert.match(html,/<button id="btn-settings"[^>]*><span class="tile app"><svg aria-hidden="true" viewBox="0 0 1024 1024">/);
   assert.doesNotMatch(i18n+html,/AutoPlay 盒子|AutoPlay box/);
-  assert.match(i18n,/applyFail: \['无法应用设置', 'Couldn’t Apply Settings'\], applyFailHint: \['请检查与盒子的连接，再试一次。'/);
+}
+{ // 1.6.2: the capsule (capsule.ts) - a passing one goes after 6 s; a staying one stays; a passing one shows over it and
+  // gives it back; only a staying one with a fix is a button, and a tap on it runs the fix
+  const {capsule,TOAST_MS}=await load('capsule');
+  const handlers={},attrs={},classes=new Set();
+  const pill={textContent:'',hidden:true,tabIndex:-1,classList:{toggle:(c,on)=>on?classes.add(c):classes.delete(c)},
+    setAttribute:(k,v)=>{attrs[k]=v},removeAttribute:k=>{delete attrs[k]},addEventListener:(k,f)=>{handlers[k]=f}};
+  let pending=null,now=0;const timers={set:(fn,ms)=>{pending={fn,at:now+ms};return 1},clear:()=>{pending=null}};
+  const run=ms=>{now+=ms;if(pending&&pending.at<=now){const f=pending.fn;pending=null;f();}};
+  const n=capsule(pill,timers);
+  assert.equal(TOAST_MS,6000);
+  n.toast('已改为 30 帧');assert.equal(pill.hidden,false);assert.equal(attrs.role,'status');assert(!classes.has('tap'));
+  run(5999);assert.equal(pill.hidden,false,'still there before 6 s');run(1);assert.equal(pill.hidden,true,'gone after 6 s');
+  let went=0;n.stay('此车机不支持 H.265 解码，请将视频编码改为「自动」',()=>went++);
+  assert.equal(attrs.role,'button');assert(classes.has('tap'));assert.equal(pill.tabIndex,0);
+  run(60000);assert.equal(pill.hidden,false,'a staying capsule stays');
+  handlers.click();assert.equal(went,1,'a tap goes to the fix');
+  n.toast('画面解码出错，正在重新获取');assert.equal(pill.textContent,'画面解码出错，正在重新获取');assert.equal(attrs.role,'status');
+  handlers.click();assert.equal(went,1,'a passing capsule over it is no button');
+  run(6000);assert.equal(pill.textContent,'此车机不支持 H.265 解码，请将视频编码改为「自动」','the staying one comes back');assert.equal(attrs.role,'button');
+  n.unstay();assert.equal(pill.hidden,true,'gone once the codec changes or a picture comes');
+  n.stay('不是安全连接，请用盒子的 https:// 地址打开本页');assert.equal(attrs.role,'status','no fix here: not a button');assert(!classes.has('tap'));
 }
 { // 1.6.0: until a language is chosen, the car browser's own (Apple: detect what can be detected); it was zh for all
   const {defaultLanguage}=await load('i18n');

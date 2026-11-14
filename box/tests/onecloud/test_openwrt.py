@@ -500,7 +500,7 @@ class ManagedPageTests(unittest.TestCase):
     def test_update_actions_need_the_page_and_start_apart(self):
         import update
         nonce = self.page.pairing.nonce
-        with self.assertRaisesRegex(ValueError, "^页面已过期：请再试一次。$"):
+        with self.assertRaisesRegex(ValueError, "^页面已过期，请再试一次。$"):
             self.page.apply("/update", {"action": "install", "nonce": "stale"})
         import threading
         release = threading.Event()
@@ -524,20 +524,21 @@ class ManagedPageTests(unittest.TestCase):
                 time.sleep(.02)
             self.assertEqual(check.call_count, 1, "one check at a time")
             self.assertNotIn("正在检查更新", self.page.render(""))
-        # Refused (CarPlay in use) or not started: an alert, as every action that could not be done (1.6.0: a line in
-        # the update group); the page under it holds still until 「好」.
-        with patch.object(update, "launch", return_value="无法升级：CarPlay 正在使用中，请停车并断开后再试。"):
-            with self.assertRaisesRegex(ValueError, "^无法升级：CarPlay 正在使用中，请停车并断开后再试。$"):
+        # Refused (CarPlay in use) or not started: a capsule, as every action that could not be done (1.6.2; an alert in
+        # 1.6.0-1.6.1, a line in the update group before); the page's reload waits for it.
+        with patch.object(update, "launch", return_value="CarPlay 正在使用中，请停车并断开后再升级。"):
+            with self.assertRaisesRegex(ValueError, "^CarPlay 正在使用中，请停车并断开后再升级。$"):
                 self.page.apply("/update", {"action": "install", "nonce": nonce})
         with patch.object(update, "launch", return_value="无法启动升级：Command failed: ubus (Permission denied)"):
-            with self.assertRaisesRegex(ValueError, "^无法启动升级：请稍后再试。$"):
+            with self.assertRaisesRegex(ValueError, "^无法启动升级，请稍后再试。$"):
                 self.page.apply("/update", {"action": "install", "nonce": nonce})
         with patch.object(update, "launch", return_value="正在升级，请稍候"):
             self.assertEqual(self.page.apply("/update", {"action": "install", "nonce": nonce}), "")
         update.save(self.state / "update-status.json", {"phase": "installing", "message": "正在安装", "at": time.time()})
-        html = self.page.render(urllib.parse.urlencode({"m": "错误：无法升级：CarPlay 正在使用中，请停车并断开后再试。"}))
-        self.assertIn('<h2 id=alert-title tabindex=-1>无法升级</h2><p id=alert-line>CarPlay 正在使用中，请停车并断开后再试。</p>', html)
-        self.assertNotIn("http-equiv=refresh", html, "an upgrade reloads the page every 3 s, but not under an alert")
+        html = self.page.render(urllib.parse.urlencode({"m": "错误：CarPlay 正在使用中，请停车并断开后再升级。"}))
+        self.assertIn('<p class=capsule role=status>CarPlay 正在使用中，请停车并断开后再升级</p>', html)
+        self.assertNotIn("http-equiv=refresh", html, "an upgrade reloads the page every 3 s, by script while a capsule shows")
+        self.assertIn("setTimeout(function(){location.reload()},6500)", html)
         self.assertNotIn('class="banner', html)
         update.save(self.state / "update-status.json", {})
         update.save(self.state / "update-status.json", {"phase": "installing", "message": "正在安装", "at": time.time()})
