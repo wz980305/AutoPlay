@@ -2,14 +2,15 @@
 
 格式参考 Keep a Changelog；版本号从 0.1.0 起，1.0 之前不承诺兼容性。每节第一段是盒子「程序更新」里显示的摘要（最多四行），写短。
 
-## [Unreleased]
+## [1.6.3] — 2026-11-14 — mu300-linux 25.12.6 上蓝牙起不来的修正
 
-修正：mu300-linux 25.12.6 上蓝牙一直「未启动」。盒子改为直接通过 D-Bus 给蓝牙上电，不再调用 bluetoothctl。
+修正：mu300-linux 25.12.6 上盒子一直显示「蓝牙未上电」，iPhone 连不上。盒子改为直接请蓝牙服务上电，不再用在这个系统上会崩溃的 bluetoothctl。
 
 - 在 F50 上从 1.5.3 升到 1.6.2 时发现（2026-11-14）：mu300-linux 升到 25.12.6 后，私有 BlueZ 的 `bluetoothctl` 一启动就崩溃（`Error relocating: g_list_delete_link: symbol not found`），`bluetoothd` 本身照常运行；守护用 `bluetoothctl power on` 上电，于是状态停在 `adapter-not-powered`，重新 `board_zte_f50.py --setup` 也没用。现在 `platform_openwrt.power_adapter` 用蓝牙桥自带的 dbus-next 直接对 `org.bluez.Adapter1` 做 `bluetoothctl` 原来做的事：上电、清掉上次留下的手机连接（关再开一次）、设名字 AutoPlay（和以前一样尽力而为，`bluez.conf` 的 `Name=AutoPlay` 兜底）、读回 Powered。配对和蓝牙桥本来就是这样连 BlueZ 的。
 - 车上那台曾在盒子上临时把上电改成 `hciconfig hci0 up`；装上这一版会覆盖那处改动，留下的 `platform_openwrt.py.bak-btfix` 可以删掉。
 - 板子脚本不再要求 `bluetoothctl` 存在；有的话仍在 `/var/run/autoplay/bin` 放一个包装，只供 SSH 排查用。
 - 测试：`box/tests/bluetooth/test_power.py`（8 个，私有 dbus-daemon 上的模拟 BlueZ：上电并命名、遗留连接只关开一次、别的适配器上的连接不动、拒绝上电为 False、名字被拒仍算上电、还没有适配器、总线上没有 BlueZ、守护的入口在自己的线程里走完一遍）；`test_platform_openwrt` 的三个上电测试改为确认不再运行 `bluetoothctl`。
+- 版本：接收端、网页包、OpenWrt 包 1.6.3；LuCI 依赖 `autoplay (>=1.6.3)`；安装说明改名 `AutoPlay-1.6.3-安装使用说明.md`。从 1.6.2 在「AutoPlay 设置 → 更新」点「立即升级」即可，蓝牙起不来时也能升级；装好后蓝牙要在几分钟内上电才算升级成功，否则自动退回 1.6.2。
 
 ## [1.6.2] — 2026-11-14 — 不再弹出提示框，所有提示都是胶囊
 
