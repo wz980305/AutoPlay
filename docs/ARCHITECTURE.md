@@ -90,7 +90,7 @@ F50 不解码、不转码，只解密、重封装、再加密。每帧在 JVM �
 | `box-restarting` | 等盒子应答的轮询 | "盒子正在重启/更新，页面将自动刷新" + 已等待 | — |
 | `overheating` | 状态通道 thermal | "盒子过热，已降低画质 / 已暂停" | — |
 | `error` | `{title, action, detail}` | 标题 + 动作 ≥22px，64px 按钮，详情折叠 | 重试 / 关闭 |
-| `night`（修饰） | 「夜间模式」此刻的结果（定时 18:30–06:30 / 跟随系统 / 始终白天 / 始终夜间） | CarPlay 的深浅色随之切换（`docs/TESLA.md` §5）；1.5.0 起等待画面、设置面板和盒子设置页也分日间、夜间两套颜色（§4.3），画面四周和画面上的提示始终深色 | 设置里切换 |
+| `night`（修饰） | 「夜间模式」此刻的结果（日落到日出 / 跟随系统 / 始终白天 / 始终夜间；1.6.4 以前第一项是定时 18:30–06:30，见 ADR-23） | CarPlay 的深浅色随之切换（`docs/TESLA.md` §5）；1.5.0 起等待画面、设置面板和盒子设置页也分日间、夜间两套颜色（§4.3），画面四周和画面上的提示始终深色 | 设置里切换 |
 
 0.1.0 已实现的：`recovering`（保留画面 + 遮罩 + 常驻提示）、`renegotiating`、`live-muted`（整宽底部解锁条，只在 AudioContext 挂起且确实收到页面要播的流时显示）、`connecting-box`/`box-unreachable`/`waiting-iphone`/`starting` 的提示语由 `src/status.ts` 按状态派生（含已等待秒数、盒子失联时隐藏"添加 iPhone"）、`unsupported` 的驾驶者可读双语检测页。还没有的：`busy`、`box-restarting`、`overheating`、`paused-by-box` 的显示，以及从盒子的 `status.json` 派生 `waiting-iphone` 的原因——这是下一步（ROADMAP 第 2–3 周）。`mic-blocked` 在特斯拉专属形态下不存在（不提供麦克风）。
 
@@ -119,7 +119,7 @@ F50 不解码、不转码，只解密、重封装、再加密。每帧在 JVM �
 
 投屏页按「夜间模式」算出此刻是日间还是夜间（`receiver/web/src/night.ts` 的 `isNight`），用在三处：告诉 CarPlay（`{type:'night'}`）；给自己的界面换色（`<html data-theme>`；等待画面在脚本运行之前就画出来，所以 `index.html` 头部有几行按同一规则先定好，`check-car.mjs` 把它和 `isNight` 逐种情况对照）；写进去盒子设置页的链接。
 
-- **去**：`http://<盒子>:18080/?night=1|0&from=panel|page`（`boxPageUrl`）。盒子设置页头部的脚本把这两项记进 `sessionStorage`（一小时内有效）并从地址里去掉，据此设 `data-theme` 和 `data-from`；服务器不读这两个参数。没有它们时（手机直接打开、书签）跟随浏览器的 `prefers-color-scheme`。
+- **去**：`http://<盒子>:18080/?night=1|0&from=panel|page[&turn=<秒>]`（`boxPageUrl`）。盒子设置页头部的脚本把这几项记进 `sessionStorage`（一小时内有效；1.6.5 起「日落到日出」带 `turn`，即下一次日落或日出，有它时结果到那一刻为止、之后反过来再管 8 小时，开着的页面到那一刻自己换色）并从地址里去掉，据此设 `data-theme` 和 `data-from`；服务器不读这两个参数。没有它们时（手机直接打开、书签）跟随浏览器的 `prefers-color-scheme`。
 - **回**：有 `data-from` 时标题栏的按钮是「返回」。从设置面板来的回到 `<投屏页地址>#settings=connection`，投屏页见到这个片段就打开面板的「连接」并把片段去掉（`panelFromHash`），再点「完成」回到 CarPlay；从等待画面来的回到等待画面；直接打开的没有可退回的地方，按钮是「CarPlay 画面」。投屏页地址取这台浏览器来时用的那一个（按请求的 `Host` 在 `entries` 里选）。
 - **颜色**：两边的日间、夜间配色是同一组值，各写在自己的样式表里（`receiver/web/src/style.css`、`box/scripts/onecloud/settings_ui.py`），盒子侧有一个测试逐项比较。
 

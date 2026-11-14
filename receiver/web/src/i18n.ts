@@ -25,7 +25,7 @@ const messages = {
   teslaFullscreenOffline: ['无法连接视频网站，暂时无法开启无边框模式', 'Can’t reach the video site; borderless mode is unavailable for now'],
   apply: ['应用并重连', 'Apply and reconnect'], applyNow: ['应用', 'Apply'],
   advanced: ['画质与兼容', 'Quality and compatibility'],
-  nightMode: ['夜间模式', 'Night mode'], nightSchedule: ['定时 18:30–06:30', '18:30–06:30'], nightSystem: ['跟随系统', 'System'], nightDay: ['始终白天', 'Always day'], nightNight: ['始终夜间', 'Always night'],
+  nightMode: ['夜间模式', 'Night mode'], nightSchedule: ['日落到日出', 'Sunset to sunrise'], nightSystem: ['跟随系统', 'System'], nightDay: ['始终白天', 'Always day'], nightNight: ['始终夜间', 'Always night'],
   latency: ['解码延迟', 'Decode delay'],
   debugHud: ['显示调试信息', 'Show debug info'],
   compatDisplay: ['兼容显示', 'Compatible display'],

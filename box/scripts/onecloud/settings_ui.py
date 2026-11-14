@@ -210,14 +210,20 @@ CSS = re.sub(r"\n\s*\n+", "\n", re.sub(r"/\*.*?\*/", "", STYLE.replace("@LIGHT@"
 # answer. After an hour without a new one, or with none at all (a phone that opened the page itself), the browser's
 # own dark/light setting decides, as the style sheet has it, and the title bar's button leads forward to the CarPlay
 # picture instead of back. In the head, before anything is drawn.
+# 1.6.5: with 「日落到日出」 the link also says when that changes (turn=, epoch seconds: the next sunset or sunrise). The
+# answer then holds until that moment and the other one for 8 hours after it, and an open page turns at that moment
+# by itself, as the CarPlay picture does; without turn= the hour's rule stands.
 VISIT = ('(function(){var d=document.documentElement,q=location.search,n=Date.now(),'
-         'a=/[?&]night=([01])(?=&|$)/.exec(q),f=/[?&]from=(panel|page)(?=&|$)/.exec(q),v=a?a[1]+"|"+(f?f[1]:"")+"|"+n:null;'
+         'a=/[?&]night=([01])(?=&|$)/.exec(q),f=/[?&]from=(panel|page)(?=&|$)/.exec(q),u=/[?&]turn=(\\d{9,11})(?=&|$)/.exec(q),'
+         'v=a?a[1]+"|"+(f?f[1]:"")+"|"+n+"|"+(u?u[1]:""):null;'
          'try{if(a){sessionStorage.setItem("autoplay-visit",v);history.replaceState(null,"",location.pathname+'
-         'q.replace(/([?&])(night=[01]|from=(panel|page))(?=&|$)/g,function(m,s){return s==="?"?"?":""})'
-         '.replace(/^\\?&/,"?").replace(/^\\?$/,"")+location.hash)}'
+         'q.replace(/([?&])(night=[01]|from=(panel|page)|turn=\\d+)(?=&|$)/g,function(m,s){return s==="?"?"?":""})'
+         '.replace(/^\\?&+/,"?").replace(/&&+/g,"&").replace(/[?&]$/,"")+location.hash)}'
          'v=sessionStorage.getItem("autoplay-visit")}catch(e){}'
-         'v=v&&v.split("|");if(v&&n-v[2]<36e5){d.setAttribute("data-theme",v[0]==="1"?"dark":"light");'
-         'if(v[1])d.setAttribute("data-from",v[1])}})()')
+         'v=v&&v.split("|");if(!v)return;var night=v[0]==="1",turn=(+v[3]||0)*1e3,ok=turn?n<turn+288e5:n-v[2]<36e5;'
+         'if(turn&&n>=turn)night=!night;if(!ok)return;d.setAttribute("data-theme",night?"dark":"light");'
+         'if(v[1])d.setAttribute("data-from",v[1]);'
+         'if(turn>n&&turn-n<864e5)setTimeout(function(){d.setAttribute("data-theme",night?"light":"dark")},turn-n)})()')
 
 # Three conveniences; the page works without them. The way back is aimed (below). A row unfolded (details) near the
 # bottom of a short window would open below the fold: scroll it into view, whole when it fits, else from its title

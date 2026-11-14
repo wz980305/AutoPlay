@@ -482,6 +482,35 @@ class ManagedPageTests(unittest.TestCase):
         (self.state / "update-check.json").unlink()
         self.assertIn("<b>本机程序</b></span><span class=value>2026.10.21", self.page.render(""), "never checked")
 
+    def test_the_last_upgrade_is_shown_only_for_the_version_this_box_runs(self):
+        # Owner, 2026-11-14: 「上次升级 已升级到 1.6.3」 above 「已是最新 1.6.4」, the box having moved on since.
+        import time
+        import update
+        update.save(self.state / "update-check.json", {"checked_at": time.time(), "current": "1.6.4", "latest": "1.6.4",
+                                                       "available": False, "online": True})
+        (self.state.parent / "version.txt").write_text("1.6.4\n")
+        update.save(self.state / "update-status.json", {"phase": "done", "message": "已升级到 1.6.3", "version": "1.6.3",
+                                                        "at": time.time()})
+        html = self.page.render("")
+        self.assertNotIn("上次升级", html)
+        self.assertIn("<b>已是最新</b></span><span class=value>1.6.4</span>", html)
+        update.save(self.state / "update-status.json", {"phase": "done", "message": "已升级到 1.6.4", "version": "1.6.4",
+                                                        "at": time.time()})
+        html = self.page.render("")
+        self.assertIn("<b>上次升级</b><span>已升级到 1.6.4</span>", html)
+        self.assertIn("<b>已是最新</b></span><span class=value>1.6.4</span>", html)
+        # a run that found nothing to install wrote 「已是最新版本」 without a version: no 「上次升级」 for it
+        update.save(self.state / "update-status.json", {"phase": "done", "message": "已是最新版本 1.6.3", "at": time.time()})
+        self.assertNotIn("上次升级", self.page.render(""))
+        # a development build (no version.txt) compares with what the check found this box runs
+        (self.state.parent / "version.txt").unlink()
+        update.save(self.state / "update-status.json", {"phase": "done", "message": "已升级到 1.6.3", "version": "1.6.3",
+                                                        "at": time.time()})
+        self.assertNotIn("上次升级", self.page.render(""))
+        update.save(self.state / "update-status.json", {"phase": "done", "message": "已升级到 1.6.4", "version": "1.6.4",
+                                                        "at": time.time()})
+        self.assertIn("已升级到 1.6.4", self.page.render(""))
+
     def test_a_failed_update_is_not_shown_once_the_box_is_up_to_date(self):
         # F50, 2026-10-19: updated by hand after a failed web update, the page still said it did not finish.
         import time

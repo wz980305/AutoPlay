@@ -8,7 +8,8 @@ import { suggestedResolution, windowResolution, areaSize, sameStream, frameRateC
 import { TESLA } from './flags';
 import { statusHint } from './status';
 import { t, language, setLanguage, type Key } from './i18n';
-import { boxPageUrl, isNight, panelFromHash, parseNightMode, type BoxLinkFrom } from './night';
+import { boxPageUrl, isNight, nextTurn, panelFromHash, parseNightMode, type BoxLinkFrom } from './night';
+import { roughPlace, sunTimes, zonePlace, type Place, type SunTimes } from './sun';
 import { reachable, TESLA_HOPS } from './tesla-fullscreen';
 import { hudLines } from './debug-hud';
 import { compatDisplayOn } from './compat-display';
@@ -71,15 +72,65 @@ const nightSelect = el<HTMLSelectElement>('night-mode');
 nightSelect.value = parseNightMode(localStorage.getItem('f50-night-mode'));
 const darkQuery = matchMedia('(prefers-color-scheme: dark)');
 let sentNight: boolean | null = null;
+/** Where 「日落到日出」 reckons the sun from (1.6.5): the car's position when this browser has given one (the car
+ *  location feed, or one position asked for when the owner picks 「日落到日出」), kept rounded to 0.1°; otherwise the
+ *  main city of the browser's time zone (sun.ts); otherwise 18:30-06:30. Today's two times are kept too, for
+ *  index.html's head, which decides day or night before this bundle runs. */
+const SUN_PLACE = 'f50-sun-place', SUN_TIMES = 'f50-sun-times';
+function storedPlace(): Place | null {
+  try {
+    const kept = JSON.parse(localStorage.getItem(SUN_PLACE) ?? 'null') as Place | null;
+    return kept && Number.isFinite(kept.lat) && Number.isFinite(kept.lon) && Math.abs(kept.lat) <= 90 && Math.abs(kept.lon) <= 180 ? kept : null;
+  } catch { return null; }
+}
+let carPlace = storedPlace();
+const zoneSun = zonePlace(browserZone());
+const sunPlace = (): Place | null => carPlace ?? zoneSun;
+const sunOn = (day: Date): SunTimes | null => { const place = sunPlace(); return place ? sunTimes(day, place) : null; };
+let keptSun = '';
+function sunToday(): SunTimes | null {
+  const sun = sunOn(new Date());
+  const text = sun ? `${sun.rise},${sun.set}` : '';
+  if (text !== keptSun) { keptSun = text; try { if (sun) localStorage.setItem(SUN_TIMES, text); else localStorage.removeItem(SUN_TIMES); } catch { /* the head falls back to 18:30-06:30 */ } }
+  return sun;
+}
+/** For the box's log (numbers only): where today's sun comes from (2 the car, 1 the time zone, 0 none: 18:30-06:30)
+ *  and the two times in minutes, while 「日落到日出」 is chosen. */
+function sunStats(): Record<string, number> {
+  if (parseNightMode(nightSelect.value) !== 'schedule') return {};
+  const sun = sunToday();
+  return { sunFrom: carPlace ? 2 : zoneSun ? 1 : 0, ...(sun ? { sunRise: sun.rise, sunSet: sun.set } : {}) };
+}
+/** A position from this browser (WGS-84 as the browser gives it): kept when it moves the rounded place. */
+function rememberPlace(lat: number, lon: number) {
+  const place = roughPlace(lat, lon);
+  if (carPlace && carPlace.lat === place.lat && carPlace.lon === place.lon) return;
+  carPlace = place;
+  try { localStorage.setItem(SUN_PLACE, JSON.stringify(place)); } catch { /* used for this visit only */ }
+  syncNight(); applyTheme();
+}
+/** One position for the sun, at low accuracy (a day old will do). prompt: the owner just picked 「日落到日出」, so the
+ *  browser may ask; otherwise only where it has been allowed already (no prompt at start-up). */
+function placeForSun(prompt: boolean) {
+  const geo = navigator.geolocation;
+  if (!geo || carPlace) return;
+  const ask = () => { try { geo.getCurrentPosition(p => rememberPlace(p.coords.latitude, p.coords.longitude), () => { /* the zone's city stands in */ }, { enableHighAccuracy: false, maximumAge: 86_400_000, timeout: 20_000 }); } catch { /* none */ } };
+  if (prompt) { ask(); return; }
+  const permissions = (navigator as Navigator & { permissions?: Permissions }).permissions;
+  permissions?.query({ name: 'geolocation' as PermissionName }).then(state => { if (state.state === 'granted') ask(); }, () => {});
+}
 
 /** Box page (pairing, network, update), when the device startup announced one: same host, plain HTTP. The link
  *  carries the day/night this page asks CarPlay for, read again at the tap (a schedule may have turned since the page
  *  was drawn), so the box page shows the colours CarPlay does, and where it was tapped - the waiting screen or the
  *  settings panel - so the box page's 返回 leads back there (1.5.0). */
 const boxPort = Number((window as unknown as { playportBoxSettingsPort?: number }).playportBoxSettingsPort) || 0;
-const nightNow = () => isNight(parseNightMode(nightSelect.value), new Date(), darkQuery.matches);
+const nightNow = () => isNight(parseNightMode(nightSelect.value), new Date(), darkQuery.matches, sunToday());
 const boxLinks: [HTMLAnchorElement, BoxLinkFrom][] = boxPort ? [[el<HTMLAnchorElement>('box-link'), 'page'], [el<HTMLAnchorElement>('box-link-panel'), 'panel']] : [];
-const aimBoxLinks = () => { for (const [link, from] of boxLinks) link.href = boxPageUrl(location.hostname, boxPort, nightNow(), from); };
+const aimBoxLinks = () => {
+  const turn = nextTurn(parseNightMode(nightSelect.value), new Date(), sunOn);
+  for (const [link, from] of boxLinks) link.href = boxPageUrl(location.hostname, boxPort, nightNow(), from, turn);
+};
 for (const [link] of boxLinks) { link.addEventListener('click', aimBoxLinks); link.hidden = false; }
 /** Day or night for this page's own screens (1.5.0) - the waiting screen, the settings panel and its option sheets:
  *  the colours CarPlay is asked for, the same answer the links to the box page carry (re-aimed here too, so the two
@@ -592,7 +643,7 @@ window.setInterval(()=>{
   send({type:'stats',stats:{fps:reportFrames/seconds,decodeMs:video.decodeLatencyMs,queue:video.decodeQueueSize,
     kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,borderless:teslaBorderless()?1:0,
     width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),
-    ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,desync:video.desynchronized,build:BUILD,webView,teslaMode:TESLA?1:0,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...stalls,...lag.take(performance.now()),...locationFeed.take(),...(locationFeed.enabled?{locGcj:datumInUse()==='gcj02'?1:0,locAuto:datumSelect.value==='auto'?1:0}:{})}});
+    ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,desync:video.desynchronized,build:BUILD,webView,teslaMode:TESLA?1:0,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...stalls,...lag.take(performance.now()),...locationFeed.take(),...sunStats(),...(locationFeed.enabled?{locGcj:datumInUse()==='gcj02'?1:0,locAuto:datumSelect.value==='auto'?1:0}:{})}});
   judgeDecoder(video.decodeLatencyMs, reportFrames/seconds);
   if (active) judgeFrameRate(stalls.caughtUp);
   reportFrames=0;reportBytes=0;reportStart=now;touchSum=0;touchCount=0;
@@ -618,7 +669,7 @@ function datumInUse(): string {
   return datumSelect.value !== 'auto' ? datumSelect.value : lastFix ? autoDatum(lastFix.lat, lastFix.lon, zone) : 'wgs84';
 }
 const locationFeed = new LocationFeed(fix => {
-  lastFix = fix; hudFixes++; showDatumChoices();
+  lastFix = fix; hudFixes++; showDatumChoices(); rememberPlace(fix.lat, fix.lon);
   send({ type: 'location', location: zone ? { ...fix, zone } : fix });
 }, navigator.geolocation, () => !document.hidden, () => toast(t('locationDenied')));
 let locationTimer = 0;
@@ -697,7 +748,12 @@ if (backTo) {
   openPanel();
 }
 
-nightSelect.onchange = () => { localStorage.setItem('f50-night-mode', nightSelect.value); syncNight(); render(); };
+nightSelect.onchange = () => {
+  localStorage.setItem('f50-night-mode', nightSelect.value);
+  if (nightSelect.value === 'schedule') placeForSun(true);
+  syncNight(); render();
+};
+if (parseNightMode(nightSelect.value) === 'schedule') placeForSun(false);
 darkQuery.addEventListener('change', () => { syncNight(); render(); });
 window.setInterval(() => { syncNight(); applyTheme(); if (panel.open) render(); }, 30000);
 

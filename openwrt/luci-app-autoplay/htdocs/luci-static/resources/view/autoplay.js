@@ -217,7 +217,11 @@ return view.extend({
 					// A failure no longer matters once a later check finds the box up to date (updated by hand, say).
 					var settled = progress.phase == 'failed' && found.latest && !found.available && !found.error
 						&& found.checked_at > progress.at;
-					if ((progress.phase == 'done' || progress.phase == 'failed') && now - progress.at < 86400 && !settled)
+					// "Last update" only for the version this box runs (1.6.4, as the settings page): the version can change
+					// without a web update, and the owner saw "updated to 1.6.3" above "up to date: 1.6.4". A run that found
+					// nothing to install wrote no version and is no update.
+					var stale = progress.phase == 'done' && (!progress.version || (found.current && progress.version != found.current));
+					if ((progress.phase == 'done' || progress.phase == 'failed') && now - progress.at < 86400 && !settled && !stale)
 						items.push(line(progress.phase == 'done' ? _('Last update:') : _('Last update did not finish:'), progress.message));
 					if (found.error)
 						items.push(line(_('Checking for updates failed:'), found.error));

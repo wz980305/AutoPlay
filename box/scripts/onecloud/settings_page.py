@@ -386,7 +386,14 @@ class SettingsPage:
         # A failure no longer matters once a later check finds the box up to date (updated by hand, say).
         settled = progress.get("phase") == "failed" and found.get("latest") and not found.get("available") \
             and not found.get("error") and found.get("checked_at", 0) > progress.get("at", 0)
-        if progress.get("phase") in ("done", "failed") and time.time() - progress.get("at", 0) < 86400 and not settled:
+        # 「上次升级」 only for the version this box runs (1.6.4): the box's version can change without a web update (by
+        # hand with apk, or the system update putting the packages back), and the owner saw 「已升级到 1.6.3」 above
+        # 「已是最新 1.6.4」 (2026-11-14). A run that found nothing to install is no upgrade: 「已是最新」 says so.
+        running_version = version or found.get("current")
+        stale = progress.get("phase") == "done" and (
+            not progress.get("version") or (running_version and progress["version"] != running_version))
+        if progress.get("phase") in ("done", "failed") and time.time() - progress.get("at", 0) < 86400 and not settled \
+                and not stale:
             done = progress["phase"] == "done"
             cells += (f'<div class=cell>{ui.tile("green" if done else "orange", "check" if done else "alert")}'
                       f'<span class=main><b>{"上次升级" if done else "上次升级未完成"}</b>'

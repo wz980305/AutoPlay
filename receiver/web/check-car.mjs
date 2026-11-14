@@ -162,6 +162,50 @@ assert.equal(isNight('schedule',at(18,29),true),false);assert.equal(isNight('sch
 assert.equal(isNight('schedule',at(0,0),false),true);assert.equal(isNight('schedule',at(6,29),false),true);assert.equal(isNight('schedule',at(6,30),true),false);
 assert.equal(isNight('system',at(12,0),true),true);assert.equal(isNight('system',at(23,0),false),false);
 assert.equal(isNight('day',at(23,0),true),false);assert.equal(isNight('night',at(12,0),false),true);
+{ // 1.6.5 (owner: switch when the iPhone does): 「日落到日出」 goes by the local sunset and sunrise; 18:30-06:30 without them.
+  const {sunEvents,sunTimes,zonePlace,roughPlace}=await load('sun');const {nextTurn,boxPageUrl}=await load('night');
+  const zone=process.env.TZ;
+  const hm=(ms,tz)=>new Date(ms).toLocaleTimeString('en-GB',{timeZone:tz,hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+  const near=(got,want,label)=>{const [a,b]=[got,want].map(t=>{const [h,m]=t.split(':');return +h*60+ +m});assert.ok(Math.abs(a-b)<=3,`${label}: ${got}, published ${want}`)};
+  // Published times (timeanddate.com): the equation is within a few minutes, both hemispheres, summer and winter.
+  for(const [label,tz,lat,lon,[y,mo,d],rise,set] of [
+    ['Sydney',      'Australia/Sydney',  -33.87, 151.21,[2026,10,14],'05:44','19:35'],
+    ['Shanghai',    'Asia/Shanghai',      31.23, 121.47,[2026,10,14],'06:21','16:59'],
+    ['Beijing',     'Asia/Shanghai',      39.90, 116.40,[2026, 5,21],'04:46','19:46'],
+    ['London',      'Europe/London',      51.51,  -0.13,[2026, 5,21],'04:43','21:21'],
+    ['Sydney June', 'Australia/Sydney',  -33.87, 151.21,[2026, 5,21],'07:00','16:54'],
+    ['Los Angeles', 'America/Los_Angeles',34.05,-118.24,[2026,11,21],'06:55','16:47']]){
+    process.env.TZ=tz;const e=sunEvents(new Date(y,mo,d,12),{lat,lon});
+    near(hm(e.rise,tz),rise,`${label} sunrise`);near(hm(e.set,tz),set,`${label} sunset`);
+    const minutes=sunTimes(new Date(y,mo,d,12),{lat,lon});near(`${Math.floor(minutes.set/60)}:${minutes.set%60}`,set,`${label} sunset in minutes`);
+  }
+  process.env.TZ='Europe/Oslo';
+  assert.deepEqual(sunTimes(new Date(2026,5,21,12),{lat:69.65,lon:18.96}),{rise:0,set:1440},'midnight sun: never night');
+  assert.deepEqual(sunTimes(new Date(2026,11,21,12),{lat:69.65,lon:18.96}),{rise:1440,set:0},'polar night: never day');
+  assert.equal(isNight('schedule',new Date(2026,5,21,23,59),false,{rise:0,set:1440}),false);
+  assert.equal(isNight('schedule',new Date(2026,11,21,12,0),false,{rise:1440,set:0}),true);
+  process.env.TZ='Australia/Sydney';
+  const sun={rise:5*60+44,set:19*60+35},day=new Date(2026,10,14);
+  const on=(h,m)=>new Date(2026,10,14,h,m);
+  assert.equal(isNight('schedule',on(19,0),false,sun),false,'18:30 has passed, the sun has not set: day, as on the iPhone');
+  assert.equal(isNight('schedule',on(19,35),false,sun),true);assert.equal(isNight('schedule',on(5,43),false,sun),true);assert.equal(isNight('schedule',on(5,44),false,sun),false);
+  assert.equal(isNight('schedule',on(19,0),false,null),true,'without a sunset: 18:30-06:30 as before');
+  assert.equal(nextTurn('schedule',on(12,0),()=>sun),on(19,35).getTime(),'day: the next sunset');
+  assert.equal(nextTurn('schedule',on(21,0),()=>sun),new Date(2026,10,15,5,44).getTime(),'evening: tomorrow\'s sunrise');
+  assert.equal(nextTurn('schedule',on(3,0),()=>sun),on(5,44).getTime(),'before dawn: this morning\'s sunrise');
+  assert.equal(nextTurn('schedule',on(12,0),()=>null),on(18,30).getTime(),'no sun: 18:30');
+  assert.equal(nextTurn('schedule',on(12,0),()=>({rise:0,set:1440})),null,'midnight sun: nothing to turn at');
+  for(const mode of ['system','day','night'])assert.equal(nextTurn(mode,on(12,0),()=>sun),null,mode);
+  assert.equal(boxPageUrl('100.96.0.1',18080,false,'panel',on(19,35).getTime()),`http://100.96.0.1:18080/?night=0&from=panel&turn=${on(19,35).getTime()/1000}`);
+  assert.deepEqual(zonePlace('Australia/Sydney'),{lat:-33.9,lon:151.2});assert.deepEqual(zonePlace('Asia/Shanghai'),{lat:31.2,lon:121.5});
+  assert.equal(zonePlace('Mars/Olympus'),null);
+  assert.deepEqual(roughPlace(31.23456,121.47321),{lat:31.2,lon:121.5},'kept to 0.1°');
+  if(zone===undefined)delete process.env.TZ;else process.env.TZ=zone;
+  const main=readFileSync(new URL('./src/main.ts',import.meta.url),'utf8');
+  assert.match(main,/rememberPlace\(fix\.lat, fix\.lon\)/,'the car location feed gives the sun its place');
+  assert.match(main,/if \(nightSelect\.value === 'schedule'\) placeForSun\(true\);/,'picking 「日落到日出」 asks for a position once');
+  assert.match(main,/if \(state\.state === 'granted'\) ask\(\);/,'at start-up only where the browser allows it already: no prompt');
+}
 { // 1.5.0: the link to the box page says which colours CarPlay is showing and where it was tapped; the box page
   // takes the colours, and its 返回 leads back to the panel (#settings=connection) or to the page.
   const {boxPageUrl,panelFromHash}=await load('night');
@@ -200,12 +244,15 @@ assert.equal(isNight('day',at(23,0),true),false);assert.equal(isNight('night',at
   assert.ok(early,'the early script is in the head');
   assert.ok(html.indexOf('<script>')<html.indexOf('<body'),'before the body');
   const vm=await import('node:vm');
-  for(const mode of [null,'schedule','system','day','night','nonsense'])for(const [h,m] of [[0,0],[6,29],[6,30],[12,0],[18,29],[18,30],[23,59]])for(const dark of [true,false]){
+  // 1.6.5: with today's sunrise and sunset kept by the bundle (f50-sun-times, "rise,set" in minutes), and without them.
+  for(const sun of [null,{rise:344,set:1175},{rise:0,set:1440},{rise:1440,set:0}])
+  for(const mode of [null,'schedule','system','day','night','nonsense'])for(const [h,m] of [[0,0],[5,43],[5,44],[6,29],[6,30],[12,0],[18,29],[18,30],[19,34],[19,35],[23,59]])for(const dark of [true,false]){
     let theme=null;
-    vm.runInNewContext(early,{localStorage:{getItem:key=>key==='f50-night-mode'?mode:null},Date:class{getHours(){return h}getMinutes(){return m}},
+    vm.runInNewContext(early,{localStorage:{getItem:key=>key==='f50-night-mode'?mode:key==='f50-sun-times'?(sun?`${sun.rise},${sun.set}`:null):null},Date:class{getHours(){return h}getMinutes(){return m}},
       matchMedia:query=>({matches:query==='(prefers-color-scheme: dark)'&&dark}),document:{documentElement:{setAttribute:(name,value)=>{if(name==='data-theme')theme=value}}}});
-    assert.equal(theme,isNight(parseNightMode(mode),at(h,m),dark)?'dark':'light',`${mode} ${h}:${m} ${dark}`);
+    assert.equal(theme,isNight(parseNightMode(mode),at(h,m),dark,sun)?'dark':'light',`${mode} ${h}:${m} ${dark} ${JSON.stringify(sun)}`);
   }
+  for(const junk of ['','1,','a,b','99999,1','1,2,3'])assert.doesNotThrow(()=>vm.runInNewContext(early,{localStorage:{getItem:key=>key==='f50-sun-times'?junk:null},Date,matchMedia:()=>({matches:false}),document:{documentElement:{setAttribute(){}}}}));
   let untouched=true; // no storage (a locked-down browser): nothing set, the page stays as the style sheet has it
   vm.runInNewContext(early,{localStorage:{getItem(){throw new Error('denied')}},Date,matchMedia:()=>({matches:false}),document:{documentElement:{setAttribute(){untouched=false}}}});
   assert.ok(untouched);

@@ -9,6 +9,8 @@ import sys
 import tempfile
 import threading
 import time
+import shutil
+import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -552,6 +554,43 @@ class PageLayoutTests(unittest.TestCase):
         self.assertNotIn("Car-5G", refused, "nothing of the box for a browser that may not see it")
         self.assertIn("<b>找不到此页面</b>", missing)
         self.assertIn('<a class="done icon" href="/" aria-label="返回"><svg', missing)
+
+    @unittest.skipUnless(shutil.which("node"), "needs node to run the page's head script")
+    def test_colours_turn_at_the_sunset_or_sunrise_the_link_names(self):
+        """1.6.5 (owner: AutoPlay should switch when the iPhone does): with 「日落到日出」 the CarPlay page's link says when
+        day and night next change (turn=, epoch seconds). The answer holds until then, the other one for 8 hours after,
+        an open page turns at that moment, and turn= leaves the address with night= and from=."""
+        import settings_ui as ui
+        harness = r"""
+const vm = require('vm'); const [code, search, now, stored] = JSON.parse(process.argv[1]);
+const attrs = {}, store = {'autoplay-visit': stored}, timers = []; let url = null;
+vm.runInNewContext(code, {document: {documentElement: {setAttribute: (k, v) => attrs[k] = v}},
+  location: {search, pathname: '/', hash: '#update'}, Date: {now: () => now},
+  sessionStorage: {setItem: (k, v) => store[k] = v, getItem: k => store[k]},
+  history: {replaceState: (a, b, u) => url = u}, setTimeout: (f, ms) => timers.push([f, ms])});
+const before = attrs['data-theme']; for (const [f] of timers) f();
+console.log(JSON.stringify({before, after: attrs['data-theme'], from: attrs['data-from'] || null, url, store: store['autoplay-visit'], waits: timers.map(t => t[1])}));
+"""
+
+        def run(search, now, stored=None):
+            out = subprocess.run(["node", "-e", harness, json.dumps([ui.VISIT, search, now, stored])],
+                                 capture_output=True, text=True, timeout=30, check=True)
+            return json.loads(out.stdout)
+
+        turn = 1_794_650_000
+        seen = run(f"?night=0&from=panel&turn={turn}", turn * 1000 - 600_000)
+        self.assertEqual((seen["before"], seen["after"], seen["from"]), ("light", "dark", "panel"), "light now, dark at sunset")
+        self.assertEqual(seen["waits"], [600_000])
+        self.assertEqual(seen["url"], "/#update", "night=, from= and turn= leave the address")
+        later = run("", turn * 1000 + 3_600_000, seen["store"])
+        self.assertEqual((later["before"], later["waits"]), ("dark", []), "a page opened after sunset in the same visit")
+        self.assertIsNone(run("", turn * 1000 + 9 * 3_600_000, seen["store"]).get("before"), "8 hours on: the browser decides")
+        self.assertEqual(run(f"?m=x&night=1&from=page&turn={turn}", turn * 1000)["url"], "/?m=x#update")
+        # without turn= (the other modes, or a CarPlay page before 1.6.5): the hour's rule, no timer
+        plain = run("?night=1&from=page", 5_000_000)
+        self.assertEqual((plain["before"], plain["waits"]), ("dark", []))
+        self.assertEqual(run("", 5_000_000 + 3_500_000, plain["store"])["before"], "dark")
+        self.assertIsNone(run("", 5_000_000 + 3_700_000, plain["store"]).get("before"))
 
     def test_colours_follow_carplay_or_the_browser(self):
         import settings_ui as ui
