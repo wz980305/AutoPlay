@@ -1,7 +1,39 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=overlays-content"/><meta name="color-scheme" content="dark"/><title>AutoPlay</title><script>(function(){try{var m=localStorage.getItem("f50-night-mode"),d=new Date(),t=d.getHours()*60+d.getMinutes(),n=m==="night"||(m!=="day"&&(m==="system"?matchMedia("(prefers-color-scheme: dark)").matches:t>=1110||t<390));document.documentElement.setAttribute("data-theme",n?"dark":"light")}catch(e){}})()</script><link rel="stylesheet" href="/src/style.css"/><noscript><style>#browser-check{display:block!important}</style></noscript></head>
-<body><section id="browser-check" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:99999;background:#000;color:#fff;overflow:auto;padding:1.5em 1.2em;font:clamp(18px,1.9vmin,26px)/1.5 -apple-system,BlinkMacSystemFont,'PingFang SC','Noto Sans CJK SC','Microsoft YaHei',system-ui,sans-serif;box-sizing:border-box">
-<h1 id="browser-check-title" style="font-size:1.6em;line-height:1.2;margin:0 0 .5em">浏览器检测 / Browser check</h1><p id="browser-check-note" style="font-size:1.1em;margin:0 0 .6em">正在检测 / Checking…</p><noscript>此浏览器禁用了 JavaScript，无法使用 CarPlay。 / JavaScript is off in this browser; CarPlay cannot be shown.</noscript><p id="browser-check-advice" style="color:rgba(235,235,245,.72);margin:0 0 1em"></p><button id="browser-check-continue" disabled style="min-height:3.5rem;padding:.6em 1.2em;font:inherit;font-size:1.1em;font-weight:600;border:0;border-radius:.75rem;background:#0066D6;color:#fff">…</button><details style="margin-top:1.2em;color:rgba(235,235,245,.72)"><summary id="browser-check-details-title" style="cursor:pointer;min-height:2.75rem;display:flex;align-items:center">技术详情 / Technical details</summary><ul id="browser-check-list" style="padding-left:1.2em;font-size:.9em"></ul><p id="browser-check-agent" style="word-wrap:break-word;font-size:.8em"></p></details></section><script src="./browser-check.js"></script><main id="app">
+<body><section id="browser-check" class="bc" style="display:none" aria-labelledby="browser-check-title">
+  <style>
+   /* The browser check (1.5.4): drawn before the player bundle, so it carries its own few rules, the settings panel's
+      look and its day and night (the <head> script has set data-theme). It shows when this browser cannot run the
+      player, or from Settings > Connection > Browser check. */
+   .bc{position:fixed;top:0;right:0;bottom:0;left:0;z-index:99999;overflow:auto;background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC",system-ui,sans-serif;font-size:20px;font-size:clamp(20px,2.78vmin,24px);line-height:1.45;--cell:#1C1C1E;--sep:rgba(84,84,88,.65);--sub:rgba(235,235,245,.6);--ok:#30D158;--bad:#FF453A;--warn:#FF9F0A}
+   :root[data-theme=light] .bc{background:#F2F2F7;color:#000;--cell:#FFF;--sep:rgba(60,60,67,.29);--sub:rgba(60,60,67,.6);--ok:#34C759;--bad:#FF3B30;--warn:#FF9500}
+   /* In em of the panel's root size (the bundle's style sheet may be what failed): the bar, the title, a row and its
+      grey line measure what the settings panel's do. */
+   .bc header{display:flex;align-items:center;justify-content:space-between;gap:1em;min-height:calc(4.75em + 1px);padding:.75em max(1.5em,calc(50% - 720px + 1.5em));border-bottom:1px solid var(--sep);background:inherit;position:sticky;top:0}
+   .bc h2{margin:0;font-size:1.6em;font-weight:600;line-height:1.3}
+   .bc header button{padding:.4167em .8333em;border:0;border-radius:.625em;background:var(--cell);color:inherit;font:inherit;font-size:1.2em}
+   .bc header button[hidden]{display:none}
+   .bc .bc-body{max-width:44em;margin:0 auto;padding:1em 1.5em 1.5em}
+   .bc p{margin:.5em 1em 0;color:var(--sub);overflow-wrap:anywhere}
+   .bc p:empty{display:none}
+   .bc ul{list-style:none;margin:1em 0 0;padding:0;border-radius:.75em;background:var(--cell);overflow:hidden}
+   .bc ul:empty{display:none}
+   .bc li{display:flex;align-items:center;gap:.625em;min-height:3em;padding:.625em .8333em;font-size:1.2em}
+   .bc li+li{border-top:1px solid var(--sep)}
+   .bc li b{flex:1;font-weight:400}
+   .bc li span{color:var(--sub);white-space:nowrap}
+   .bc li.ok span{color:var(--ok)}.bc li.missing span{color:var(--bad)}.bc li.limited span{color:var(--warn)}
+   .bc li small{display:block;color:var(--sub);font-size:.8333em;margin-top:.2083em}
+  </style>
+  <header><h2 id="browser-check-title">浏览器检测 / Browser check</h2><button id="browser-check-continue" type="button" hidden>完成</button></header>
+  <div class="bc-body">
+   <p id="browser-check-note">正在检测 / Checking…</p>
+   <noscript><p>此浏览器禁用了 JavaScript，无法使用 CarPlay。 / JavaScript is off in this browser; CarPlay cannot be shown.</p></noscript>
+   <ul id="browser-check-list"></ul>
+   <p id="browser-check-advice"></p>
+   <p id="browser-check-agent"></p>
+  </div>
+</section><script src="./browser-check.js"></script><main id="app">
   <div id="screen-container"><div id="surface"><canvas id="screen" width="1280" height="720" aria-label="CarPlay" inert></canvas></div></div>
   <div id="overlay" role="status"><div class="welcome">
     <h1 data-i18n="brand">AutoPlay</h1>
@@ -10,13 +42,13 @@
     <div class="group actions">
       <a id="box-link" class="cell" href="/" hidden><span class="tile green"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.8" width="10" height="18.4" rx="2.6"/><path d="M10.8 5.2h2.4"/></svg></span><span class="main"><b data-i18n="boxLink"></b></span><span class="chev"></span></a>
       <button id="btn-settings" class="cell" type="button" aria-haspopup="dialog" aria-controls="settings"><span class="tile gray"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></span><span class="main"><b data-i18n="playerSettings"></b></span><span class="chev"></span></button>
-      <button id="welcome-fullscreen" class="cell" type="button"><span class="tile blue"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg></span><span class="main"><b id="welcome-fullscreen-text"></b></span></button>
+      <button id="welcome-fullscreen" class="cell" type="button"><span class="tile blue"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg></span><span class="main"><b data-i18n="fullscreen"></b></span><span id="welcome-fullscreen-value" class="value"></span></button>
     </div>
   </div></div>
   <div id="recovering" role="status" hidden><div class="notice"><span class="spinner" aria-hidden="true"></span><span id="recovering-text"></span></div></div>
   <div id="toast" class="capsule" role="status" hidden></div>
   <div id="debug-hud" aria-hidden="true" hidden></div>
-  <div id="error-banner" role="alert" hidden><b data-i18n="error"></b><details><summary data-i18n="technical"></summary><p id="error-text"></p></details><button id="dismiss-error" class="text" data-i18n="close"></button></div>
+  <div id="error-banner" role="alert" hidden><b id="error-title"></b><details id="error-details" hidden><summary data-i18n="technical"></summary><p id="error-text"></p></details><button id="dismiss-error" class="text" data-i18n="close"></button></div>
 </main>
 <dialog id="settings" aria-labelledby="settings-title">
   <header><h2 id="settings-title" data-i18n="settings" tabindex="-1" autofocus></h2><button id="btn-close" class="text" type="button" data-i18n="done"></button></header>
@@ -32,7 +64,7 @@
 <button class="cell select-row" type="button" data-picker="language" aria-haspopup="dialog"><span class="tile blue"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.4 3.9 5.2 3.9 8.5s-1.3 6.1-3.9 8.5c-2.6-2.4-3.9-5.2-3.9-8.5s1.3-6.1 3.9-8.5z"/></svg></span><span class="main"><b data-i18n="language"></b></span><span class="value"></span><span class="chev"></span></button><select id="language" hidden tabindex="-1"><option value="zh">简体中文</option><option value="en">English</option></select></div>
         <h3 class="group-title" data-i18n="navigation"></h3>
         <div class="group"><label class="cell"><span class="tile blue"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4L4 11.2l7 1.8 1.8 7z"/></svg></span><span class="main"><b data-i18n="carLocation"></b></span><input id="car-location-on" class="switch" type="checkbox"/></label>
-<button id="car-location-datum-row" class="cell select-row" type="button" data-picker="car-location-datum" aria-haspopup="dialog" hidden><span class="tile gray"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17M3.5 12h17"/><circle cx="12" cy="12" r="2.2"/></svg></span><span class="main"><b data-i18n="datum"></b></span><span class="value"></span><span class="chev"></span></button><select id="car-location-datum" hidden tabindex="-1"><option value="auto" data-i18n="datumAuto"></option><option value="wgs84">WGS-84</option><option value="gcj02">GCJ-02</option></select></div>
+<button id="car-location-datum-row" class="cell select-row" type="button" data-picker="car-location-datum" aria-haspopup="dialog" hidden><span class="tile gray"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17M3.5 12h17"/><circle cx="12" cy="12" r="2.2"/></svg></span><span class="main"><b data-i18n="datum"></b></span><span class="value"></span><span class="chev"></span></button><select id="car-location-datum" hidden tabindex="-1"><option value="auto" data-i18n="datumAuto"></option><option value="wgs84">WGS-84</option><option value="gcj02">GCJ-02</option></select></div><p id="location-status" class="foot" role="status" aria-live="polite"></p>
       </section>
       <section id="settings-display" class="settings-page" aria-labelledby="nav-display" data-settings-content="display" hidden>
         <h3 class="group-title" data-i18n="frameSettings"></h3>
@@ -44,7 +76,7 @@
           <button id="apply" class="cell action" type="submit" hidden><span id="apply-text" data-i18n="apply"></span></button>
         </form>
         <p id="display-status" class="foot" role="status" aria-live="polite"></p>
-        <div class="group spaced"><button id="fullscreen" class="cell" type="button"><span class="tile blue"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg></span><span class="main"><b id="fullscreen-text"></b></span></button></div>
+        <div class="group spaced"><button id="fullscreen" class="cell" type="button"><span class="tile blue"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg></span><span class="main"><b data-i18n="fullscreen"></b></span><span id="fullscreen-value" class="value"></span></button></div>
         <div class="group spaced"><details><summary class="cell"><span class="tile gray"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.6 6.2a4.2 4.2 0 0 0-5.3 5.3L4 16.8V20h3.2l5.3-5.3a4.2 4.2 0 0 0 5.3-5.3l-2.6 2.6-2.2-2.2z"/></svg></span><span class="main"><b data-i18n="advanced"></b></span><span class="chev"></span></summary><div class="inner advanced">
           <button class="cell select-row" type="button" data-picker="codec" aria-haspopup="dialog"><span class="tile purple"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7.5 5v14M16.5 5v14M3 9.5h4.5M3 14.5h4.5M16.5 9.5H21M16.5 14.5H21"/></svg></span><span class="main"><b data-i18n="codec"></b></span><span class="value"></span><span class="chev"></span></button><select id="codec" hidden tabindex="-1"><option value="auto" data-i18n="codecAuto"></option><option value="h264">H.264</option><option value="h265">H.265</option></select>
           <label class="cell"><span class="tile red"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L5.5 13.5H11l-1 7.5 8.5-11H13z"/></svg></span><span class="main"><b data-i18n="performanceMode"></b></span><input id="performance-mode" class="switch" type="checkbox"/></label>
@@ -53,9 +85,8 @@
         </div></details></div>
       </section>
       <section id="settings-connection" class="settings-page" aria-labelledby="nav-connection" data-settings-content="connection" hidden>
-        <h3 class="group-title" data-i18n="supportTab"></h3>
         <div class="group"><a id="box-link-panel" class="cell" href="/" hidden><span class="tile green"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.8" width="10" height="18.4" rx="2.6"/><path d="M10.8 5.2h2.4"/></svg></span><span class="main"><b data-i18n="boxLink"></b></span><span class="chev"></span></a>
-<details><summary class="cell"><span class="tile blue"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.2-5.5 4 11 2.3-5.5H21"/></svg></span><span class="main"><b data-i18n="diagnostics"></b></span><span class="chev"></span></summary><div class="inner text"><p id="capabilities"></p><p id="stats"></p><button id="browser-check-show" class="btn plain" type="button" data-i18n="browserCheck"></button></div></details></div>
+<details><summary class="cell"><span class="tile blue"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.2-5.5 4 11 2.3-5.5H21"/></svg></span><span class="main"><b data-i18n="diagnostics"></b></span><span class="chev"></span></summary><div class="inner advanced"><div class="cell"><span class="tile purple"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7.5 5v14M16.5 5v14M3 9.5h4.5M3 14.5h4.5M16.5 9.5H21M16.5 14.5H21"/></svg></span><span class="main"><b data-i18n="decoding"></b></span><span id="capabilities" class="value"></span></div><div class="cell"><span class="tile blue"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8 20h8M12 16.5V20"/></svg></span><span class="main"><b data-i18n="picture"></b></span><span id="stats" class="value"></span></div><div class="cell"><span class="tile orange"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2.5h5"/></svg></span><span class="main"><b data-i18n="latency"></b></span><span id="latency" class="value"></span></div><button id="browser-check-show" class="cell" type="button"><span class="tile gray"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7.5 3v5.2c0 4.6-3.2 8.1-7.5 9.8-4.3-1.7-7.5-5.2-7.5-9.8V6z"/><path d="M8.8 12.2l2.2 2.2 4.4-4.6"/></svg></span><span class="main"><b data-i18n="browserCheck"></b></span><span class="chev"></span></button></div></details></div>
       </section>
     </div>
   </div>

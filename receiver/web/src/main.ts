@@ -42,7 +42,8 @@ let linkDownAt = performance.now();
 function hintFor(): string {
   const hint = statusHint(state, (performance.now() - linkDownAt) / 1000);
   if (!hint.key) return '';
-  return t(hint.key as Key) + (hint.seconds === null ? '' : ` · ${t('waited')}${hint.seconds}${t('secondsUnit')}`);
+  const text = t(hint.key as Key);
+  return hint.seconds === null ? text : `${text}${language === 'zh' ? '' : ' '}${t('waited')}${hint.seconds}${t('secondsUnit')}`;
 }
 let lastAutoTarget = '', autoTimer = 0, displayBusy = false;
 /** A change that cannot wait for the next session (codec failed, a setting changed by hand): why, for the box's log. */
@@ -98,7 +99,7 @@ function render() {
   if (boxPort) el('box-link').hidden = !statusHint(state, 0).boxLink;
   el('overlay').hidden = painted || holding;
   el('app').dataset.live = String(painted || holding);
-  el('capabilities').textContent = !isSecureContext ? t('insecure') : typeof VideoDecoder === 'undefined' ? t('unsupported') : t('compatible');
+  el('capabilities').textContent = !isSecureContext ? t('decodingInsecure') : typeof VideoDecoder === 'undefined' ? t('decodingMissing') : t('decodingOk');
   syncApply();
 }
 function fit() {
@@ -114,10 +115,24 @@ function fit() {
   surface.style.width = `${size.width}px`; surface.style.height = `${size.height}px`;
   screen.classList.toggle('area', !!area);
 }
-function error(message: string) {
-  // This browser said it decodes H.265 but cannot: auto goes back to H.264 for good (on this browser).
-  if (message.includes('H.265/HEVC')) { saveFlag('f50-hevc-failed', '1'); lastAutoTarget = ''; urgentChange = 'codec'; scheduleAuto(); }
-  el('error-text').textContent = message; el('error-banner').hidden = !message;
+/** The error banner (1.5.4): its headline is the reason in the page's words; technical text, if any, under 详细信息.
+ *  Until then the headline was always "播放遇到问题" and the reason sat folded away, in English where the decoder
+ *  wrote it, with advice that no longer held. */
+function error(headline: string, detail = '') {
+  el('error-title').textContent = headline; el('error-text').textContent = detail;
+  el('error-details').hidden = !detail; el('error-banner').hidden = !headline;
+}
+/** What the decoder reports, said for this page: its own words go under the details. */
+function decoderError(message: string) {
+  if (!message) { error(''); return; }
+  if (message.includes('H.265/HEVC')) {
+    // This browser said it decodes H.265 but cannot: auto goes back to H.264 for good (on this browser); a codec
+    // picked by hand stays as picked, and the banner says where to change it.
+    saveFlag('f50-hevc-failed', '1'); lastAutoTarget = ''; urgentChange = 'codec'; scheduleAuto();
+    error(t(el<HTMLSelectElement>('codec').value === 'h265' ? 'hevcManual' : 'hevcAuto'), message); return;
+  }
+  if (message.startsWith('VideoDecoder is not available')) { error(t(isSecureContext ? 'unsupported' : 'insecure'), message); return; }
+  error(t('decodeFail'), message);
 }
 /** Auto quality (2026-10-14; a Tesla decodes a frame in ~1 ms, the XPeng in 60-100 ms): once this browser has
  *  shown it decodes fast (f50-fast-decoder, from the 10 s reports), auto picks the resolution from the screen's real
@@ -154,7 +169,7 @@ function send(message: ClientMessage) { if (active) connection.send(message); }
 // Compatible display (compat-display.ts): automatic by the browser's version, or the switch in Display; chosen once
 // per page, since a canvas keeps the kind it was made with (the switch reloads the page).
 const compatDisplay = compatDisplayOn(readFlag('f50-compat-display'), navigator.userAgent);
-const video = new VideoPlayer(canvas, error, () => {
+const video = new VideoPlayer(canvas, decoderError, () => {
   if (!active) return;
   if (!shownOnce) { startup.mark('firstFrameMs'); connection.send({type:'stats', stats:{ev:16,...startupStats()}}); }
   frames++; reportFrames++; hudFrames++; painted = true; shownOnce = true; el('overlay').hidden = true; el('app').dataset.live = 'true';
@@ -317,10 +332,11 @@ function teslaFullscreenUrl() {
 let teslaChecking = false;
 function updateFullscreen() {
   const borderless = teslaBorderless();
-  const label = t(borderless ? 'borderlessOn' : teslaChecking ? 'checkingNetwork' : 'fullscreen');
-  // Bare rows on the waiting screen as in the settings panel (1.5.0, asked for in the car): until then this row and
-  // the box link carried a second line each ("使用浏览器返回按钮退出。", "配对 iPhone，查看热点与证书。").
-  el('fullscreen-text').textContent = label; el('welcome-fullscreen-text').textContent = label;
+  // The row's name stays 「无边框模式」 and its state is the grey value, as every other row (1.5.4; it used to turn into
+  // 「已开启无边框」 or 「正在检查网络」). Bare rows on the waiting screen as in the settings panel (1.5.0).
+  const value = borderless ? t('borderlessOn') : teslaChecking ? t('checkingNetwork') : '';
+  el('fullscreen-value').textContent = value; el('welcome-fullscreen-value').textContent = value;
+  const label = value ? `${t('fullscreen')}, ${value}` : t('fullscreen');
   for (const id of ['fullscreen', 'welcome-fullscreen']) {
     el(id).setAttribute('aria-label', label);
     el<HTMLButtonElement>(id).disabled = borderless || teslaChecking;
@@ -483,7 +499,8 @@ let resizeTimer = 0;
 window.addEventListener('resize', () => { window.clearTimeout(resizeTimer); resizeTimer = window.setTimeout(() => pageEvent(5), 400); });
 window.setInterval(()=>{
   const now=performance.now(),fps=frames*1000/Math.max(1,now-lastStats);frames=0;lastStats=now;
-  el('stats').textContent=painted?`${canvas.width} × ${canvas.height} / ${fps.toFixed(0)} fps / ${display?.hevc ? 'H.265' : 'H.264'} / ${t('latency')} ${video.decodeLatencyMs.toFixed(0)} ms`:t('noStream');
+  el('stats').textContent=painted?`${canvas.width} × ${canvas.height} · ${fps.toFixed(0)} fps · ${display?.hevc ? 'H.265' : 'H.264'}`:t('noStream');
+  el('latency').textContent=painted?`${video.decodeLatencyMs.toFixed(0)} ms`:'–';
 },750);
 // Which browser the car runs.
 const chromeMajor=Number(/Chrome\/(\d+)/.exec(navigator.userAgent)?.[1] ?? 0),webView=/; wv\)/.test(navigator.userAgent)?1:0;
@@ -580,7 +597,18 @@ function datumInUse(): string {
 const locationFeed = new LocationFeed(fix => {
   lastFix = fix; hudFixes++; showDatumChoices();
   send({ type: 'location', location: zone ? { ...fix, zone } : fix });
-}, navigator.geolocation, () => !document.hidden, () => toast(t('locationDenied')));
+}, navigator.geolocation, () => !document.hidden, () => locationNote('locationDenied'));
+let locationTimer = 0;
+/** What a location change came to (1.5.4): under the 导航 group while the panel is open, as the picture settings say
+ *  theirs under 画质 (it was a capsule across the top of the panel); a toast over the picture otherwise (the browser
+ *  can take the permission back while driving). "Reconnecting" has said its piece after about 6 s. */
+function locationNote(key: Key | null) {
+  const line = el('location-status');
+  window.clearTimeout(locationTimer);
+  if (key && !el<HTMLDialogElement>('settings').open) { toast(t(key)); key = null; }
+  if (key) { line.dataset.i18n = key; line.textContent = t(key); } else { delete line.dataset.i18n; line.textContent = ''; }
+  if (key === 'locationReconnecting') locationTimer = window.setTimeout(() => locationNote(null), 6000);
+}
 /** The datum row shows inside China's rectangle only (or once GCJ-02 is chosen). Each choice carries the position it
  *  would give the iPhone, written as the iPhone's Compass app writes it: the one that matches Compass is right.
  *  "Automatic" also says which of the two it comes to here. */
@@ -606,18 +634,18 @@ function showLocation(from: Display) { if (!locationBusy) applyLocation(from.car
 async function setLocation(on: boolean, datum: string, picked = false) {
   if (!token || locationBusy) return;
   const was = { on: locationFeed.enabled, datum: datumSelect.value };
-  locationBusy = true; locationSwitch.disabled = true;
+  locationBusy = true; locationSwitch.disabled = true; locationNote(null);
   try {
     if (on && !was.on) {
       const permission = await askLocation(navigator.geolocation);
-      if (permission !== 'granted') { applyLocation(false, was.datum); toast(t(permission === 'denied' ? 'locationDenied' : 'locationUnavailable')); return; }
+      if (permission !== 'granted') { applyLocation(false, was.datum); locationNote(permission === 'denied' ? 'locationDenied' : 'locationUnavailable'); return; }
     }
     const { ok, body } = await askBox<{ ok?: boolean; restarting?: boolean }>(`/api/location?token=${encodeURIComponent(token)}`,
       { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(picked ? { enabled: on, datum } : { enabled: on }) }, WRITE_MS);
     if (!ok || !body?.ok) throw new Error();
     applyLocation(on, datum);
-    if (body.restarting) toast(t('locationReconnecting'));
-  } catch { applyLocation(was.on, was.datum); toast(t('locationFail')); }
+    if (body.restarting) locationNote('locationReconnecting');
+  } catch { applyLocation(was.on, was.datum); locationNote('locationFail'); }
   finally { locationBusy = false; locationSwitch.disabled = false; }
 }
 locationSwitch.onchange = () => { void setLocation(locationSwitch.checked, datumSelect.value); };

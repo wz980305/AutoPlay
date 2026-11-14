@@ -381,7 +381,8 @@ async def run_incoming(root, timeout):
                     save_json(root / 'state/receiver/pairing-request.json', {
                         'phone':phone, 'boot':get_platform().boot_id(),
                         'expires':time.monotonic() + GRANT_SECONDS})
-                    save_json(status_file, {'phase':'paired'})
+                    # When (1.5.4): the box page says "connecting" for a few minutes at most, not until the next pairing.
+                    save_json(status_file, {'phase':'paired', 'at': int(time.time())})
                     return
             elif selected is None:
                 objects = await object_manager.call_get_managed_objects()

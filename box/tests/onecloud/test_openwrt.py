@@ -381,10 +381,10 @@ class ManagedPageTests(unittest.TestCase):
         # What is on screen, not the style sheet's comments; "Wi-Fi" keeps its hyphen from breaking, addresses break
         # before the port (1.4.1).
         shown = html.split("</style>", 1)[1].replace("\u2011", "-").replace("<wbr>", "")
-        for text in ("交给 iPhone 的 Wi-Fi", "Car-5G", "在 OpenWrt 后台设置", "https://dashplay.lan:18443/",
+        for text in ("AutoPlay 热点", "Car-5G", "在 OpenWrt 后台设置", "https://dashplay.lan:18443/",
                      "添加"):
             self.assertIn(text, shown)
-        self.assertIn("交给 iPhone 的 Wi\u2011Fi", html)
+        self.assertIn("<div class=name>Car\u20115G</div>", html, "a name is not broken at its hyphen")
         self.assertIn("https://dashplay.lan<wbr>:18443/", html)
         for text in ("盒子热点", "重新进行首次设置", "使用方式", "第 1 步", "数据线", "用户名 root", "密码 1234", "组合与验证状态"):
             self.assertNotIn(text, html)

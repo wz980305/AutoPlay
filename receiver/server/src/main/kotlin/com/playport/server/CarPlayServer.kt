@@ -255,7 +255,8 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
             hevc = display.hevc,
             manufacturer = config.manufacturer,
             model = config.model,
-            oemLabel = "盒子设置",
+            // The icon opens the CarPlay page's settings panel, so it carries the panel's name (1.5.4: was "盒子设置").
+            oemLabel = "AutoPlay 设置",
             icons = listOf(AirPlayIcon(180, 180, checkNotNull(javaClass.getResourceAsStream("/f50-settings.png")).use { it.readBytes() })),
             appearanceUpdates = appearanceUpdatesFor(selectedPhone),
             // No audioFormats/audioLatencies and no audio feature bits (1.3.0, always): the iPhone sets up no audio

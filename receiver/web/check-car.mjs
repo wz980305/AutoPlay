@@ -350,9 +350,18 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
 { // The hint follows the state (viewer audit V3): the box is the question while the link is down, the iPhone only
   // while the box answers; the box's own page link hides while the box is unreachable.
   const {statusHint,SLOW_LINK_S}=await load('status');
-  assert.deepEqual(statusHint('waiting',0),{key:'waitingHint',seconds:null,boxLink:true},'the one good state as before');
-  assert.deepEqual(statusHint('starting',0),{key:'startingHint',seconds:null,boxLink:true},'iPhone connected: no first-run hint');
+  // 1.5.4: waiting and starting carry no standing line under the title (it explained what the title says);
+  // a display change says how long it takes.
+  assert.deepEqual(statusHint('waiting',0),{key:null,seconds:null,boxLink:true},'the one good state: the title says it');
+  assert.deepEqual(statusHint('starting',0),{key:null,seconds:null,boxLink:true},'iPhone connected: the title says it');
   assert.deepEqual(statusHint('renegotiating',0),{key:'renegotiatingHint',seconds:null,boxLink:true},'a display change is not "waiting for iPhone"');
+  { const i18n=readFileSync(new URL('./src/i18n.ts',import.meta.url),'utf8');
+    assert.doesNotMatch(i18n,/waitingHint|startingHint/);
+    assert.match(i18n,/renegotiatingHint: \['通常约 5 秒', 'Usually about 5 seconds'\]/);
+    // the time waited follows the hint as a sentence of its own, never 「。 · 已等待」
+    const main=readFileSync(new URL('./src/main.ts',import.meta.url),'utf8');
+    assert.doesNotMatch(main,/ · \$\{t\('waited'\)\}/);
+    assert.match(i18n,/waited: \['已等待 ', 'Waited '\]/); }
   assert.deepEqual(statusHint('connecting',1),{key:null,seconds:null,boxLink:false},'the first seconds of a connect say nothing');
   assert.deepEqual(statusHint('connecting',SLOW_LINK_S+4.7),{key:'reconnectingHint',seconds:7,boxLink:false},'then the box is not answering, with the time');
   assert.deepEqual(statusHint('reconnecting',0.5),{key:'reconnectingHint',seconds:null,boxLink:false},'a dropped link names the box at once, the time after 3 s');

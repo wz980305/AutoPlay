@@ -96,8 +96,7 @@ export class VideoPlayer {
     this.lastConfig = message;
     if (typeof VideoDecoder === 'undefined') {
       this.onError(
-        'WebCodecs video decoding needs a secure context. Open the https:// URL printed by the server ' +
-          '(accept the certificate warning once), or use http://localhost.',
+        'VideoDecoder is not available (WebCodecs needs a secure context).',
       );
       return;
     }
@@ -166,8 +165,7 @@ export class VideoPlayer {
       return;
     }
     this.onError(
-      'This phone sent H.265/HEVC, but this browser cannot decode it. ' +
-        'Switch the video codec back to H.264 in the Display panel.',
+      'H.265/HEVC stream: no decoder configuration of this browser accepted it.',
     );
     this.onRequestKeyframe();
   }

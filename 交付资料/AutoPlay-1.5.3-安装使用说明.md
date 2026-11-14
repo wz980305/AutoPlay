@@ -113,15 +113,15 @@ apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
 
 | 入口 | 地址 |
 |---|---|
-| 设置页 | `http://100.96.0.1:18080/` |
+| AutoPlay 盒子 | `http://100.96.0.1:18080/`（也从「AutoPlay 设置 → 连接 → AutoPlay 盒子」进） |
 | LuCI 后台 | `http://100.96.0.1/` → 服务 → AutoPlay |
 | 车机浏览器 | `https://<域名>:18443/`（或 `https://autoplay.lan:18443/`） |
 
 ### 上车步骤
 1. **F50 接车上 USB**：5V≥3A、打火不断电的口，短粗线；加散热片/小风扇。
 2. **iPhone**：连特斯拉蓝牙并设为媒体来源（音乐/通话/Siri 走特斯拉蓝牙）。
-3. **车机 Wi-Fi**：打开「行驶中保持连接」，连 F50 的热点（SSID 见 LuCI「网络 → 无线」）。
-4. **第一次使用**：车机（或手机）浏览器打开 `http://100.96.0.1:18080/`，点「添加 iPhone」；在 iPhone 的「设置 → 蓝牙」里点盒子的名字，两边核对六位配对码。之后 iPhone 靠近盒子，蓝牙 iAP2 自动引导它连上 F50 热点。
+3. **车机 Wi-Fi**：打开「行驶中保持连接」，连 AutoPlay 热点（F50 的 Wi-Fi，名字见 LuCI「网络 → 无线」）。
+4. **第一次使用**：车机（或手机）浏览器打开 `http://100.96.0.1:18080/`，点「添加 iPhone」；在 iPhone 的「设置 → 蓝牙」里点盒子的名字，两边核对六位配对码。之后 iPhone 靠近盒子，蓝牙 iAP2 自动引导它连上 AutoPlay 热点。
 5. 车机浏览器打开 `https://<域名>:18443/`，即看到 CarPlay 画面；触摸回传。默认模式下页面无声，所有声音从特斯拉蓝牙出来，不需要轻点。
 
 ### 关键注意
@@ -130,7 +130,7 @@ apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
 - 盒子需长期有 SIM（证书续期 + 特斯拉联网检测）。
 - **1.2.0 上车看一眼界面**：设置 → 夜间模式弹出的是页内选项表（大字、可点）而不是浏览器的小下拉；盒子页点一部手机 → 「删除此 iPhone…」出现确认屏而不是浏览器弹窗。若选项表没有出现，把车机浏览器版本记到 `docs/TESLA.md` 并反馈。
 - **1.3.0 上车看一眼**：从别的应用切回浏览器十次左右，屏幕键盘不再出现；设置面板三页每行都有图标、没有小字。
-- **1.5.0 上车看一眼**：白天和夜里各看一次，等待画面、「AutoPlay 设置」和盒子设置页的颜色是否跟着 CarPlay 的日间/夜间，在「夜间模式」里改一下是否当场跟着变；从 CarPlay 点「盒子设置」→ 连接 → 打开盒子网页，再点右上角「返回」，是否回到设置的「连接」，再点「完成」回到 CarPlay（第十一节；`docs/UI-1.5.0.md` §六）。
+- **1.5.0 上车看一眼**：白天和夜里各看一次，等待画面、「AutoPlay 设置」和盒子设置页的颜色是否跟着 CarPlay 的日间/夜间，在「夜间模式」里改一下是否当场跟着变；从 CarPlay 点「AutoPlay 设置」（1.5.4 前叫「盒子设置」）→ 连接 → AutoPlay 盒子，再点右上角「返回」，是否回到设置的「连接」，再点「完成」回到 CarPlay（第十一节；`docs/UI-1.5.0.md` §六）。
 - **在线升级（1.3.1 起）**：已经装着 1.3.0 或更早版本的盒子，先按第一节手动装一次 1.3.1 或更新的版本（可以直接用 GitHub Release v1.3.1 上的 apk，不必自己编译）；之后设置页或 LuCI「程序更新」会在新版本发布后一天内提示，点「立即升级」即可，CarPlay 断开约 1 分钟，起不来会自动退回（`docs/RELEASE.md`）。勿手动覆盖 `/opt/autoplay/{state,identity}`。
 
 ## 六、1.2.0 的界面变化（`docs/UI-1.2.0.md`）
@@ -194,7 +194,7 @@ apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
 
 盒子的系统由 mu300-linux 提供，它有自己的更新命令 `mu300-update`，换上新的系统镜像并把你加过的东西带过去。**AutoPlay 的四个软件包是从文件安装的，系统更新后要靠事先"登记"才会被装回来**；配对、证书、设置（`/opt/autoplay/state`）和认证文件不受影响。1.5.0 起每次在线升级后盒子会自己登记；下面第 2 步是手动确认。以下在停车、断开 CarPlay、SIM 卡能上网时，经 SSH 在盒子上操作。这一流程根据 mu300-linux 的脚本写成，**还没有在真机上完整跑过**，请在不急着用车时做，并保留回退（不要加 `--no-rollback`）。
 
-1. 先在盒子设置页把 AutoPlay 升到 1.5.0 或更新。
+1. 先在「AutoPlay 盒子」页把 AutoPlay 升到 1.5.0 或更新。
 2. 登记并确认：
 
    ```sh
@@ -223,7 +223,7 @@ apk del luci-i18n-autoplay-zh-cn luci-app-autoplay autoplay autoplay-jre
    mu300-user-packages status
    ```
    AutoPlay 的包互相依赖，第一遍可能只装回 `autoplay-jre`；这时再运行 `mu300-user-packages retry`（必要时两次），直到四个都回来。
-7. 打开盒子设置页（`:18080`）：「iPhone」分类顶部三个圆点应全绿、蓝牙在运行，再连一次 iPhone。蓝牙起不来时先「下载诊断记录」，不要急着改别的。
+7. 打开「AutoPlay 盒子」页（`:18080`）：「iPhone」分类顶部三个圆点应全绿、蓝牙在运行，再连一次 iPhone。蓝牙起不来时先「下载诊断记录」，不要急着改别的。
 8. 不行就退回原来的系统：`mu300-update rollback`。
 
 较新的 mu300-linux 默认打开 USB 调试（adb）且不设密码，插上盒子 USB 口的电脑能直接拿到管理员权限。不需要它时可以关掉：`mu300-usb adb off`（关过的设置在更新后保持）。

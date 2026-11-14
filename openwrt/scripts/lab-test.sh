@@ -45,7 +45,7 @@ EOF
      chmod +x /tmp/fake/ubus /tmp/fake/iw
      PATH=/tmp/fake:$PATH python3 /opt/autoplay/supervisor_openwrt.py --root /opt/autoplay > /tmp/sup.log 2>&1 &
      pid=$!; sleep 45; cat /tmp/sup.log
-     echo "-- settings page"; wget -qO- http://127.0.0.1:18080/ | grep -o "交给 iPhone 的 Wi-Fi\|Lab-5G\|在 OpenWrt 后台设置 Wi-Fi\|https://autoplay.lan:18443/\|还缺 CarPlay 认证文件" | sort -u
+     echo "-- settings page"; wget -qO- http://127.0.0.1:18080/ | grep -o "AutoPlay 热点\|Lab-5G\|在 OpenWrt 后台设置 Wi-Fi\|https://autoplay.lan:18443/\|还缺 CarPlay 认证文件" | sort -u
      echo "-- status"; cat /var/run/autoplay/status.json
      echo "-- certificate names"; cat /opt/autoplay/state/tls/leaf.san.json; echo
      kill $pid; sleep 3; tail -1 /tmp/sup.log

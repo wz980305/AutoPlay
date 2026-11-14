@@ -1,6 +1,6 @@
 """HTML for the box page, laid out and drawn as the CarPlay page's "AutoPlay 设置" panel (1.5.0).
 
-People arrive from that panel (连接 → 打开盒子网页) in the Tesla's browser (773x601 or 1256x706 CSS px at DPR 1.53), or
+People arrive from that panel (连接 → AutoPlay 盒子) in the Tesla's browser (773x601 or 1256x706 CSS px at DPR 1.53), or
 from a phone. So the page is the panel's twin: a title bar with one button (返回, back to where the visit began - the
 panel or the waiting screen - where the panel itself has 完成; "CarPlay 画面" for a browser that came by itself), the
 categories on the left with the chosen one filled in the tint, one column of grouped rows on
@@ -49,6 +49,8 @@ h1{font-size:1.6rem;line-height:1.3;font-weight:600;letter-spacing:normal;margin
 .done{flex:none;display:inline-flex;align-items:center;justify-content:center;min-height:var(--hit2);min-width:var(--hit);padding:var(--s1) var(--s3);
 border-radius:var(--radius);background:var(--cell);color:var(--label);font-weight:600;text-decoration:none;white-space:nowrap}
 .done:active{opacity:.5}
+header form{display:contents}
+button.done{border:0;font:inherit;font-weight:inherit;cursor:pointer}
 /* The way out says where it leads: back, when the visit came from the CarPlay page (data-from, set by VISIT below). */
 .done .back,:root[data-from] .done .fwd{display:none} :root[data-from] .done .back{display:inline}
 
@@ -78,7 +80,10 @@ font-weight:500;background:var(--cell);color:var(--label);text-decoration:none}
 .pane:target~.nav a.first{background:var(--cell);color:var(--label)}
 #iphone:target~.nav a.first,#net:target~.nav a[href="#net"],#update:target~.nav a[href="#update"],#more:target~.nav a[href="#more"]{background:var(--tint);color:#fff}
 .pane>.group-title:first-child{margin-top:.25rem}
-.pane>.chain:first-child{margin-top:.25rem}
+/* A group without a title (1.5.4: none repeats its category's name) keeps the distance a title gave it. */
+section>.group:first-child{margin-top:var(--s4)}
+.pane>.chain:first-child,.pane>section:first-child>.group:first-child{margin-top:.25rem}
+.flow>section:first-child>.group:first-child{margin-top:var(--s2)}
 
 /* Inset grouped list, as the panel's. Separators 1 px: .5 px vanished on the light page at DPR 1.53. */
 .group{background:var(--cell);border-radius:var(--radius);overflow:hidden}
@@ -141,7 +146,7 @@ input::placeholder{color:var(--secondary)}
 .flow{max-width:44rem;margin:0 auto;padding:var(--s3) max(var(--s4),env(safe-area-inset-right)) max(var(--s5),env(safe-area-inset-bottom)) max(var(--s4),env(safe-area-inset-left))}
 .flow>.group-title:first-child,.flow>section:first-child>.group-title{margin-top:var(--s2)}
 .flow>.banner{margin-bottom:var(--s2)}
-.sub{color:var(--secondary);font-size:1rem;margin:var(--s2) var(--s3) 0}
+
 .btn{display:block;width:100%;min-height:var(--hit);margin:var(--s3) 0 0;padding:var(--s2) var(--s3);border:0;border-radius:var(--radius);background:var(--btn);
 color:#fff;font:inherit;font-weight:600;line-height:1.3;text-align:center;text-decoration:none;cursor:pointer;transition:transform .1s ease-out}
 .btn:active{transform:scale(.97)}
@@ -249,7 +254,7 @@ def page(title, body, refresh=False, done=None, out=None):
     # (/?m=#update after a button): it only scrolls. Where the tag works the page is gone before the script's turn.
     meta = (f'<meta http-equiv=refresh content={seconds}>'
             f'<script>setTimeout(function(){{location.reload()}},{int(seconds * 1000) + 500})</script>') if refresh else ''
-    button = f'<a class=done href="{escape(done[1])}">{escape(done[0])}</a>' if done else ''
+    button = (done if isinstance(done, str) else f'<a class=done href="{escape(done[1])}">{escape(done[0])}</a>') if done else ''
     if out:
         button = f'<a class="done out" href="{escape(out)}"><span class=fwd>CarPlay 画面</span><span class=back>返回</span></a>'
     return (f'<!doctype html><html lang=zh-CN><head><meta charset=utf-8>'
@@ -383,16 +388,13 @@ def pairing_panel(pair, nonce, address=""):
     there and this page is operated on another screen, normally the head unit's browser.
     """
     phase = pair.get("phase", "closed")
-    cancel = (f'<form method=post action=/pair>{hidden(nonce)}'
-              '<button class="btn plain" name=action value=cancel>取消</button></form>')
     if phase == "confirm":
         # The code and its two buttons first, within one Tesla window (773x601 CSS px); the explanation under them.
         return (f'<p class=group-title>配对码</p><div class=group><p class=code>{escape(pair.get("passkey", ""))}</p></div>'
                 f'<form method=post action=/pair>{hidden(nonce, request_id=pair.get("request_id", ""))}<div class=pair>'
                 '<button class="btn plain" name=action value=no>不一致</button>'
                 '<button class=btn name=action value=yes>一致</button></div></form>'
-                f'<p class=foot style="text-align:center">和「{escape(pair.get("name", ""))}」上的数字一致时，'
-                '在 iPhone 上点「配对」，这里点「一致」。</p>', True)
+                f'<p class=foot>和「{escape(pair.get("name", ""))}」上的数字一致时，在 iPhone 上点「配对」，这里点「一致」。</p>', True)
     if phase == "waiting":
         twins = same_names(f["name"] for f in pair.get("found", []))
         found = "".join(
@@ -403,23 +405,23 @@ def pairing_panel(pair, nonce, address=""):
         found = found or '<div class="cell empty" aria-busy=true><span class=spin></span><span class=main><b>正在寻找附近的 iPhone…</b></span></div>'
         error = banner(pair["error"], "bad") if pair.get("error") else ""
         # The list to tap first, the three steps under it: in the Tesla's windowed browser the list sat below the fold.
-        return (f'{error}{group("附近的 iPhone", found)}{cancel}'
+        # Before the first iPhone, where to do this (address): the iPhone stays on its Bluetooth page, so this page is
+        # opened on the car or another device (1.5.4: until then a standing group of the iPhone category said so).
+        where = (f'<p class=foot>iPhone 要停在蓝牙页，所以本页在车机或另一台设备上打开：{url(address)}</p>'
+                 if address else '')
+        return (f'{error}{group("附近的 iPhone", found)}'
                 '<p class=group-title>怎么做</p><ol class=steps>'
                 '<li>在 iPhone 上打开「设置 → 蓝牙」，<b>停在这一页</b>。</li>'
-                '<li>在上面的列表里点它的名字。</li><li>核对两边的六位数字。</li></ol>', True)
+                f'<li>在上面的列表里点它的名字。</li><li>核对两边的六位数字。</li></ol>{where}', True)
     if phase == "pairing":
-        return (group("添加 iPhone", f'<div class=cell aria-busy=true><span class=spin></span><span class=main><b>正在连接「{escape(pair.get("name", ""))}」</b>'
-                      '<span>请留意 iPhone 上的配对请求。</span></span></div>') + cancel, True)
+        return (group("", f'<div class=cell aria-busy=true><span class=spin></span><span class=main><b>正在连接「{escape(pair.get("name", ""))}」</b>'
+                      '<span>请留意 iPhone 上的配对请求。</span></span></div>'), True)
     if phase in ("starting", "finishing"):
-        return group("添加 iPhone", '<div class="cell empty" aria-busy=true><span class=spin></span><span class=main><b>请稍候…</b></span></div>'), True
+        return group("", '<div class="cell empty" aria-busy=true><span class=spin></span><span class=main><b>请稍候…</b></span></div>'), True
     return None, False
 
 
-def other_screen(address):
-    """Where to operate pairing: the head unit or another device, since the iPhone must stay on its Bluetooth page
-    (settings_onboarding_audit S5). Shown until the first iPhone is added: the group's title says what to do, the
-    row is the address to open there."""
-    if not address:
-        return ""
-    return group("添加时 iPhone 要停在蓝牙页，请在车机或另一台设备上打开",
-                 f'<div class=cell>{tile("gray", "screen")}<span class=main><b>{url(address)}</b></span></div>')
+def pair_cancel(nonce):
+    """The pairing screens' bar button (1.5.4): 取消 where every one-task screen has it, a POST as before."""
+    return (f'<form method=post action=/pair>{hidden(nonce)}'
+            '<button class=done name=action value=cancel>取消</button></form>')

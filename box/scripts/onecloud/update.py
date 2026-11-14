@@ -373,6 +373,14 @@ def check(root, openwrt=None, key=KEY, manifest=None):
     except (ValueError, KeyError, subprocess.SubprocessError) as error:
         result["error"] = f"检查更新失败：{error}"
     save(root / "state/update-check.json", result)
+    if result.get("error"):
+        # The page says a failed check in one sentence (1.5.4); the places asked and their errors are read here.
+        import diagnostics   # here, not above: diagnostics imports this module
+        try:
+            diagnostics.DiagLog(root / "state/diag").append(
+                {"uptime": round(time.monotonic(), 1), "event": "update_check", "error": result["error"][-600:]})
+        except OSError:
+            pass
     return result
 
 

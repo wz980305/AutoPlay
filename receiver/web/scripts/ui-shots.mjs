@@ -189,22 +189,27 @@ const PLACES = selectors => Object.fromEntries(Object.entries(selectors).map(([n
   const r = document.querySelector(selector).getBoundingClientRect();
   return [name, { x: r.left, y: r.top, r: innerWidth - r.right, h: r.height }];
 }));
-const COMPARED = { bar: 'yh', title: 'xyh', button: 'ryh', category: 'xyh', heading: 'xy', row: 'xrh' };
-if (want('twins')) for (const vp of [...SHAPES, { w: 600, h: 800, dsf: 2, tag: 'narrow' }, { w: 1710, h: 960, dsf: 1, tag: 'wide' }]) {
+const COMPARED = { bar: 'yh', title: 'xyh', button: 'ryh', category: 'xyh', heading: 'xy', group: 'xyr', row: 'xrh' };
+// Two pairs (1.5.4): a page whose first group has a title (通用 / 网络) and one whose first group has none (连接 / 高级:
+// their group titles only repeated the category's name).
+const TWIN_PAGES = [{ panel: 'general', box: 'net', titled: true }, { panel: 'connection', box: 'more', titled: false }];
+if (want('twins')) for (const vp of [...SHAPES, { w: 600, h: 800, dsf: 2, tag: 'narrow' }, { w: 1710, h: 960, dsf: 1, tag: 'wide' }]) for (const pair of TWIN_PAGES) {
   const { ctx, page } = await viewer(vp);
   await page.evaluate(() => document.getElementById('btn-settings').click()); await page.waitForTimeout(500);
-  await page.click('[data-settings-page="connection"]'); await settle(page);
+  await page.click(`[data-settings-page="${pair.panel}"]`); await settle(page);
+  const shown = '.settings-page:not([hidden])';
   const panel = await page.evaluate(PLACES, { bar: 'dialog[open] header', title: 'dialog[open] header h2', button: '#btn-close', category: '.settings-nav button',
-    heading: '.settings-page:not([hidden]) .group-title', row: '.settings-page:not([hidden]) .group .cell' });
+    ...(pair.titled ? { heading: `${shown} .group-title` } : {}), group: `${shown} .group`, row: `${shown} .group .cell` });
   await ctx.close();
   const ctx2 = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, deviceScaleFactor: vp.dsf, locale: 'zh-CN', colorScheme: 'dark' });
   const page2 = await ctx2.newPage();
-  await page2.goto(`${box.url}box-live.html?night=1&from=panel#net`); await page2.waitForTimeout(300);
-  const twin = await page2.evaluate(PLACES, { bar: 'header', title: 'header h1', button: 'a.done', category: '.nav a', heading: '.pane:target .group-title', row: '.pane:target .group .cell' });
+  await page2.goto(`${box.url}box-live.html?night=1&from=panel#${pair.box}`); await page2.waitForTimeout(300);
+  const twin = await page2.evaluate(PLACES, { bar: 'header', title: 'header h1', button: 'a.done', category: '.nav a',
+    ...(pair.titled ? { heading: '.pane:target .group-title' } : {}), group: '.pane:target .group', row: '.pane:target .group .cell' });
   await ctx2.close();
-  const apart = Object.entries(COMPARED).flatMap(([name, keys]) => [...keys].filter(k => Math.abs(panel[name][k] - twin[name][k]) > 0.5)
+  const apart = Object.entries(COMPARED).filter(([name]) => panel[name]).flatMap(([name, keys]) => [...keys].filter(k => Math.abs(panel[name][k] - twin[name][k]) > 0.5)
     .map(k => `${name}.${k} ${Math.round(panel[name][k] * 10) / 10} / ${Math.round(twin[name][k] * 10) / 10}`));
-  console.log(`twins ${vp.tag} ${vp.w}x${vp.h}: ${apart.length ? 'APART (panel / box page) ' + apart.join('; ') : `same (bar ${Math.round(panel.bar.h)} px, title at ${Math.round(panel.title.x)}, button ${Math.round(panel.button.r)} from the right)`}`);
+  console.log(`twins ${vp.tag} ${vp.w}x${vp.h} ${pair.panel}/${pair.box}: ${apart.length ? 'APART (panel / box page) ' + apart.join('; ') : `same (bar ${Math.round(panel.bar.h)} px, title at ${Math.round(panel.title.x)}, button ${Math.round(panel.button.r)} from the right, first group at ${Math.round(panel.group.y)})`}`);
   if (apart.length) process.exitCode = 1;
 }
 await browser.close(); dist.server.close(); box.server.close();

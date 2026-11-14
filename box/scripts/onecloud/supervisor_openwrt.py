@@ -143,7 +143,7 @@ def lan_warning(address):
 def channel_warning(channel):
     """A Tesla sees 5 GHz channels 36-48 and 149-165 only (tesla_only_box_delta.md 6.1, platform_audit #9)."""
     if channel is None or channel <= 14:
-        return "交给 iPhone 的 Wi-Fi 在 2.4 GHz：能用，但 5 GHz（国内信道 149）更稳。" if channel else ""
+        return "AutoPlay 热点在 2.4 GHz：能用，但 5 GHz（国内信道 149）更稳。" if channel else ""
     if 36 <= channel <= 48 or 149 <= channel <= 165:
         return ""
     return f"Wi-Fi 信道 {channel} 特斯拉看不到（它只认 36–48 和 149–165）。请在 OpenWrt 后台「网络 → 无线」改成 149（国家 CN）或 36。"
@@ -178,7 +178,7 @@ def waiting_warning(why):
         if re.fullmatch(pattern, why):
             why = re.sub(pattern, text, why)
             break
-    return (f"交给 iPhone 的 Wi-Fi 还没准备好：{why}。请在 OpenWrt 后台「网络 → 无线」或「服务 → AutoPlay」检查；"
+    return (f"AutoPlay 热点还没准备好：{why}。请在 OpenWrt 后台「网络 → 无线」或「服务 → AutoPlay」检查；"
             "准备好后 AutoPlay 会自动继续。")
 
 
