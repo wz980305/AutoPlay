@@ -114,7 +114,7 @@ class PageBannerTests(unittest.TestCase):
         self.status.set("bluetooth", "failed", "controller-init-failed", retry_in=60)
         html = self.page.render("")
         self.assertIn("蓝牙没有启动：蓝牙芯片初始化失败", html)
-        self.assertIn("可以重启盒子；仍不行请下载诊断记录", html)
+        self.assertIn("请重启盒子。", html)
         self.assertNotIn("数据线", html)
         self.assertIn("蓝牙就绪后才能添加", html)
         self.status.set("bluetooth", "on")
@@ -128,7 +128,7 @@ class PageBannerTests(unittest.TestCase):
         self.status.set("uplink", "offline")
         html = self.page.render("")
         self.assertIn("证书 2026-11-20 到期", html)
-        self.assertIn("插上能上网的 SIM 卡", html)
+        self.assertIn("请插上能上网的 SIM 卡。", html)
         self.status.set("certificate", "expired", None, not_after="2026-10-01")
         self.status.set("uplink", "online")
         html = self.page.render("")
@@ -145,7 +145,7 @@ class PageBannerTests(unittest.TestCase):
         for text in ("导航播报", "声音", "上游在线", "可以上网"):
             self.assertNotIn(text, html)
         self.status.update(tesla_upstream="offline", tesla_internet="上游不可用（没有 4G 信号）；局域网 CarPlay 正常；特斯拉自带音乐、地图不能上网。")
-        self.assertIn("盒子没有网络（没有 4G 信号）", self.page.render(""))
+        self.assertIn("盒子没有 4G 网络", self.page.render(""))
         self.status.update(tesla_upstream="unknown", tesla_internet="上游状态检测中；局域网 CarPlay 正常。")
         self.assertNotIn("检测中", self.page.render(""))
 
@@ -185,7 +185,7 @@ class PageBannerTests(unittest.TestCase):
 
     def test_pairing_lost_tells_the_owner_to_re_add(self):
         self.status.set("phone", "pairing-lost", "pairing-lost")
-        self.assertIn("请删除此 iPhone 后重新添加", self.page.render(""))
+        self.assertIn("请删除它后重新添加", self.page.render(""))
 
     def test_box_node_follows_bluetooth_and_receiver(self):
         self.status.set("bluetooth", "failed", "rfkill")

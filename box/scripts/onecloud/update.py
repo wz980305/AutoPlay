@@ -597,7 +597,7 @@ def install_openwrt(root, manifest, status, work, key=KEY):
     cache = Path(root).parent / CACHE
     shutil.rmtree(cache, ignore_errors=True)
     cache.mkdir(mode=0o700, parents=True, exist_ok=True)
-    status("downloading", f"正在下载当前版本 {current} 的安装包（升级失败时用来退回）")
+    status("downloading", f"正在下载退回用的 {current}")
     previous = previous_packages(current, prefixes, cache, LEGACY_PACKAGES if legacy else OPENWRT_PACKAGES, key)
     status("downloading", f"正在下载 {manifest['version']}（{sum(f['size'] for f in wanted.values()) // 1048576} MB）")
     files = []
@@ -612,7 +612,7 @@ def install_openwrt(root, manifest, status, work, key=KEY):
     blocked = forbidden_in_plan(simulation.stdout)
     if blocked:
         raise UpdateError("升级会改动内核、内核模块或系统蓝牙（" + "、".join(blocked) + "），已停止，请按说明手动升级")
-    status("installing", "正在安装，CarPlay 会断开约 1 分钟")
+    status("installing", "正在安装")
     port = settings_port()
     write_journal(root, phase="installing", target=manifest["version"], previous=current, legacy=legacy,
                   new_files=[str(f) for f in files], previous_files=[str(f) for f in previous])

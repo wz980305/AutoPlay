@@ -9,14 +9,14 @@
  var lang='zh';try{if(w.localStorage&&w.localStorage.getItem('f50-language')==='en')lang='en';}catch(e){}
  var T={
   checking:['正在检测车机浏览器…','Checking this car browser…'],
-  checkingNote:['如果此提示一直不变，请确认 JavaScript 已启用，或刷新页面。','If this never changes, make sure JavaScript is on, or reload the page.'],
+  checkingNote:['一直停在这里时，请刷新页面。','If this stays, reload the page.'],
   passTitle:['浏览器检测通过','Browser check passed'],passNote:['正在加载播放器…','Loading the player…'],
   failTitle:['这台车机的浏览器无法显示 CarPlay 画面','This car browser cannot show the CarPlay picture'],
   failNote:['缺少：','Missing: '],
-  advice:['特斯拉：在「控制 › 软件」更新车辆软件后再试；旧版本的浏览器不能解码视频。地址必须是盒子的 https:// 名称（证书受信任）。','Tesla: update the car software (Controls › Software) and try again; older browsers cannot decode video. Open the box by its https:// name (trusted certificate).'],
+  advice:['请在「控制 › 软件」更新车辆软件后再试。','Update the car software (Controls › Software) and try again.'],
   ok:['通过','OK'],missing:['缺少','Missing'],limited:['受限','Limited'],done:['完成','Done'],
   appFailed:['播放器未正常启动','The player did not start'],
-  appFailedNote:['脚本加载或初始化失败。请刷新页面；仍不行则更新车辆软件。','The script failed to load or start. Reload the page; if that fails, update the car software.'],
+  appFailedNote:['请刷新页面；仍不行就更新车辆软件。','Reload the page; if that fails, update the car software.'],
   agent:['浏览器上报：','Browser reports: '],
   secure:['不是安全连接（证书未受信任，或用了 http://）','not a secure connection (certificate not trusted, or http://)'],
   old:['浏览器太旧','browser too old'],video:['视频解码（H.264 / WebCodecs）','video decoding (H.264 / WebCodecs)']

@@ -409,7 +409,7 @@ class ManagedPageTests(unittest.TestCase):
         self.assertNotIn("过热", self.page.render(""), "the processor's own cooling is what counts")
         self.page.thermal = lambda: ({"soc": 74, "nr": 55}, {"cpufreq-0": "2/9"})
         html = self.page.render("")
-        self.assertIn("盒子过热（74 °C），系统正在降低它的速度", html)
+        self.assertIn("盒子过热（74 °C），正在降速", html)
         self.assertIn("<span>过热，正在降速</span></span><span class=value>74 °C</span>", html)
         def broken(): raise OSError("sensor")
         self.page.thermal = broken

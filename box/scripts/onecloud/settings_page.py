@@ -316,7 +316,7 @@ class SettingsPage:
         removed = factory_reset.wipe(self.root, identity=identity, uci=self.uci)
         threading.Timer(1.0, self.on_change, args=("factory reset",)).start()
         return ("已重置" + ("，认证文件也已删除" if identity else "")
-                + f"（{len(removed)} 项）。盒子约 1 分钟后重新启动，之后请重新添加 iPhone。")
+                + "。盒子正在重新启动，之后重新添加 iPhone。")
 
     # Blocks ----------------------------------------------------------------------------------
 
@@ -500,34 +500,33 @@ class SettingsPage:
         if bluetooth.get("state") in ("failed", "starting") and bluetooth.get("reason") not in (None, "helper-starting", "powering"):
             # S2: the real reason at the top of the chain, never a cable story.
             reason = BLUETOOTH_TEXT.get(bluetooth["reason"], bluetooth["reason"])
-            html += ui.banner(f"蓝牙没有启动：{reason}。可以重启盒子；仍不行请下载诊断记录。", "bad")
+            html += ui.banner(f"蓝牙没有启动：{reason}。请重启盒子。", "bad")
         elif bluetooth.get("state") == "failed":
-            html += ui.banner("蓝牙没有启动，盒子在不断重试。可以重启盒子；仍不行请下载诊断记录。", "bad")
+            html += ui.banner("蓝牙没有启动，正在重试。可以重启盒子。", "bad")
         phone = status.get("phone") or {}
         if phone.get("state") == "pairing-lost":
-            html += ui.banner("有一部 iPhone 忘记了这台盒子（连续两次拒绝连接），请删除此 iPhone 后重新添加。", "bad")
+            html += ui.banner("有一部 iPhone 忘记了这台盒子，请删除它后重新添加。", "bad")
         certificate = status.get("certificate") or {}
         if certificate.get("state") in ("expiring_soon", "expired", "failed"):
             until = certificate.get("not_after")
             text = {"expiring_soon": f"证书 {until} 到期",
-                    "expired": f"证书已于 {until} 过期，车机浏览器会提示不安全",
+                    "expired": f"证书已于 {until} 过期，车机会提示不安全",
                     "failed": "证书还没申请到"}[certificate["state"]]
             uplink = (status.get("uplink") or {}).get("state")
-            advice = "盒子没网，无法续签：插上能上网的 SIM 卡开机一次。" if uplink == "offline" else "盒子联网后会自动续签。"
+            advice = "盒子没网无法续签，请插上能上网的 SIM 卡。" if uplink == "offline" else "联网后会自动续签。"
             html += ui.banner(text + "。" + advice, "wait")
         identity = status.get("identity")
         if identity is False or (isinstance(identity, dict) and identity.get("state") == "missing"):
-            host = urllib.parse.urlsplit(self.home()).hostname or ""
-            # No credentials here: the F50's root password is the installer's, never 1234 (S3).
-            html += ui.banner(f"还缺 CarPlay 认证文件：把「AI 安装说明」、盒子地址 {host} 和安装时记下的登录方式交给你的"
-                              " AI 助手。放好后自动开始工作；添加 iPhone 可以先做。", "wait")
+            # No credentials here: the F50's root password is the installer's, never 1234 (S3). How to put the files in
+            # place is the install guide's business (1.5.4: the banner retold it in three clauses).
+            html += ui.banner("还缺 CarPlay 认证文件，按「AI 安装说明」放好后自动开始工作。", "wait")
         if status.get("warning"):
             html += ui.banner(status["warning"], "bad")
         # Only an upstream that is down is news (1.3.0): "online" said nothing a driver could act on, and the
         # first seconds of probing are no problem either.
         # The page's own words since 1.4.1 ("上游" was ours, not the owner's); tesla_internet stays in the diagnostics.
         if status.get("tesla_upstream") == "offline":
-            html += ui.banner("盒子没有网络（没有 4G 信号）：CarPlay 照常，车机自带的音乐、地图不能上网。", "wait")
+            html += ui.banner("盒子没有 4G 网络：CarPlay 照常，车机自带的音乐、地图不能上网。", "wait")
         error = status.get("tesla_error", "")
         if error:
             html += ui.banner("车机网络设置失败：" + error + "。CarPlay 不受影响。", "bad")
@@ -535,8 +534,7 @@ class SettingsPage:
         if slowed:
             # 1.5.0: said only while the system is really holding the processor back for heat, which the owner can
             # do something about. The drive of 2026-11-10 reached 72 C parked in the sun with nobody told.
-            html += ui.banner(f"盒子过热（{hottest} °C），系统正在降低它的速度，CarPlay 可能卡顿。"
-                              "请把它移到晒不到的地方或靠近出风口。", "wait")
+            html += ui.banner(f"盒子过热（{hottest} °C），正在降速，CarPlay 可能卡顿。请移到晒不到的地方。", "wait")
         return html
 
     def heat(self):

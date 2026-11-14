@@ -22,7 +22,7 @@ let old=setup(false);assert.equal(old.w.F50BrowserCheck.allowed,false);assert.eq
 // Driver view (viewer audit V10): one headline, the missing things in plain words (each cause once), the Tesla advice.
 assert.equal(old.nodes['browser-check-title'].textContent,'这台车机的浏览器无法显示 CarPlay 画面');
 assert.equal(old.nodes['browser-check-note'].textContent,'缺少：视频解码（H.264 / WebCodecs）；浏览器太旧');
-assert(old.nodes['browser-check-advice'].textContent.indexOf('特斯拉')===0,'the car advice names the Tesla');
+assert.equal(old.nodes['browser-check-advice'].textContent,'请在「控制 › 软件」更新车辆软件后再试。','one thing to do, in the Tesla\'s own menu (1.5.4)');
 assert.equal(old.nodes['browser-check-agent'].textContent,'浏览器上报：Android 4.2.2 Firefox/68','the browser\'s own report, only when something failed');
 assert(!/轻点|声音|tap/i.test(code.split('var T={')[1].split('};')[0]),'no word about a first sound: the page has played none since 1.3.0');
 { // English when this browser saved it; an insecure page is named as such, not as a missing API.

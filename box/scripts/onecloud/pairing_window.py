@@ -62,7 +62,7 @@ class PairingWindow:
     def start(self):
         with self.lock:
             if read_json(self.root / 'state/receiver/phone-presence.json').get('active'):
-                raise ValueError('当前有人使用 CarPlay，请先断开后再添加手机。')
+                raise ValueError('有人正在用 CarPlay，请先断开再添加。')
             if self.process and self.process.poll() is None:
                 return
             self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -85,7 +85,7 @@ class PairingWindow:
         with self.lock:
             status = self.status()
             if self.presence().get('active'):
-                raise ValueError('当前有人使用 CarPlay，请先断开后再添加手机。')
+                raise ValueError('有人正在用 CarPlay，请先断开再添加。')
             if status.get('phase') != 'waiting' or address not in {d['address'] for d in status.get('found', [])}:
                 raise ValueError('这部手机已不在列表中，请刷新页面。')
             save_json(self.pick_file, {'address': address})
@@ -105,7 +105,7 @@ class PairingWindow:
         """Give one already-paired phone the next bounded invitation, e.g. on a new hotspot."""
         with self.lock:
             if self.presence().get('active'):
-                raise ValueError('当前有人使用 CarPlay，不会自动抢占；请对方先断开 Wi-Fi 或 CarPlay。')
+                raise ValueError('有人正在用 CarPlay，请对方先断开。')
             if not PHONE.fullmatch(phone) or phone not in self.devices():
                 raise ValueError('这部手机未配对，请先添加新手机。')
             save_json(self.root / 'state/receiver/pairing-request.json', {
@@ -308,7 +308,7 @@ async def run_incoming(root, timeout):
             # reply from this attempt cannot confirm or clear the next phone's request.
             attempt_generation += 1
             selected, confirmed = None, False
-            error = '配对请求已取消或超时。请重新发起，并及时在手机和盒子页面确认相同的数字。'
+            error = '配对已取消或超时，请重试。'
             save_json(status_file, {'phase': 'waiting', 'found': [], 'error': error})
             confirm_file.unlink(missing_ok=True)
 
@@ -334,7 +334,7 @@ async def run_incoming(root, timeout):
                 # Also when the page already confirmed: the iPhone never answered (it only shows the
                 # request while Settings > Bluetooth is open). Go back to the list instead of waiting.
                 selected, confirmed = None, False
-                error = '手机没有确认配对。请让 iPhone 停在「设置 → 蓝牙」页面，再点一次它的名字。'
+                error = 'iPhone 没有确认配对：让它停在「设置 → 蓝牙」，再点一次它的名字。'
                 save_json(status_file, {'phase': 'waiting', 'found': [], 'error': error})
                 confirm_file.unlink(missing_ok=True)
 
