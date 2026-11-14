@@ -768,7 +768,7 @@ def launch(root, openwrt=None):
         save(root / "state/update-status.json", {"phase": "failed", "message": "无法启动升级：" + why,
                                                  "at": int(time.time())})
         return "无法启动升级：" + why
-    return "已开始升级，约 2–5 分钟，期间 CarPlay 会断开"
+    return "已开始升级"
 
 
 # Plain HTTP on purpose: its Date header needs no clock, while HTTPS fails on a clock off by months. The F50 has no

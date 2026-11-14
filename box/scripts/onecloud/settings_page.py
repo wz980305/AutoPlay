@@ -279,7 +279,7 @@ class SettingsPage:
                 return ""   # the phone leaves the list; the confirmation screen said what that means
             if action == "use":
                 self.pairing.use(form.get("phone", ""))
-                return {"m": "已邀请，1 分钟内有效。请保持 iPhone 的蓝牙打开。", "at": "phones"}
+                return {"m": "已邀请。", "at": "phones"}
             if action in ("yes", "no"):
                 self.pairing.confirm(form.get("request_id", ""), action == "yes")
                 return "" if action == "yes" else {"m": "已拒绝这次配对。", "at": "phones"}
@@ -348,8 +348,7 @@ class SettingsPage:
         progress = update.read(self.state / "update-status.json")
         if update.running(self.state.parent):
             return (f'<div class=cell aria-busy=true><span class=spin></span><span class=main><b>正在升级</b>'
-                    f'<span>{escape(progress.get("message", ""))}</span></span></div>',
-                    "约 2–5 分钟，期间 CarPlay 断开。")
+                    f'<span>{escape(progress.get("message", ""))}</span></span></div>', "")
         version = update.bundled_version(self.state.parent)
         mine = (f'<div class=cell>{ui.tile("gray", "box")}<span class=main><b>本机程序</b></span>'
                 f'<span class=value>{escape(version)}</span></div>' if version else "")
@@ -444,8 +443,7 @@ class SettingsPage:
         pair = self.pairing.status()
         presence = self.pairing.presence()
         devices = self.pairing.devices()
-        # Before the first iPhone the pairing screen says where to do it (the iPhone stays on its Bluetooth page).
-        panel, refresh = ui.pairing_panel(pair, nonce, "" if devices else self.home())
+        panel, refresh = ui.pairing_panel(pair, nonce)
         if panel:
             return panel, refresh, devices, True
         # "paired" stays in the status file after the window closes; it matters until someone connects, and for a few
@@ -579,7 +577,7 @@ class SettingsPage:
                 return None
             return (f'升级到 {found.get("latest", "")}', "/#update",
                     f'<form method=post action=/update>{ui.hidden(nonce, confirmed="1")}'
-                    + ui.group("", '<button class="cell action" name=action value=install>立即升级</button>', "约 2–5 分钟，期间 CarPlay 断开。")
+                    + ui.group("", '<button class="cell action" name=action value=install>立即升级</button>')
                     + '</form>')
         return None
 

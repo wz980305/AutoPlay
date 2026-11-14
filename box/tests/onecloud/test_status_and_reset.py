@@ -245,8 +245,9 @@ class PageBannerTests(unittest.TestCase):
         self.assertIn("<h1>升级到 1.4.0</h1>", html)
         self.assertIn('<a class=done href="/#update">取消</a>', html)
         self.assertIn('<button class="cell action" name=action value=install>立即升级</button>', html)
-        self.assertIn("<p class=foot>约 2–5 分钟，期间 CarPlay 断开。</p>", html)
-        self.assertNotIn("<span>", html.split("<main", 1)[1], "no line under a row")
+        main = html.split("<main", 1)[1]
+        self.assertNotIn("<span>", main, "no line under a row")
+        self.assertNotIn("<p class=foot>", main, "no time estimate: the box refuses an upgrade while CarPlay is in use")
         self.assertEqual(html.count("<button"), 1)
         self.assertNotIn("confirm(", html)
         with patch("settings_page.update.launch", return_value="正在升级，请稍候") as launch:
@@ -346,14 +347,15 @@ class PageLayoutTests(unittest.TestCase):
         self.assertNotIn("<p class=foot>", html)
         self.page.pairing.status = lambda: {"phase": "waiting", "found": []}
         html = self.page.render("")
-        # 1.5.4: one line under the list (three numbered steps under a 怎么做 title until then)
-        self.assertIn("<p class=foot>在 iPhone 上打开「设置 → 蓝牙」并停在那一页。本页在车机或另一台设备上打开："
-                      "http://100.96.0.1<wbr>:18080/</p>", html)
+        # 1.5.4: the list alone (three numbered steps under a 怎么做 title, then one line, until then; the owner's rule:
+        # no line that tells how to do the task)
+        self.assertIn("正在寻找附近的 iPhone…", html)
+        self.assertNotIn("<p class=foot>", html)
         self.assertNotIn("怎么做", html)
         self.assertNotIn("<ol", html)
+        self.assertNotIn("车机或另一台设备", html)
         self.page.pairing.devices = lambda: {"02:00:00:00:00:01": "小王的 iPhone"}
-        self.assertNotIn("车机或另一台设备", self.page.render(""))
-        self.assertIn("<p class=foot>在 iPhone 上打开「设置 → 蓝牙」并停在那一页。</p>", self.page.render(""))
+        self.assertNotIn("<p class=foot>", self.page.render(""))
 
     def test_the_bars_button_leads_to_the_carplay_page_this_browser_came_from(self):
         # The CarPlay page keeps its settings per address: back to the one on the name this browser used here. The
@@ -378,7 +380,7 @@ class PageLayoutTests(unittest.TestCase):
         self.assertIn('<button class="cell action" name=action value=yes>配对</button>', html)
         self.assertNotIn("不一致", html)
         self.assertNotIn("value=no", html)
-        self.assertIn("<p class=foot>和「iPhone」上的数字相同时，两边都点「配对」。</p>", html)
+        self.assertNotIn("<p class=foot>", html, "the iPhone shows its own request with the code and 配对")
         self.assertIn('<form method=post action=/pair>', html.split("</header>")[0])
         self.assertIn('<button class=done name=action value=cancel>取消</button>', html.split("</header>")[0])
         self.assertNotIn("CarPlay 画面", html)

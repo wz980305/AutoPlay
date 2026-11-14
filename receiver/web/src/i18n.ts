@@ -15,7 +15,7 @@ const messages = {
   reconnectingHint: ['暂时无法连接盒子。请检查盒子电源与车机的 AutoPlay 热点连接。', 'Cannot connect to the box. Check its power and the car’s AutoPlay hotspot connection.'],
   waited: ['已等待 ', 'Waited '], secondsUnit: [' 秒', ' s'],
   starting: ['正在准备画面', 'Preparing picture'],
-  renegotiating: ['正在调整画面', 'Adjusting picture'], renegotiatingHint: ['通常约 5 秒', 'Usually about 5 seconds'],
+  renegotiating: ['正在调整画面', 'Adjusting picture'],
   // No token: the page asks the box for it when it opens (boot.ts, receiver-access.json) and did not get it. Until
   // 1.4.3 this told the driver to tap a button the box page does not have (1.5.0).
   access: ['未取得盒子的访问许可', 'No access to the box'], accessHint: ['本页打开时没有从盒子取到访问许可。请检查盒子电源与车机的 AutoPlay 热点连接，然后刷新本页。', 'This page did not get its access from the box when it opened. Check the box’s power and the car’s AutoPlay hotspot connection, then reload this page.'],
@@ -35,7 +35,7 @@ const messages = {
   deferred: ['已记下，下次连接 iPhone 时生效，不打断当前画面。', 'Saved for the next connection; the picture is not interrupted now.'],
   nextSession: ['新画质下次连接 iPhone 时生效。', 'The new quality takes effect on the next iPhone connection.'],
   fpsLowered: ['车机解码跟不上 60 帧，已自动改为 30 帧（重新连接一次）。', 'This browser cannot decode 60 fps in time; switched to 30 fps (one reconnect).'],
-  adjusting: ['正在调整画面 · 通常约 5 秒', 'Adjusting picture · usually about 5 s'],
+  adjusting: ['正在调整画面', 'Adjusting picture'],
   recoveringNotice: ['连接中断 · 正在重连 · 触控已暂停', 'Link lost · Reconnecting · Touch paused'],
   loadFail: ['读取失败，请检查盒子连接后重试。', 'Could not load settings. Check the receiver connection and retry.'],
   applyFail: ['应用失败，请检查连接和分辨率范围。', 'Could not apply. Check connection and resolution range.'],

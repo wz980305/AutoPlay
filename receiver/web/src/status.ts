@@ -12,7 +12,7 @@ export function statusHint(state: string, linkDownSeconds: number): StatusHint {
     // way to pair is the box page's 「添加 iPhone」, one row below; starting said its title again.
     case 'waiting': return { key: null, seconds: null, boxLink: true };
     case 'starting': return { key: null, seconds: null, boxLink: true };
-    case 'renegotiating': return { key: 'renegotiatingHint', seconds: null, boxLink: true };
+    case 'renegotiating': return { key: null, seconds: null, boxLink: true };   // 1.5.4: no time estimate under the title
     case 'connecting':
       // The first seconds of a connect say nothing; past them it is the box that is not answering.
       return linkDownSeconds < SLOW_LINK_S ? { key: null, seconds: null, boxLink: false }

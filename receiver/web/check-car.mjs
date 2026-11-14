@@ -350,14 +350,13 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
 { // The hint follows the state (viewer audit V3): the box is the question while the link is down, the iPhone only
   // while the box answers; the box's own page link hides while the box is unreachable.
   const {statusHint,SLOW_LINK_S}=await load('status');
-  // 1.5.4: waiting and starting carry no standing line under the title (it explained what the title says);
-  // a display change says how long it takes.
+  // 1.5.4: no line under the title while things go as they should (waiting, starting, a display change): the
+  // owner's rule, no explanation and no time estimate; the lines are for a box that does not answer.
   assert.deepEqual(statusHint('waiting',0),{key:null,seconds:null,boxLink:true},'the one good state: the title says it');
   assert.deepEqual(statusHint('starting',0),{key:null,seconds:null,boxLink:true},'iPhone connected: the title says it');
-  assert.deepEqual(statusHint('renegotiating',0),{key:'renegotiatingHint',seconds:null,boxLink:true},'a display change is not "waiting for iPhone"');
+  assert.deepEqual(statusHint('renegotiating',0),{key:null,seconds:null,boxLink:true},'a display change: the title says it');
   { const i18n=readFileSync(new URL('./src/i18n.ts',import.meta.url),'utf8');
-    assert.doesNotMatch(i18n,/waitingHint|startingHint/);
-    assert.match(i18n,/renegotiatingHint: \['通常约 5 秒', 'Usually about 5 seconds'\]/);
+    assert.doesNotMatch(i18n,/waitingHint|startingHint|renegotiatingHint|通常约|usually about/i);
     // the time waited follows the hint as a sentence of its own, never 「。 · 已等待」
     const main=readFileSync(new URL('./src/main.ts',import.meta.url),'utf8');
     assert.doesNotMatch(main,/ · \$\{t\('waited'\)\}/);

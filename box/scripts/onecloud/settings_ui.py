@@ -381,7 +381,7 @@ def phone_rows(devices, active, last, nonce, idle):
     return html
 
 
-def pairing_panel(pair, nonce, address=""):
+def pairing_panel(pair, nonce):
     """The add-phone flow as its own screen. Returns (html, refresh), or (None, False) when idle.
 
     iOS shows an incoming pairing request only while Settings > Bluetooth is open, so the iPhone stays
@@ -389,17 +389,17 @@ def pairing_panel(pair, nonce, address=""):
 
     1.5.4, after Apple's guidelines (buttons, alerts, action sheets): one action per screen as a row of the list, the
     way the rest of this page acts (「配对」, the word the iPhone's own request uses; 取消 is the bar's button), no
-    yes/no pair (一致 / 不一致), no line that explains the buttons, no numbered steps: the one thing to do on the
-    iPhone is the list's footer.
+    yes/no pair (一致 / 不一致), no numbered steps. And, the owner's rule for this page: no line that tells how to
+    do the task or how long it takes - only the rows (the steps live in the install guide).
     """
     phase = pair.get("phase", "closed")
     if phase == "confirm":
-        # The code and its button first, within one Tesla window (773x601 CSS px).
-        name = escape(pair.get("name", ""))
-        return (f'<p class=group-title>配对码</p><div class=group><p class=code>{escape(pair.get("passkey", ""))}</p></div>'
-                f'<form method=post action=/pair>{hidden(nonce, request_id=pair.get("request_id", ""))}'
-                + group("", '<button class="cell action" name=action value=yes>配对</button>',
-                        f'和「{name}」上的数字相同时，两边都点「配对」。')
+        # The phone, its code under it (the iPhone shows the same digits in its own request), then 配对: all within one
+        # Tesla window (773x601 CSS px).
+        return (group("", f'<div class=cell>{tile("gray", "phone")}<span class=main><b>{escape(pair.get("name", ""))}</b></span></div>'
+                          f'<p class=code>{escape(pair.get("passkey", ""))}</p>')
+                + f'<form method=post action=/pair>{hidden(nonce, request_id=pair.get("request_id", ""))}'
+                + group("", '<button class="cell action" name=action value=yes>配对</button>')
                 + '</form>', True)
     if phase == "waiting":
         twins = same_names(f["name"] for f in pair.get("found", []))
@@ -410,10 +410,7 @@ def pairing_panel(pair, nonce, address=""):
             for f in pair.get("found", []))
         found = found or '<div class="cell empty" aria-busy=true><span class=spin></span><span class=main><b>正在寻找附近的 iPhone…</b></span></div>'
         error = banner(pair["error"], "bad") if pair.get("error") else ""
-        # Before the first iPhone, where to do this (address): the iPhone stays on its Bluetooth page, so this page is
-        # opened on the car or another device.
-        tip = "在 iPhone 上打开「设置 → 蓝牙」并停在那一页。" + (f"本页在车机或另一台设备上打开：{url(address)}" if address else "")
-        return f'{error}{group("附近的 iPhone", found, tip)}', True
+        return f'{error}{group("附近的 iPhone", found)}', True
     if phase == "pairing":
         return (group("", f'<div class=cell aria-busy=true><span class=spin></span><span class=main><b>正在连接「{escape(pair.get("name", ""))}」</b>'
                       '</span></div>'), True)
