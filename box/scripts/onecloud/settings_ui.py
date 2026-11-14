@@ -289,23 +289,38 @@ def back(href):
     return f'<a class="done icon" href="{escape(href)}" aria-label="返回">{CHEVRON}</a>'
 
 
+def reload(ms):
+    """A script that reloads the page after ms, but only once the box answers: until then the page stays as it is and
+    asks again every ms (a fetch, given up after 10 s). While an upgrade restarts the service, or the hotspot comes
+    back, a plain reload showed the browser's error page and stopped there (1.6.4)."""
+    return ('<script>(function(){function go(){if(!window.fetch){location.reload();return}'
+            'var c=window.AbortController?new AbortController():null,t=c?setTimeout(function(){c.abort()},10000):0;'
+            'fetch(location.href,{cache:"no-store",signal:c?c.signal:void 0}).then(function(r){clearTimeout(t);'
+            'if(r.ok)location.reload();else later()},function(){clearTimeout(t);later()})}'
+            f'function later(){{setTimeout(go,{ms})}}later()}})()</script>')
+
+
 def page(title, body, refresh=False, done=None, out=None, capsule=""):
     """The title bar and what is under it. refresh: True reloads every 3 s, a number every that many seconds;
     done: the bar's leading button - (label, address) for 取消, or HTML (back(), a form's button); out: instead of
     done, the CarPlay page's address - the way out of the box page: the chevron on the leading edge for a visit that
     came from the CarPlay page (to the settings panel when it began there, see SCRIPT), 「CarPlay 画面」 on the
     trailing edge for a browser that came by itself. capsule: capsule()'s HTML; a page that reloads itself then waits
-    until the capsule has gone (6 s) and does it by script alone, at the address without the message (SCRIPT), as a
-    refresh tag would reload the message too."""
+    until the capsule has gone (6 s), at the address without the message (SCRIPT).
+
+    The reload is reload(): it asks the box first and reloads only when the box answers (1.6.4). An upgrade restarts
+    the service under the page; a blind reload then landed on the browser's own "cannot reach" page, which never
+    reloads, so the owner saw another page flash by and the upgrade still "running" after it had finished
+    (2026-11-14). The refresh tag is only for a browser without scripts (noscript)."""
     body = keep_words(body)
     seconds = 3 if refresh is True else refresh
     if capsule and refresh:
         seconds = max(seconds, 6)
-    # The refresh tag, and a script that reloads half a second after it would have (1.5.3): the owner had to open the
-    # page again to see what a check had found. A browser may leave the tag alone for an address with a fragment
-    # (/?m=#update after a button): it only scrolls. Where the tag works the page is gone before the script's turn.
-    meta = (('' if capsule else f'<meta http-equiv=refresh content={seconds}>')
-            + f'<script>setTimeout(function(){{location.reload()}},{int(seconds * 1000) + 500})</script>') if refresh else ''
+    # The script reloads (1.5.3: the owner had to open the page again to see what a check had found; a browser may
+    # take the refresh tag to /?m=#update as a scroll). The tag is for a browser without scripts, and never with a
+    # capsule: it would bring the message back.
+    meta = (('' if capsule else f'<noscript><meta http-equiv=refresh content={seconds}></noscript>')
+            + reload(int(seconds * 1000) + 500)) if refresh else ''
     lead = (done if isinstance(done, str) else f'<a class=done href="{escape(done[1])}">{escape(done[0])}</a>') if done else ''
     trail = ''
     if out:

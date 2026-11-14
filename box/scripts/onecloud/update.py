@@ -635,6 +635,10 @@ def install_openwrt(root, manifest, status, work, key=KEY):
         # /opt/dashplay/state), the autoplay postinst then moves state, identity and the uci section over.
         run("apk", "del", *LEGACY_PACKAGES, timeout=300)
     result = run("apk", "add", "--upgrade", "--allow-untrusted", *map(str, files), timeout=600)
+    if result.returncode == 0:
+        # The new version is installed and starting; the page (served by it now) says so instead of 「正在安装」 for
+        # the minutes the check below may take (1.6.4: the owner saw CarPlay back and the page still installing).
+        status("verifying", "正在确认新版本运行正常")
     if result.returncode == 0 and service_up(port):
         write_journal(root, phase="done", target=manifest["version"], previous=current)
         return

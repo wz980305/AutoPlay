@@ -114,7 +114,8 @@ curl shim with `--connect-timeout 10 --max-time 90 --retry 2` (`state/acme/bin/c
 ### update — the online update (6e)
 
 `current` (reason = latest version), `available` (reason = version),
-`installing` (reason = phase), `failed` (reason = message), `check-failed`,
+`installing` (reason = phase: `starting`, `checking`, `backup`, `downloading`, `installing`, `verifying`
+(1.6.4: the new version is in and being checked, up to 4 min), `restoring`), `failed` (reason = message), `check-failed`,
 `check-off`. `update.healthy()` — used by the update's own health check and by
 `recover()` after a power cut — requires `system` `ok` and `bluetooth` `on`.
 

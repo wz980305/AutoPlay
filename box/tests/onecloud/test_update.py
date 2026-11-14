@@ -400,6 +400,7 @@ class SignedReleaseTests(unittest.TestCase):
         new = self.openwrt_release('2026.10.20', {n: f'new {n}'.encode() for n in update.OPENWRT_PACKAGES})
         self.publish({'format': 1, 'version': '2026.10.20', 'online': True, 'openwrt': new})
         calls, ups = [], list(comes_up)
+        self.seen_at_check = []   # the page's phase while the new version is being checked
 
         def run(*args, timeout=300):
             if args[0] == OPENSSL:   # the signature is checked for real
@@ -420,7 +421,8 @@ class SignedReleaseTests(unittest.TestCase):
         versions = {installed: '2026.10.19.1-r1', 'autoplay-jre': '21.0.12.1-r1'}
         with patch.object(update, 'run', run), patch.object(update, 'apk_version', versions.get), \
                 patch.object(update, 'Path', fake_path), patch.object(update, 'settings_port', lambda: 18080), \
-                patch.object(update, 'service_up', lambda port, seconds=150: ups.pop(0)), \
+                patch.object(update, 'service_up', lambda port, seconds=150: (self.seen_at_check.append(
+                    update.read(self.root / 'state/update-status.json').get('phase')), ups.pop(0))[1]), \
                 patch.object(update, 'BACKUP', 'backup.tar.gz'), \
                 patch.object(update, 'LEGACY_ROOT', str(self.dir / 'legacy')):
             code = update.install(self.root, True, self.pub)
@@ -432,6 +434,12 @@ class SignedReleaseTests(unittest.TestCase):
     def test_openwrt_installs_the_three_packages_after_a_clean_plan(self):
         code, calls, status = self.openwrt_install()
         self.assertEqual((code, status['phase']), (0, 'done'), status)
+        # While the new version is checked (up to 4 min) the page says so, not 「正在安装」 (1.6.4: the owner saw CarPlay
+        # back and the page still installing); it still counts as running.
+        self.assertEqual(self.seen_at_check, ['verifying'])
+        update.save(self.root / 'state/update-status.json', {'phase': 'verifying', 'message': '正在确认新版本运行正常',
+                                                             'at': int(time.time())})
+        self.assertTrue(update.running(self.root))
         self.assertIn(['apk', 'update'], calls)
         real = [c for c in calls if c[:3] == ['apk', 'add', '--upgrade'] and '--simulate' not in c]
         self.assertEqual(len(real), 1)

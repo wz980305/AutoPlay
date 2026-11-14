@@ -297,8 +297,8 @@ class PageBannerTests(unittest.TestCase):
         self.assertIn("<h1>添加 iPhone</h1>", html)
         self.assertIn("<p class=capsule role=status>配对请求已变化，请重新核对配对码</p>", html)
         self.assertNotIn("http-equiv=refresh", html)
-        self.assertIn("<script>setTimeout(function(){location.reload()},6500)</script>", html)
-        self.assertIn("http-equiv=refresh content=3", ui.page("x", "", True))
+        self.assertIn(ui.reload(6500), html)
+        self.assertIn("<noscript><meta http-equiv=refresh content=3></noscript>", ui.page("x", "", True))
         self.assertNotIn("location.reload", ui.page("x", "", False, capsule=ui.capsule("错误：a，b")))
         # the reset's capsule is on the reset page
         html = self.page.render_reset(urllib.parse.urlencode({"m": "错误：确认词不正确，请输入「重置」。"}))
@@ -665,20 +665,29 @@ class PageLayoutTests(unittest.TestCase):
                      '#net:target~.nav a[href="#net"]', "scroll-margin-top:100vh"):
             self.assertIn(rule, ui.CSS)
 
-    def test_a_page_that_refreshes_also_reloads_from_a_script(self):
-        """1.5.3: the owner had to open the page again to see what 「检查更新」 had found. After a button the address
-        ends in #update, and a browser may take the refresh tag to such an address as a scroll, not a reload. A
-        script reloads half a second after the tag would have; where the tag works, the page is gone by then."""
+    def test_a_page_that_refreshes_reloads_only_once_the_box_answers(self):
+        """1.5.3: the owner had to open the page again to see what 「检查更新」 had found (a browser may take the refresh
+        tag to /?m=#update as a scroll), so a script reloads. 1.6.4: it asks the box first. An upgrade restarts the
+        service under the page; a blind reload landed on the browser's error page, which never reloads, so the owner
+        saw another page flash by and the upgrade still "running" after it had finished (2026-11-14). The refresh tag
+        is only for a browser without scripts."""
         import settings_ui as ui
         html = ui.page("t", "<p>x</p>", 2)
-        self.assertIn("<meta http-equiv=refresh content=2><script>setTimeout(function(){location.reload()},2500)</script>", html)
-        self.assertIn("setTimeout(function(){location.reload()},3500)", ui.page("t", "<p>x</p>", True))
+        self.assertIn("<noscript><meta http-equiv=refresh content=2></noscript>" + ui.reload(2500), html)
+        self.assertNotIn("<meta http-equiv=refresh content=2><", html.replace("<noscript><meta http-equiv=refresh content=2></noscript>", ""))
+        self.assertIn(ui.reload(3500), ui.page("t", "<p>x</p>", True))
         self.assertNotIn("location.reload", ui.page("t", "<p>x</p>"))
+        script = ui.reload(3500)
+        self.assertIn('fetch(location.href,{cache:"no-store"', script)
+        self.assertIn("if(r.ok)location.reload();else later()", script, "a refused or failed answer: ask again later")
+        self.assertIn("function(){clearTimeout(t);later()}", script, "no answer (the service restarting): stay, ask again")
+        self.assertIn("c.abort()},10000)", script, "a request that hangs is given up")
+        self.assertIn("if(!window.fetch){location.reload();return}", script, "a browser without fetch reloads as before")
         with patch("settings_page.update.check", side_effect=lambda root: threading.Event().wait(5)):
             self.page.start_check()
         checking = self.page.render("m=")
         self.assertIn("正在检查更新…", checking)
-        self.assertIn("location.reload()},2500)", checking)
+        self.assertIn("function later(){setTimeout(go,2500)}", checking)
 
     def test_a_buttons_answer_comes_back_on_its_category(self):
         import http.client

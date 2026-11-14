@@ -41,6 +41,10 @@ let good=setup(true);await Promise.resolve();assert.equal(good.w.F50BrowserCheck
 assert.equal(good.nodes['browser-check-agent'].textContent,undefined,'nothing failed: no browser report');
 assert.equal(good.nodes['browser-check-continue'].attributes['aria-label'],'返回','the chevron back to the panel (1.6.0: it said 完成)');assert.equal(good.nodes['browser-check-continue'].hidden,true,'the bar button waits for the player');
 good.w.F50BrowserCheck.appReady();assert.equal(good.nodes['browser-check-continue'].disabled,false);assert.equal(good.nodes['browser-check-continue'].hidden,false);assert.equal(good.nodes['browser-check'].style.display,'none');
+{ // Opened from the panel, ‹ goes back to the panel (main.ts reopens it), not to CarPlay (owner, 2026-11-14); once
+  let back=0;good.w.F50BrowserCheck.show(()=>back++);assert.equal(good.nodes['browser-check'].style.display,'block');
+  good.nodes['browser-check-continue'].onclick();assert.equal(good.nodes['browser-check'].style.display,'none');assert.equal(back,1,'back to the panel');
+  good.w.F50BrowserCheck.show();good.nodes['browser-check-continue'].onclick();assert.equal(back,1,'shown without a way back: just hides');}
 let bad=setup(true,false);await Promise.resolve();assert.equal(bad.w.F50BrowserCheck.allowed,false);
 good.w.F50BrowserCheck.appFailed();assert.equal(good.nodes['browser-check'].style.display,'block');assert.equal(good.nodes['browser-check-continue'].disabled,true);assert.equal(good.nodes['browser-check-continue'].hidden,true);
 console.log('Browser check: legacy API failures, supported browser, H264 rejection and bundle failure passed.');

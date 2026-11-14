@@ -46,7 +46,10 @@
   state.textContent=t('passTitle');note.textContent=t('passNote');timer=w.setTimeout(function(){if(!api.ready)api.appFailed();},12000);}
  api.appReady=function(){api.ready=true;w.clearTimeout(timer);button.disabled=false;button.hidden=false;note.textContent='';if(api.allowed)panel.style.display='none';};
  api.appFailed=function(){w.clearTimeout(timer);panel.style.display='block';state.textContent=t('appFailed');note.textContent=t('appFailedNote');if(advice)advice.textContent=t('advice');report();button.disabled=true;button.hidden=true;};
- api.show=function(){panel.style.display='block';};button.onclick=function(){if(api.allowed&&api.ready)panel.style.display='none';};
+ /* Opened from the panel (main.ts passes back): the chevron returns there, as a pushed iOS page does; 1.6.0-1.6.3 only
+    hid this page, which left the driver on CarPlay with the panel closed (owner, 2026-11-14). */
+ api.show=function(back){api.back=back||null;panel.style.display='block';};
+ button.onclick=function(){if(!(api.allowed&&api.ready))return;panel.style.display='none';var back=api.back;api.back=null;if(back)back();};
  var zh=lang==='zh';
  add(zh?'安全连接':'Secure connection',w.isSecureContext===true,true,zh?'视频解码需要安全上下文。':'Video decoding needs a secure context.','secure');
  add(zh?'实时连接':'Live connection',typeof w.WebSocket==='function',true,zh?'接收画面与发送触控。':'Receives the picture, sends touches.','old');

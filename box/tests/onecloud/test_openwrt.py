@@ -538,7 +538,7 @@ class ManagedPageTests(unittest.TestCase):
         html = self.page.render(urllib.parse.urlencode({"m": "错误：CarPlay 正在使用中，请停车并断开后再升级。"}))
         self.assertIn('<p class=capsule role=status>CarPlay 正在使用中，请停车并断开后再升级</p>', html)
         self.assertNotIn("http-equiv=refresh", html, "an upgrade reloads the page every 3 s, by script while a capsule shows")
-        self.assertIn("setTimeout(function(){location.reload()},6500)", html)
+        self.assertIn("function later(){setTimeout(go,6500)}", html)
         self.assertNotIn('class="banner', html)
         update.save(self.state / "update-status.json", {})
         update.save(self.state / "update-status.json", {"phase": "installing", "message": "正在安装", "at": time.time()})

@@ -506,7 +506,7 @@ function pageEvent(ev: number) {
   connection.send({type:'stats',stats:{ev,hidden:document.hidden?1:0,borderless:teslaBorderless()?1:0,width:screen.clientWidth,height:screen.clientHeight,...viewport()}});
 }
 /** Which page build runs (raised with each build tried in the car). */
-const BUILD = 202611141800;
+const BUILD = 202611142000;
 /** What the browser says of the space it gives the page, to find the car's bar over a fullscreen page (2026-10-13):
  *  window, visual viewport (and its offset), screen, available screen, outer window, pixel ratio. */
 function viewport(): Record<string, number> {
@@ -714,7 +714,13 @@ panel.querySelectorAll<HTMLDetailsElement>('details').forEach(details => {
     details.scrollIntoView({ block: own.height > view.height ? 'start' : 'end', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   });
 });
-el('browser-check-show').onclick = () => {
+// 「浏览器兼容性检测」 replaces the panel; its ‹ brings the panel back as it was (the same page, 「连接与兼容性」 still
+// open) with this row in view, as a pushed iOS page returns to its list (owner, 2026-11-14: it went back to CarPlay).
+const browserCheckRow = el('browser-check-show');
+browserCheckRow.onclick = () => {
   panel.close();
-  (window as unknown as { F50BrowserCheck: { show(): void } }).F50BrowserCheck.show();
+  (window as unknown as { F50BrowserCheck: { show(back: () => void): void } }).F50BrowserCheck.show(() => {
+    openPanel();
+    browserCheckRow.scrollIntoView({ block: 'center' }); browserCheckRow.focus();
+  });
 };
