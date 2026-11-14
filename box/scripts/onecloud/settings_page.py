@@ -76,10 +76,6 @@ def host_allowed(host, allowed_networks, names=()):
 
 
 TITLE = "AutoPlay 盒子"   # what the CarPlay page's row calls it (连接 → AutoPlay 盒子); "AutoPlay 设置" is that page's own panel
-# After a pairing, "connecting" is said under the iPhone group this long at most (1.5.4): the pairing's status keeps
-# "paired" until the next pairing or a restart, and an iPhone that never joined the Wi-Fi held the page on a screen with
-# no categories and no way back.
-PAIRED_SHOWN_FOR = 180
 # Which category a button's answer is shown on: the redirect after a POST carries it as the address's fragment.
 PANE_AFTER = {"/update": "#update"}
 
@@ -279,7 +275,7 @@ class SettingsPage:
                 return ""   # the phone leaves the list; the confirmation screen said what that means
             if action == "use":
                 self.pairing.use(form.get("phone", ""))
-                return {"m": "已邀请。", "at": "phones"}
+                return ""   # the phone's row says 「正在接入…」 (1.5.4: 「已邀请。」 under the group)
             if action in ("yes", "no"):
                 self.pairing.confirm(form.get("request_id", ""), action == "yes")
                 return "" if action == "yes" else {"m": "已拒绝这次配对。", "at": "phones"}
@@ -290,8 +286,9 @@ class SettingsPage:
                 self.start_check()
                 return ""   # the update group shows "checking" and the page refreshes itself until the result is in
             if form.get("action") == "install":
-                if form.get("confirmed") != "1":
-                    return {"ask": "install"}
+                # At once (1.5.4; until then a confirmation screen first). Apple's guidelines keep confirmations for
+                # what loses data unexpectedly: an upgrade loses none, is refused while CarPlay is in use, and goes
+                # back by itself when the new version does not start - as iOS starts on 「立即更新」.
                 message = update.launch(self.state.parent)
                 # Started: the group shows the upgrade running. Refused (CarPlay in use) or failed: said in the group.
                 return "" if message.startswith("已开始升级") else {"m": message, "at": "update"}
@@ -347,6 +344,14 @@ class SettingsPage:
         found = update.read(self.state / "update-check.json")
         progress = update.read(self.state / "update-status.json")
         if update.running(self.state.parent):
+            share = progress.get("progress")
+            if progress.get("phase") == "downloading" and isinstance(share, (int, float)):
+                # The size is known: a bar instead of the spinner (1.5.4, Apple's progress indicators).
+                percent = max(0, min(100, round(share * 100)))
+                return (f'<div class=cell>{ui.tile("blue", "download")}<span class=main><b>正在升级</b>'
+                        f'<span>{escape(progress.get("message", ""))}</span>'
+                        f'<progress max=100 value={percent} aria-label="已下载 {percent}%"></progress></span>'
+                        f'<span class=value>{percent}%</span></div>', "")
             return (f'<div class=cell aria-busy=true><span class=spin></span><span class=main><b>正在升级</b>'
                     f'<span>{escape(progress.get("message", ""))}</span></span></div>', "")
         version = update.bundled_version(self.state.parent)
@@ -379,8 +384,10 @@ class SettingsPage:
                                f'<span class=value>{escape(found["current"])}</span></div>' if found.get("current") else "")
             cells = current + cells + (
                 f'<div class="cell tall">{ui.tile("red", "download")}<span class=main><b>有新版本 {escape(found["latest"])}</b>'
-                f'{f"<span class=clamp>{notes}</span>" if notes else ""}'
-                f'<span><a class=more href="{escape(more)}">完整更新说明</a></span></span></div>')
+                f'{f"<span class=clamp>{notes}</span>" if notes else ""}</span></div>'
+                # A row of its own (1.5.4: a small link, 31-37 px high, under Apple's 44 pt)
+                f'<a class=cell href="{escape(more)}">{ui.tile("gray", "doc")}<span class=main><b>完整更新说明</b></span>'
+                '<span class=chev></span></a>')
             if found.get("online"):
                 cells += (f'<form method=post action=/update>{ui.hidden(nonce)}<button class="cell action" name=action '
                           'value=install>立即升级</button></form>')
@@ -392,7 +399,16 @@ class SettingsPage:
                       f'<span class=value>{escape(version or found["latest"])}</span></div>')
         else:
             cells = mine + cells
+        if self.check_stale(found):
+            # Opening 更新 checks by itself when the last check is old (1.5.4, as iOS's Software Update does on opening;
+            # Apple: don't make people start every update). The script submits this form; the button stays for a retry.
+            check = check.replace("<form method=post action=/update>", "<form method=post action=/update data-auto>", 1)
         return cells + check, foot
+
+    def check_stale(self, found):
+        """The last check is more than an hour old (or there was none) and nothing is running: opening 更新 checks."""
+        return (time.time() - found.get("checked_at", 0) > 3600 and not self.check_running()
+                and not update.running(self.state.parent))
 
     def ddns_block(self):
         """The own DuckDNS name: LuCI sets it; this page only tells how it is going. Two rows: the name, and its
@@ -411,9 +427,11 @@ class SettingsPage:
         return (f'<div class=cell>{ui.tile("blue", "globe")}<span class=main><b>{escape(name)}</b></span></div>'
                 + certificate)
 
-    def phone_node(self, devices, active, phase):
+    def phone_node(self, devices, active, phase, joining=None):
         if active and active in devices:
             return ("on", devices[active], "正在使用")
+        if joining and joining in devices:
+            return ("wait", devices[joining], "正在接入")
         if phase != "closed":
             return ("wait", "iPhone", "正在添加")
         return ("off", "iPhone", f"已添加 {len(devices)} 部" if devices else "未添加")
@@ -434,7 +452,7 @@ class SettingsPage:
         return ("on", "盒子", "运行中")
 
     def chain(self, devices, presence, phase):
-        return ui.chain(self.hotspot_node(), self.phone_node(devices, presence.get("active"), phase), self.box_node())
+        return ui.chain(self.hotspot_node(), self.phone_node(devices, presence.get("active"), phase, self.pairing.joining()), self.box_node())
 
     def phones_block(self, nonce, note=""):
         """The pairing flow while it runs (its own screen); otherwise the iPhone group: the phones, then "添加 iPhone" as
@@ -446,12 +464,12 @@ class SettingsPage:
         panel, refresh = ui.pairing_panel(pair, nonce)
         if panel:
             return panel, refresh, devices, True
-        # "paired" stays in the status file after the window closes; it matters until someone connects, and for a few
-        # minutes at most (1.5.4): until then this line was a screen of its own, without the categories or 返回, for as
-        # long as the iPhone did not come.
-        connecting = pair.get("phase") == "paired" and not presence.get("active") \
-            and time.time() - pair.get("at", 0) < PAIRED_SHOWN_FOR
-        rows = ui.phone_rows(devices, presence.get("active"), presence.get("last_phone"), nonce, not presence.get("active"))
+        # A phone being invited (接入 CarPlay, or a pairing that just finished) says so in its own row while the
+        # invitation holds (1.5.4; until then a line under the group, and before that a screen of its own).
+        joining = self.pairing.joining()
+        connecting = bool(joining) and joining in devices and presence.get("active") != joining
+        rows = ui.phone_rows(devices, presence.get("active"), presence.get("last_phone"), nonce, not presence.get("active"),
+                             joining if connecting else None)
         add = (f'<form method=post action=/pair>{ui.hidden(nonce)}'
                '<button class="cell action" name=action value=start>添加 iPhone</button></form>')
         bluetooth = self.status().get("bluetooth") or {}
@@ -459,8 +477,6 @@ class SettingsPage:
         if bluetooth.get("state") not in (None, "on", "unknown"):
             # Bluetooth is not up: say so instead of inventing a cable (the alert at the top says why).
             foot = "蓝牙就绪后才能添加或接入 iPhone。"
-        elif connecting:
-            foot = "配对完成，iPhone 正在连上 AutoPlay 热点并打开 CarPlay。"
         else:
             # Nothing going on: no line (1.5.0). The steps of adding an iPhone are on the screen that adds it.
             foot = note
@@ -480,13 +496,17 @@ class SettingsPage:
         return ui.group("在车机浏览器打开", "".join(
             f'<div class=cell>{ui.tile("green", "screen")}<span class=main><b>{ui.url(u)}</b></span></div>' for u in entries))
 
-    def network_block(self):
-        status = self.status()
+    def admin_url(self):
+        """LuCI's Wi-Fi page, on the router's own web server (port 80), not on this page's port (a 404 there)."""
         admin = self.admin
         if admin.startswith("/"):
-            # On the router's own web server (port 80), not on this page's port (a 404 there).
-            host = urllib.parse.urlsplit(status.get("home", "")).hostname
+            host = urllib.parse.urlsplit(self.status().get("home", "")).hostname
             admin = f"http://{host}{admin}" if host else admin
+        return admin
+
+    def network_block(self):
+        status = self.status()
+        admin = self.admin_url()
         # No line under the link (1.4.1): AutoPlay follows whatever is changed there by itself.
         return (f'<div class=cell>{ui.tile("blue", "wifi")}<span class=main><b>名称</b></span>'
                 f'<span class=value>{escape(status.get("ssid", "") or "正在开启")}</span></div>'
@@ -521,7 +541,9 @@ class SettingsPage:
             # place is the install guide's business (1.5.4: the banner retold it in three clauses).
             html += ui.banner("还缺 CarPlay 认证文件，按「AI 安装说明」放好后自动开始工作。", "wait")
         if status.get("warning"):
-            html += ui.banner(status["warning"], "bad")
+            # A notice about the hotspot leads to OpenWrt's Wi-Fi page itself (1.5.4: it said where that page is).
+            link = ("在 OpenWrt 后台设置", self.admin_url()) if "AutoPlay 热点" in status["warning"] else None
+            html += ui.banner(status["warning"], "bad", link)
         # Only an upstream that is down is news (1.3.0): "online" said nothing a driver could act on, and the
         # first seconds of probing are no problem either.
         # The page's own words since 1.4.1 ("上游" was ours, not the owner's); tesla_internet stays in the diagnostics.
@@ -550,8 +572,8 @@ class SettingsPage:
 
     def confirm_screen(self, kind, params, nonce):
         """The question a destructive button used to put in the browser's confirm() box, as a screen of this page: a car
-        browser draws confirm() at the OS size, outside this page's scale, or suppresses it (1.2.0). Since 1.5.4 every
-        one-task screen has one shape: the task is the title, 取消 is the bar's button, the body holds what it is about
+        browser draws confirm() at the OS size, outside this page's scale, or suppresses it (1.2.0). Since 1.5.4 only
+        removing a phone asks (an upgrade starts at once), and every one-task screen has one shape: the task is the title, 取消 is the bar's button, the body holds what it is about
         and the one button that does it (the question used to be the smallest text on the screen, a group's title).
         Returns (title, where 取消 goes, body), or None when there is nothing to ask (the phone is gone, an unknown
         kind): the normal page follows.
@@ -569,14 +591,6 @@ class SettingsPage:
             return ("删除 iPhone", "/", ui.group("", f'<div class=cell>{ui.tile("gray", "phone")}{ui.device_name(name, phone, twins)}</div>')
                     + f'<form method=post action=/pair>{ui.hidden(nonce, phone=phone, confirmed="1")}'
                     + ui.group("", '<button class="cell destructive" name=action value=remove>删除此 iPhone</button>') + '</form>')
-        if kind == "install":
-            found = update.read(self.state / "update-check.json")
-            if not found.get("available") or not found.get("online"):
-                return None
-            return (f'升级到 {found.get("latest", "")}', "/#update",
-                    f'<form method=post action=/update>{ui.hidden(nonce, confirmed="1")}'
-                    + ui.group("", '<button class="cell action" name=action value=install>立即升级</button>')
-                    + '</form>')
         return None
 
     def render(self, query, host=""):
@@ -619,14 +633,14 @@ class SettingsPage:
         panes = {
             "iphone": self.chain(devices, presence, phase) + block,
             "net": (ui.group("AutoPlay 热点", self.network_block()) + self.entries_block(entries)
-                    + (ui.group("自己的网址", reach) if reach else "")),
+                    + (ui.group("自定义域名", reach) if reach else "")),   # 1.5.4: was 「自己的网址」 (Apple: possessives sparingly)
             "update": ui.group("程序更新", updates, update_foot),
             "more": ui.group("", advanced),   # no title: the category is 「高级」 already (1.5.4)
         }
         found = update.read(self.state / "update-check.json")
         marked = ("update",) if found.get("available") and not found.get("error") else ()
         # An upgrade reloads every 3 s; a check from the button every 2 s until its result is in; a new iPhone's
-        # connecting every 3 s until it is there (PAIRED_SHOWN_FOR at most).
+        # connecting every 3 s until it is there (while its invitation holds, 90 s).
         refresh = True if update.running(self.state.parent) else 2 if self.check_running() else connecting
         # The bar's button is this page's way out, as 完成 is the panel's: back to where the visit began on the
         # CarPlay page (settings_ui.page), at the address this browser knows it by.
@@ -659,4 +673,4 @@ class SettingsPage:
     @staticmethod
     def render_missing():
         """404 (1.5.4: was the bare words "not found"), with the bar's way back to the page."""
-        return ui.page(TITLE, ui.flow(ui.banner("没有这一页。", "wait")), done=("返回", "/"))
+        return ui.page(TITLE, ui.flow(ui.banner("没有这一页。", "wait")), done=ui.back("/"))

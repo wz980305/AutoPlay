@@ -421,11 +421,14 @@ class ManagedPageTests(unittest.TestCase):
                                                        "notes": "- 新功能<b>\n- 修复", "available": True, "online": True})
         html = self.page.render("")
         for text in ("程序更新", "有新版本 2026.10.20", "- 新功能&lt;b&gt;<br>- 修复", "立即升级", "检查更新",
-                     'href="https://github.com/wz980305/AutoPlay/releases/tag/v2026.10.20">完整更新说明',
+                     # the notes a tap away, as a row of their own (1.5.4: a small link)
+                     '<a class=cell href="https://github.com/wz980305/AutoPlay/releases/tag/v2026.10.20"><span class="tile gray">',
+                     '<b>完整更新说明</b></span><span class=chev></span></a>',
                      # this box's version is the row above the new one (1.5.0; a line "当前 …" inside it before)
                      "<b>本机程序</b></span><span class=value>2026.10.19.1</span>",
-                     # and the category carries a red dot while there is something to install
-                     '<a href="#update">更新<i></i></a>'):
+                     # and the category carries a numbered badge while there is something to install (1.5.4: a red
+                     # dot, colour alone)
+                     '<a href="#update">更新<i>1</i></a>'):
             self.assertIn(text, html)
         # 1.5.0: no standing line under the group; a footer speaks only while something is happening
         self.assertNotIn("每天自动检查", html)
@@ -476,11 +479,10 @@ class ManagedPageTests(unittest.TestCase):
             self.page.apply("/update", {"action": "install", "nonce": "stale"})
         import threading
         release = threading.Event()
-        with patch.object(update, "launch", return_value="已开始升级，约 2–5 分钟") as launch, \
+        with patch.object(update, "launch", return_value="已开始升级") as launch, \
                 patch.object(update, "check", side_effect=lambda root: release.wait(5)) as check:
-            self.assertEqual(self.page.apply("/update", {"action": "install", "nonce": nonce}), {"ask": "install"})   # asks first (1.2.0)
-            # Started: nothing to say at the top, the group shows the upgrade running (1.4.1).
-            self.assertEqual(self.page.apply("/update", {"action": "install", "nonce": nonce, "confirmed": "1"}), "")
+            # Started at once (1.5.4; 1.2.0 asked first): nothing to say at the top, the group shows it running (1.4.1).
+            self.assertEqual(self.page.apply("/update", {"action": "install", "nonce": nonce}), "")
             launch.assert_called_once_with(self.state.parent)
             # Checking: no banner asking to reload; the group says "checking" and the page refreshes itself (1.4.1).
             self.assertEqual(self.page.apply("/update", {"action": "check", "nonce": nonce}), "")

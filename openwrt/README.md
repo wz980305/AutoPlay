@@ -6,7 +6,7 @@
 
 - `autoplay`：程序与开机服务（`/opt/autoplay`、`/etc/init.d/autoplay`、`/etc/config/autoplay`），各架构通用。程序本身是 `autoplay-bundle-<版本>.tar`（目前由 `box/scripts/build-bundle.sh` 在本地构建后传给 SDK；项目还没有发布页，`autoplay/Makefile` 的 `PKG_SOURCE_URL` 是占位、`PKG_HASH:=skip`），本目录不另存源码。
 - `autoplay-jre`：Eclipse Temurin 21 JRE 的 musl 版（OpenWrt 没有 Java），aarch64 与 x86_64。
-- `luci-app-autoplay`（含中文 `luci-i18n-autoplay-zh-cn`）：后台「服务 → AutoPlay」，一块概览加四个标签页（网络、iPhone、自己的网址、程序更新）。
+- `luci-app-autoplay`（含中文 `luci-i18n-autoplay-zh-cn`）：后台「服务 → AutoPlay」，一块概览加四个标签页（网络、iPhone、自定义域名、程序更新）。
 
 > **这不是 Apple 认证产品。** 运行需要你自己提供配件认证身份，见 [box/README.md](../box/README.md#认证身份)。
 
@@ -39,7 +39,7 @@ F50 用厂商 5.4 内核，不能装系统的 `bluez-daemon`（它会带入 6.12
 
 - 设置页：`http://100.96.0.1:18080/`（`http://100.96.0.2/` 也转到这里）。
 - 车机浏览器：`https://<你的域名>:18443/`——DuckDNS 名字或托管在腾讯云 DNSPod 的自有域名，都有 Let's Encrypt 正式证书，没有警告；没设域名时是 `https://autoplay.lan:18443/`，会有证书警告。
-- LuCI「服务 → AutoPlay」：概览（蓝牙、iPhone、证书、更新各一行，带原因）；「网络」看热点和网段；「iPhone」邀请/删除、空闲释放时间；「自己的网址」选 DuckDNS 或 DNSPod 并填凭证；「程序更新」检查、升级、改镜像。
+- LuCI「服务 → AutoPlay」：概览（蓝牙、iPhone、证书、更新各一行，带原因）；「网络」看热点和网段；「iPhone」邀请/删除、空闲释放时间；「自定义域名」选 DuckDNS 或 DNSPod 并填凭证；「程序更新」检查、升级、改镜像。
 - 特斯拉 WiFi 要打开「行驶中保持连接」，否则一出 P 挡就断 WiFi。搜不到热点时到 LuCI「网络 → 无线」确认 5 GHz 在 149–165（安装时已设为 CN / 149）。
 
 状态与原因词：[box/docs/STATUS-MODEL.md](../box/docs/STATUS-MODEL.md)。

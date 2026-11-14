@@ -26,7 +26,7 @@
 2. 第一次使用，在设置页 `http://100.96.0.1:18080/` 点「添加 iPhone」，在 iPhone 的「设置 → 蓝牙」里点盒子的名字，两边核对六位配对码。之后 iPhone 靠近就会被蓝牙 iAP2 引导连上热点。
 3. 车机浏览器打开 `https://<你的域名>:18443/`（DuckDNS 名字或 DNSPod 托管的自有域名；没设域名时是 `https://autoplay.lan:18443/`，车机会报证书警告）。
 
-设置页（页面标题「AutoPlay 盒子」）1.5.0 起和投屏页的「AutoPlay 设置」一个样子，分四类：「iPhone」看热点、盒子、iPhone 三者的状态，添加或删除 iPhone；「网络」看交给 iPhone 的 Wi-Fi、车机要打开的地址和证书有效期；「更新」检查和安装新版本；「高级」看盒子温度、下载诊断记录、恢复出厂设置。它的日间/夜间跟随 CarPlay（`../docs/UI-1.5.0.md`）。车机或手机打开 `http://100.96.0.2/` 也会转到它。OpenWrt 后台「服务 → AutoPlay」有四个标签页：网络、iPhone、自己的网址（DuckDNS / DNSPod）、程序更新。
+设置页（页面标题「AutoPlay 盒子」）1.5.0 起和投屏页的「AutoPlay 设置」一个样子，分四类：「iPhone」看热点、盒子、iPhone 三者的状态，添加或删除 iPhone；「网络」看交给 iPhone 的 Wi-Fi、车机要打开的地址和证书有效期；「更新」检查和安装新版本；「高级」看盒子温度、下载诊断记录、恢复出厂设置。它的日间/夜间跟随 CarPlay（`../docs/UI-1.5.0.md`）。车机或手机打开 `http://100.96.0.2/` 也会转到它。OpenWrt 后台「服务 → AutoPlay」有四个标签页：网络、iPhone、自定义域名（DuckDNS / DNSPod）、程序更新。
 
 `/etc/config/autoplay` 一共十一项：开关、网页端口、空闲释放秒数、DNS 服务商、DuckDNS 名字和 token、自有域名和 DNSPod 的 ID 与 token、是否检查更新、更新镜像。声音没有选项：所有声音都走特斯拉蓝牙（1.1.0–1.2.0 的 `audio_route_navigation` 键升级时会被删掉，`docs/AUDIO.md`）。网络仍由 OpenWrt 管。
 

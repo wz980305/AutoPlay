@@ -118,10 +118,13 @@ function fit() {
 /** The error banner (1.5.4): its headline is the reason in the page's words; technical text, if any, under 详细信息.
  *  Until then the headline was always "播放遇到问题" and the reason sat folded away, in English where the decoder
  *  wrote it, with advice that no longer held. */
-function error(headline: string, detail = '') {
+let errorAction: (() => void) | null = null;
+function error(headline: string, detail = '', action: (() => void) | null = null) {
   el('error-title').textContent = headline; el('error-text').textContent = detail;
   el('error-details').hidden = !detail; el('error-banner').hidden = !headline;
+  errorAction = action; el('error-action').hidden = !action;
 }
+el('error-action').onclick = () => { const go = errorAction; error(''); go?.(); };
 /** What the decoder reports, said for this page: its own words go under the details. */
 function decoderError(message: string) {
   if (!message) { error(''); return; }
@@ -129,7 +132,9 @@ function decoderError(message: string) {
     // This browser said it decodes H.265 but cannot: auto goes back to H.264 for good (on this browser); a codec
     // picked by hand stays as picked, and the banner says where to change it.
     saveFlag('f50-hevc-failed', '1'); lastAutoTarget = ''; urgentChange = 'codec'; scheduleAuto();
-    error(t(el<HTMLSelectElement>('codec').value === 'h265' ? 'hevcManual' : 'hevcAuto'), message); return;
+    if (el<HTMLSelectElement>('codec').value === 'h265') error(t('hevcManual'), message, () => openSetting('display', 'codec'));
+    else error(t('hevcAuto'), message);
+    return;
   }
   if (message.startsWith('VideoDecoder is not available')) { error(t(isSecureContext ? 'unsupported' : 'insecure'), message); return; }
   error(t('decodeFail'), message);
@@ -281,6 +286,15 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) drop
   const keyboard = (navigator as unknown as { virtualKeyboard?: { overlaysContent: boolean } }).virtualKeyboard;
   if (keyboard) try { keyboard.overlaysContent = true; } catch { /* Then the meta viewport alone decides. */ }
 }
+/** The panel at one setting's row (1.5.4): the way an error leads to what fixes it. A row inside a folded group
+ *  (画质与兼容) unfolds it first; the row is scrolled into view and focused. */
+function openSetting(page: string, select: string) {
+  openPanel();
+  panel.querySelector<HTMLButtonElement>(`[data-settings-page="${page}"]`)?.click();
+  const row = panel.querySelector<HTMLElement>(`[data-picker="${select}"]`);
+  const fold = row?.closest('details'); if (fold) fold.open = true;
+  row?.scrollIntoView({ block: 'center' }); row?.focus();
+}
 function openPanel() {
   if (!panel.open) {
     for (const id of ['toast', 'error-banner']) el('settings-notices').append(el(id));
@@ -339,7 +353,11 @@ function updateFullscreen() {
   const label = value ? `${t('fullscreen')}, ${value}` : t('fullscreen');
   for (const id of ['fullscreen', 'welcome-fullscreen']) {
     el(id).setAttribute('aria-label', label);
-    el<HTMLButtonElement>(id).disabled = borderless || teslaChecking;
+    // Off: a row that leaves for the video site, so it shows ›. On: a status row - not greyed out as a disabled
+    // button (1.5.4), only nothing to tap (it can be left in the car browser's own controls only).
+    el(id).classList.toggle('static', borderless);
+    el<HTMLButtonElement>(id).disabled = teslaChecking;
+    el(id).setAttribute('aria-disabled', String(borderless || teslaChecking));
   }
 }
 /** The hop leaves this page for the video sites, which need the car's own internet (the box answers the Tesla's

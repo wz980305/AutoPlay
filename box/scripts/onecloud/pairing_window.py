@@ -112,6 +112,16 @@ class PairingWindow:
                 'phone': phone, 'boot': get_platform().boot_id(),
                 'expires': time.monotonic() + GRANT_SECONDS})
 
+    def joining(self):
+        """The phone the box is inviting right now (a 接入 CarPlay, or a pairing that just finished), while its
+        invitation holds; None otherwise. The box page shows 「正在接入…」 in that phone's row (1.5.4)."""
+        grant = read_json(self.root / 'state/receiver/pairing-request.json')
+        try:
+            current = grant.get('boot') == get_platform().boot_id() and grant.get('expires', 0) > time.monotonic()
+        except Exception:
+            return None
+        return grant.get('phone') if current else None
+
     def remove(self, phone):
         """Forget a phone on the box too: BlueZ pairing, Wi-Fi identities, back-off and any grant."""
         with self.lock:

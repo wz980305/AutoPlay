@@ -165,8 +165,9 @@ def sources(url, prefixes=(), prefer=None):
     return sorted(found, key=lambda place: place[0] != prefer) if prefer else found
 
 
-def fetch_from(place, url, limit=1 << 20, target=None, sha256=None, size=None, timeout=30):
-    """Bytes of url (or, with target, the file written there) from one place of sources(); raises what went wrong."""
+def fetch_from(place, url, limit=1 << 20, target=None, sha256=None, size=None, timeout=30, progress=None):
+    """Bytes of url (or, with target, the file written there) from one place of sources(); raises what went wrong.
+    progress(bytes so far) is called after each piece (1.5.4: the page shows how far a download is)."""
     _label, candidate, extra = place
     candidate = candidate or api_download(url, timeout=timeout)
     request = urllib.request.Request(candidate, headers={"User-Agent": "AutoPlay-update", **extra})
@@ -184,6 +185,8 @@ def fetch_from(place, url, limit=1 << 20, target=None, sha256=None, size=None, t
                     raise UpdateError("下载的文件比预期大，已停止")
                 digest.update(chunk)
                 (out.write(chunk) if out else chunks.append(chunk))
+                if progress:
+                    progress(total)
         finally:
             if out:
                 out.close()
@@ -192,14 +195,14 @@ def fetch_from(place, url, limit=1 << 20, target=None, sha256=None, size=None, t
     return target if target else b"".join(chunks)
 
 
-def fetch(url, prefixes=(), limit=1 << 20, target=None, sha256=None, size=None, prefer=None):
+def fetch(url, prefixes=(), limit=1 << 20, target=None, sha256=None, size=None, prefer=None, progress=None):
     """Bytes of url (or, with target, the file written there), from GitHub's API, github.com, or else each mirror
     prefix; the place the last good manifest came from first (prefer, by default). With sha256 and size the
     download must match them exactly."""
     errors, codes = [], []
     for place in sources(url, prefixes, prefer or _last_good):
         try:
-            return fetch_from(place, url, limit, target, sha256, size)
+            return fetch_from(place, url, limit, target, sha256, size, progress=progress)
         except (OSError, UpdateError, ValueError, http.client.HTTPException) as error:
             if hasattr(error, "close"):   # an HTTPError holds its response open
                 error.close()
@@ -599,11 +602,22 @@ def install_openwrt(root, manifest, status, work, key=KEY):
     cache.mkdir(mode=0o700, parents=True, exist_ok=True)
     status("downloading", f"正在下载退回用的 {current}")
     previous = previous_packages(current, prefixes, cache, LEGACY_PACKAGES if legacy else OPENWRT_PACKAGES, key)
-    status("downloading", f"正在下载 {manifest['version']}（{sum(f['size'] for f in wanted.values()) // 1048576} MB）")
+    total = sum(f["size"] for f in wanted.values()) or 1
+    said = f"正在下载 {manifest['version']}（{total // 1048576} MB）"
+    status("downloading", said, progress=0)
+    done, last = 0, [0.0]
+
+    def moved(now_in_file):
+        # How far, for the page's progress bar (1.5.4, Apple: a determinate indicator when the size is known);
+        # written at most once a second.
+        if time.monotonic() - last[0] >= 1:
+            last[0] = time.monotonic()
+            status("downloading", said, progress=round(min(1, (done + now_in_file) / total), 3))
     files = []
     for entry in wanted.values():
         files.append(fetch(feed["base"] + entry["file"], prefixes, target=cache / entry["file"],
-                           sha256=entry["sha256"], size=entry["size"]))
+                           sha256=entry["sha256"], size=entry["size"], progress=moved))
+        done += entry["size"]
     status("checking", "正在核对升级计划")
     run("apk", "update", timeout=300)   # without the index the simulation misses dependencies (F50, 2026-10-19)
     simulation = run("apk", "add", "--upgrade", "--simulate", "--allow-untrusted", *map(str, files))

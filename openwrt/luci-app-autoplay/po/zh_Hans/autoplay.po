@@ -39,8 +39,8 @@ msgstr "网络"
 msgid "iPhone"
 msgstr "iPhone"
 
-msgid "Own address"
-msgstr "自己的网址"
+msgid "Custom domain"
+msgstr "自定义域名"
 
 msgid "Program update"
 msgstr "程序更新"
@@ -136,7 +136,7 @@ msgid "Network check unavailable (service starting or stopped)."
 msgstr "网络检查暂不可用（服务启动中或已停止）。"
 
 msgid "No own name set."
-msgstr "没有设置自己的网址。"
+msgstr "没有设置自定义域名。"
 
 msgid "certificate installed"
 msgstr "证书已装好"

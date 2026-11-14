@@ -19,10 +19,10 @@ from html import escape
 
 # The two sets of colours. Dark is the CarPlay page's (style.css :root); light is iOS's light set of the same roles.
 DARK = ("--bg:#000;--cell:#1C1C1E;--press:#3A3A3C;--sep:rgba(84,84,88,.6);--label:#FFF;--secondary:rgba(235,235,245,.72);"
-        "--tint:#0A84FF;--btn:#0066D6;--green:#30D158;--orange:#FF9F0A;--red:#FF453A;--fill:rgba(120,120,128,.24);"
+        "--tint:#0091FF;--btn:#0066D6;--green:#30D158;--orange:#FF9230;--red:#FF4245;--fill:rgba(120,120,128,.24);"
         "--chev:rgba(235,235,245,.55);color-scheme:dark")
 LIGHT = ("--bg:#F2F2F7;--cell:#FFF;--press:#D1D1D6;--sep:rgba(60,60,67,.24);--label:#000;--secondary:rgba(60,60,67,.7);"
-         "--tint:#007AFF;--btn:#007AFF;--green:#34C759;--orange:#FF9500;--red:#FF3B30;--fill:rgba(120,120,128,.14);"
+         "--tint:#0088FF;--btn:#007AFF;--green:#34C759;--orange:#FF8D28;--red:#FF383C;--fill:rgba(120,120,128,.14);"
          "--chev:rgba(60,60,67,.45);color-scheme:light")
 
 STYLE = """
@@ -41,18 +41,25 @@ font:1.2rem/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","N
 [hidden]{display:none!important}
 :focus-visible{outline:3px solid var(--tint);outline-offset:2px}
 
-/* Title bar: the panel's header. It stays while the page scrolls. */
+/* Title bar: the panel's header. It stays while the page scrolls. As iOS lays one out (1.5.4, Apple's guidelines on
+   toolbars and sheets): the way back or 取消 on the leading edge, the title in the middle, an action on the trailing
+   edge. Until then the title sat on the left and the one button on the right. */
 header{position:-webkit-sticky;position:sticky;top:0;z-index:3;background:var(--bg);border-bottom:1px solid var(--sep)}
-header>div{display:flex;align-items:center;justify-content:space-between;gap:var(--s3);max-width:1440px;margin:0 auto;min-height:var(--bar);
+header>div{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:var(--s3);max-width:1440px;margin:0 auto;min-height:var(--bar);
 padding:max(var(--s2),env(safe-area-inset-top)) max(var(--s4),env(safe-area-inset-right)) var(--s2) max(var(--s4),env(safe-area-inset-left))}
-h1{font-size:1.6rem;line-height:1.3;font-weight:600;letter-spacing:normal;margin:0;min-width:0}
-.done{flex:none;display:inline-flex;align-items:center;justify-content:center;min-height:var(--hit2);min-width:var(--hit);padding:var(--s1) var(--s3);
+h1{grid-column:2;grid-row:1;font-size:1.6rem;line-height:1.3;font-weight:600;letter-spacing:normal;margin:0;min-width:0;text-align:center;
+overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.done{grid-column:1;grid-row:1;justify-self:start;display:inline-flex;align-items:center;justify-content:center;min-height:var(--hit2);min-width:var(--hit);padding:var(--s1) var(--s3);
 border-radius:var(--radius);background:var(--cell);color:var(--label);font-weight:600;text-decoration:none;white-space:nowrap}
 .done:active{opacity:.5}
 header form{display:contents}
 button.done{border:0;font:inherit;font-weight:inherit;cursor:pointer}
-/* The way out says where it leads: back, when the visit came from the CarPlay page (data-from, set by VISIT below). */
-.done .back,:root[data-from] .done .fwd{display:none} :root[data-from] .done .back{display:inline}
+.done.icon{width:var(--hit2);min-width:0;padding:0;border-radius:50%}
+.done.icon svg{width:1.45rem;height:1.45rem}
+.done.fwd{grid-column:3;justify-self:end}
+/* The way out says where it leads: Apple's Back button (the chevron alone) when the visit came from the CarPlay page
+   (data-from, set by VISIT below), 「CarPlay 画面」 on the trailing edge for a browser that came by itself. */
+.done.back,:root[data-from] .done.fwd{display:none} :root[data-from] .done.back{display:inline-flex}
 
 /* Alerts: only states the owner can act on, and errors, under the title bar on every category (STATUS-MODEL.md). */
 .alerts{max-width:1440px;margin:0 auto;padding:var(--s3) max(var(--s4),env(safe-area-inset-right)) 0 max(var(--s4),env(safe-area-inset-left))}
@@ -72,7 +79,7 @@ padding:var(--s3) max(var(--s4),env(safe-area-inset-right)) max(var(--s4),env(sa
 .nav a{display:flex;align-items:center;justify-content:space-between;gap:var(--s1);min-height:var(--hit);border-radius:var(--radius);padding:var(--s2) var(--s3);
 font-weight:500;background:var(--cell);color:var(--label);text-decoration:none}
 .nav a:active{background:var(--press)}
-.nav i{flex:none;width:.6rem;height:.6rem;border-radius:50%;background:var(--red)}
+.nav i{flex:none;min-width:1.5rem;height:1.5rem;padding:0 .4rem;border-radius:.75rem;background:var(--red);color:#fff;font:600 .85rem/1.5rem system-ui,sans-serif;font-style:normal;text-align:center}
 .pane{grid-column:2;grid-row:1;min-width:0;display:none;scroll-margin-top:100vh}
 .pane.first,.pane:target{display:block}
 .pane:target~.pane.first{display:none}
@@ -117,7 +124,7 @@ summary{list-style:none} summary::-webkit-details-marker{display:none}
 .tile{width:2rem;height:2rem;flex:none;border-radius:.45rem;display:grid;place-items:center;color:#fff;background:#8E8E93}
 .tile svg{width:1.25rem;height:1.25rem}
 .tile.blue{background:var(--tint)} .tile.green{background:var(--green)} .tile.orange{background:var(--orange)}
-.tile.red{background:var(--red)} .tile.gray{background:#8E8E93} .tile.indigo{background:#5E5CE6}
+.tile.red{background:var(--red)} .tile.gray{background:#8E8E93} .tile.indigo{background:#6155F5}
 .spin{width:1.4rem;height:1.4rem;margin:0 .3rem;flex:none;border-radius:50%;border:3px solid var(--fill);border-top-color:var(--label);animation:spin .9s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .cell[aria-busy=true] .main b{color:var(--secondary)}
@@ -147,6 +154,11 @@ input::placeholder{color:var(--secondary)}
 .flow{max-width:44rem;margin:0 auto;padding:var(--s3) max(var(--s4),env(safe-area-inset-right)) max(var(--s5),env(safe-area-inset-bottom)) max(var(--s4),env(safe-area-inset-left))}
 .flow>.group-title:first-child,.flow>section:first-child>.group-title{margin-top:var(--s2)}
 .flow>.banner{margin-bottom:var(--s2)}
+progress{display:block;width:100%;height:.4rem;margin-top:.55rem;-webkit-appearance:none;appearance:none;border:0;border-radius:.2rem;background:var(--fill);overflow:hidden;color:var(--tint)}
+progress::-webkit-progress-bar{background:var(--fill)} progress::-webkit-progress-value{background:var(--tint);border-radius:.2rem} progress::-moz-progress-bar{background:var(--tint)}
+.value.busy{display:inline-flex;align-items:center}
+.value.busy .spin{width:1.1rem;height:1.1rem;border-width:2px;margin:0 .45rem 0 0}
+.banner a{display:block;padding:.35rem 0 .1rem;color:var(--tint);font-weight:600;text-decoration:none}
 
 
 
@@ -201,7 +213,7 @@ VISIT = ('(function(){var d=document.documentElement,q=location.search,n=Date.no
 # (toggle does not bubble, hence the capture). And a category is chosen without adding to the browser's history, so
 # "back" leaves the page instead of walking through the categories looked at; the chosen one is also marked for a
 # screen reader.
-SCRIPT = ('<script>(function(){var out=document.querySelector("a.done.out");'
+SCRIPT = ('<script>(function(){var out=document.querySelector("a.done.back");'
           # A visit that began in the settings panel goes back to it (the CarPlay page opens the panel at 连接 for this
           # fragment); one that began on the waiting screen, to the page as it is.
           'if(out&&document.documentElement.getAttribute("data-from")==="panel")out.href=out.href.split("#")[0]+"#settings=connection";'
@@ -212,7 +224,13 @@ SCRIPT = ('<script>(function(){var out=document.querySelector("a.done.out");'
           'function mark(){var h=location.hash,on=nav.querySelector(\'a[href="\'+h+\'"]\')||links[0];'
           'for(var i=0;i<links.length;i++)links[i].setAttribute("aria-current",links[i]===on?"page":"false")}'
           'nav.addEventListener("click",function(e){var a=e.target.closest?e.target.closest("a"):null;if(!a)return;'
-          'e.preventDefault();location.replace(a.getAttribute("href"));scrollTo(0,0);mark()});'
+          'e.preventDefault();location.replace(a.getAttribute("href"));scrollTo(0,0);mark();auto()});'
+          # 更新 opened with an old check: check now (the form carries data-auto); once a minute at most, so a check
+          # that fails at once does not loop.
+          'function auto(){if(location.hash!=="#update")return;var f=document.querySelector("form[data-auto]");if(!f)return;'
+          'try{var k="autoplay-auto-check",n=Date.now();if(n-(+sessionStorage.getItem(k)||0)<6e4)return;sessionStorage.setItem(k,n)}catch(e){}'
+          # the button, not form.submit(): only a pressed button sends its name=action value=check
+          'var b=f.querySelector("button[name=action]");if(b)b.click()}addEventListener("hashchange",auto);auto();'
           'addEventListener("hashchange",mark);mark()})()</script>')
 
 ICONS = {
@@ -242,11 +260,22 @@ def url(address):
     return re.sub(r"(:\d+/?)$", r"<wbr>\1", escape(address))
 
 
+# Apple's standard Back symbol (a chevron, no word): the box page's way back and the 404 page's (1.5.4).
+CHEVRON = ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" '
+           'stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>')
+
+
+def back(href):
+    """The leading button of a page one level down: the chevron alone, as Apple's Back button."""
+    return f'<a class="done icon" href="{escape(href)}" aria-label="返回">{CHEVRON}</a>'
+
+
 def page(title, body, refresh=False, done=None, out=None):
     """The title bar and what is under it. refresh: True reloads every 3 s, a number every that many seconds;
-    done: (label, address) of the bar's one button; out: instead of done, the CarPlay page's address - the button is
-    then the way out of the box page: 返回 for a visit that came from the CarPlay page (to the settings panel when it
-    began there, see SCRIPT), "CarPlay 画面" for a browser that came by itself."""
+    done: the bar's leading button - (label, address) for 取消, or HTML (back(), a form's button); out: instead of
+    done, the CarPlay page's address - the way out of the box page: the chevron on the leading edge for a visit that
+    came from the CarPlay page (to the settings panel when it began there, see SCRIPT), 「CarPlay 画面」 on the
+    trailing edge for a browser that came by itself."""
     body = keep_words(body)
     seconds = 3 if refresh is True else refresh
     # The refresh tag, and a script that reloads half a second after it would have (1.5.3): the owner had to open the
@@ -254,14 +283,16 @@ def page(title, body, refresh=False, done=None, out=None):
     # (/?m=#update after a button): it only scrolls. Where the tag works the page is gone before the script's turn.
     meta = (f'<meta http-equiv=refresh content={seconds}>'
             f'<script>setTimeout(function(){{location.reload()}},{int(seconds * 1000) + 500})</script>') if refresh else ''
-    button = (done if isinstance(done, str) else f'<a class=done href="{escape(done[1])}">{escape(done[0])}</a>') if done else ''
+    lead = (done if isinstance(done, str) else f'<a class=done href="{escape(done[1])}">{escape(done[0])}</a>') if done else ''
+    trail = ''
     if out:
-        button = f'<a class="done out" href="{escape(out)}"><span class=fwd>CarPlay 画面</span><span class=back>返回</span></a>'
+        lead = f'<a class="done icon out back" href="{escape(out)}" aria-label="返回">{CHEVRON}</a>'
+        trail = f'<a class="done out fwd" href="{escape(out)}">CarPlay 画面</a>'
     return (f'<!doctype html><html lang=zh-CN><head><meta charset=utf-8>'
             f'<meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
             f'<meta name=color-scheme content="light dark">{meta}'
             f'<title>{escape(title)}</title><script>{VISIT}</script><style>{CSS}</style></head>'
-            f'<body><header><div><h1>{escape(title)}</h1>{button}</div></header>{body}{SCRIPT}</body></html>')
+            f'<body><header><div>{lead}<h1>{escape(title)}</h1>{trail}</div></header>{body}{SCRIPT}</body></html>')
 
 
 def alerts(banners):
@@ -282,7 +313,7 @@ def layout(panes, marked=()):
     first = PANES[0][0]
     pages = "".join(f'<section class="pane{" first" if key == first else ""}" id={key} aria-label="{label}">{panes.get(key, "")}</section>'
                     for key, label in PANES[1:] + PANES[:1])
-    links = "".join(f'<a href="#{key}"{" class=first" if key == first else ""}>{label}{"<i></i>" if key in marked else ""}</a>'
+    links = "".join(f'<a href="#{key}"{" class=first" if key == first else ""}>{label}{"<i>1</i>" if key in marked else ""}</a>'
                     for key, label in PANES)
     return f'<div class=layout>{pages}<nav class=nav aria-label="分类">{links}</nav></div>'
 
@@ -325,8 +356,14 @@ def tile(color, name):
             f'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{TILES[name]}</svg></span>')
 
 
-def banner(text, kind="ok"):
-    return f'<p class="banner {kind}" role=status>{escape(text)}</p>' if text else ""
+def banner(text, kind="ok", link=None):
+    """link: (label, address) of the place that fixes it (1.5.4, Apple: a direct link, not its location in words)."""
+    if not text:
+        return ""
+    if link:
+        return (f'<p class="banner {kind}" role=status><span>{escape(text)}'
+                f'<a href="{escape(link[1])}">{escape(link[0])}</a></span></p>')
+    return f'<p class="banner {kind}" role=status>{escape(text)}</p>'
 
 
 def flash(message):
@@ -359,9 +396,10 @@ def device_name(name, address, twins):
     return f'<span class=main><b>{escape(name)}</b>{line}</span>'
 
 
-def phone_rows(devices, active, last, nonce, idle):
+def phone_rows(devices, active, last, nonce, idle, joining=None):
     """Bluetooth-style "My devices": a row per iPhone with its state; one that is not in use unfolds to connect it or
-    remove it. The one in use is a plain row: nothing can be done to it until it disconnects."""
+    remove it. The one in use is a plain row: nothing can be done to it until it disconnects. joining: the phone the
+    box is inviting - its row says so, with a spinner (1.5.4, Apple: status beside what it describes)."""
     if not devices:
         return f'<div class="cell empty">{tile("gray", "phone")}<span class=main><b>还没有添加 iPhone</b></span></div>'
     twins = same_names(devices.values())
@@ -370,6 +408,10 @@ def phone_rows(devices, active, last, nonce, idle):
         if phone == active:
             html += (f'<div class="cell on">{tile("green", "phone")}{device_name(name, phone, twins)}'
                      '<span class=value>正在使用</span></div>')
+            continue
+        if phone == joining:
+            html += (f'<div class=cell aria-busy=true>{tile("gray", "phone")}{device_name(name, phone, twins)}'
+                     '<span class="value busy"><span class=spin></span>正在接入…</span></div>')
             continue
         summary = (f'<summary class=cell>{tile("gray", "phone")}{device_name(name, phone, twins)}'
                    f'<span class=value>{"上次使用" if phone == last else "未连接"}</span><span class=chev></span></summary>')
@@ -415,7 +457,9 @@ def pairing_panel(pair, nonce):
         return (group("", f'<div class=cell aria-busy=true><span class=spin></span><span class=main><b>正在连接「{escape(pair.get("name", ""))}」</b>'
                       '</span></div>'), True)
     if phase in ("starting", "finishing"):
-        return group("", '<div class="cell empty" aria-busy=true><span class=spin></span><span class=main><b>请稍候…</b></span></div>'), True
+        # What is happening (1.5.4, Apple: no vague words like "please wait" beside a spinner).
+        doing = "正在打开配对…" if phase == "starting" else "正在完成配对…"
+        return group("", f'<div class="cell empty" aria-busy=true><span class=spin></span><span class=main><b>{doing}</b></span></div>'), True
     return None, False
 
 

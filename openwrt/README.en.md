@@ -6,7 +6,7 @@ The three packages of [AutoPlay](../box/README.en.md) for the ZTE F50 (OpenWrt 2
 
 - `autoplay`: the program and its boot service (`/opt/autoplay`, `/etc/init.d/autoplay`, `/etc/config/autoplay`), architecture-independent. The program is the `autoplay-bundle-<version>.tar` built locally by `box/scripts/build-bundle.sh` and handed to the SDK (there is no release page yet; `PKG_SOURCE_URL` in `autoplay/Makefile` is a placeholder and `PKG_HASH:=skip`); no second copy of the source lives here.
 - `autoplay-jre`: Eclipse Temurin 21 JRE, musl build (OpenWrt has no Java), aarch64 and x86_64.
-- `luci-app-autoplay` (with `luci-i18n-autoplay-zh-cn`): Services → AutoPlay in LuCI, an overview block and four tabs (Network, iPhone, Own address, Program update).
+- `luci-app-autoplay` (with `luci-i18n-autoplay-zh-cn`): Services → AutoPlay in LuCI, an overview block and four tabs (Network, iPhone, Custom domain, Program update).
 
 > **Not an Apple-certified product.** It needs the accessory identity you supply: [box/README.en.md](../box/README.en.md#accessory-identity).
 
@@ -39,7 +39,7 @@ The F50 runs a vendor 5.4 kernel; OpenWrt's `bluez-daemon` pulls in 6.12 kernel 
 
 - Settings page: `http://100.96.0.1:18080/` (`http://100.96.0.2/` redirects there).
 - Car browser: `https://<your domain>:18443/` — a DuckDNS name or your own domain hosted at Tencent DNSPod, both with a Let's Encrypt certificate and no warning; without a domain it is `https://autoplay.lan:18443/`, with a certificate warning.
-- LuCI Services → AutoPlay: overview (one line each for Bluetooth, iPhone, certificate and update, with the reason); "network" shows the AP and the subnet; "iPhone" invites or removes and sets the idle release; "Own address" picks DuckDNS or DNSPod and takes the credentials; "Program update" checks, upgrades, sets the mirror.
+- LuCI Services → AutoPlay: overview (one line each for Bluetooth, iPhone, certificate and update, with the reason); "network" shows the AP and the subnet; "iPhone" invites or removes and sets the idle release; "Custom domain" picks DuckDNS or DNSPod and takes the credentials; "Program update" checks, upgrades, sets the mirror.
 - The Tesla's Wi-Fi needs "stay connected while driving", otherwise it drops the Wi-Fi as soon as the car leaves Park. If the car cannot see the AP, check in LuCI → Network → Wireless that the 5 GHz radio is on 149–165 (set to CN / 149 at install).
 
 Status and reason words: [box/docs/STATUS-MODEL.md](../box/docs/STATUS-MODEL.md).

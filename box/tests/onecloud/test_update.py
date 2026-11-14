@@ -350,6 +350,17 @@ class SignedReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(update.UpdateError, '下载失败'):
             update.fetch(self.server.base + 'f.apk', target=target, sha256=sha(b'other'), size=7)
 
+    def test_a_download_reports_how_far_it_is(self):
+        """1.5.4: the page shows a bar while downloading (Apple: a determinate indicator when the size is known)."""
+        body = bytes(200_000)
+        self.server.put('big.apk', body)
+        seen = []
+        update.fetch(self.server.base + 'big.apk', target=self.dir / 'big.apk', sha256=sha(body), size=len(body),
+                     progress=seen.append)
+        self.assertGreater(len(seen), 1, "piece by piece")
+        self.assertEqual(seen, sorted(seen))
+        self.assertEqual(seen[-1], len(body))
+
     def test_check_reports_a_newer_openwrt_release(self):
         self.publish({'format': 1, 'version': '2026.10.20', 'online': True, 'notes': '- 新功能'})
         with patch.object(update, 'apk_version', lambda name: '2026.10.19.1-r1'):

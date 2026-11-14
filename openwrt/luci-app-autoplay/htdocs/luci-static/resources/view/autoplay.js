@@ -69,7 +69,7 @@ return view.extend({
 		s = m.section(form.NamedSection, 'main', 'autoplay');
 		s.tab('network', _('Network'));
 		s.tab('iphone', _('iPhone'));
-		s.tab('reach', _('Own address'));
+		s.tab('reach', _('Custom domain'));
 		s.tab('update', _('Program update'));
 
 		o = s.taboption('network', form.Flag, 'enabled', _('Enable'));

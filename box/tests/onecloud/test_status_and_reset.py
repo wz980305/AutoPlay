@@ -155,11 +155,15 @@ class PageBannerTests(unittest.TestCase):
         self.page.pairing.devices = lambda: {"02:00:00:00:00:01": "小王的 iPhone"}
         nonce = self.page.pairing.nonce
         self.page.pairing.use = lambda phone: None
-        reply = self.page.apply("/pair", {"nonce": nonce, "action": "use", "phone": "02:00:00:00:00:01"})
-        self.assertEqual(reply["at"], "phones")
-        html = self.page.render(urllib.parse.urlencode(reply))
-        self.assertIn(f'<p class=foot>{reply["m"]}</p>', html)
+        # 1.5.4: an invitation says nothing under the group - the phone's row says 「正在接入…」 (below)
+        self.assertEqual(self.page.apply("/pair", {"nonce": nonce, "action": "use", "phone": "02:00:00:00:00:01"}), "")
+        self.page.pairing.joining = lambda: "02:00:00:00:00:01"
+        html = self.page.render("")
+        self.assertIn('<span class="value busy"><span class=spin></span>正在接入…</span>', html)
+        self.assertNotIn("<p class=foot>", html)
         self.assertNotIn('class="banner', html)
+        self.assertIn("http-equiv=refresh content=3", html, "until it is there")
+        self.page.pairing.joining = lambda: None
         # 1.5.0: with nothing going on the group has no line at all (until 1.4.3 "添加 iPhone 时，请在车机或…")
         self.assertNotIn("<p class=foot>", self.page.render(""))
         self.page.pairing.stop = lambda: None
@@ -236,27 +240,15 @@ class PageBannerTests(unittest.TestCase):
         self.page.pairing.devices = lambda: {}
         self.assertIn("添加 iPhone", self.page.render("ask=remove&phone=02%3A00%3A00%3A00%3A00%3A01"))
 
-    def test_an_update_is_confirmed_on_the_page_too(self):
+    def test_an_upgrade_starts_at_once(self):
+        """1.5.4: no confirmation screen (1.2.0-1.5.3 asked first). Apple's guidelines keep confirmations for what loses
+        data unexpectedly; an upgrade loses none, is refused while CarPlay is in use and goes back by itself."""
         nonce = self.page.pairing.nonce
-        reply = self.page.apply("/update", {"nonce": nonce, "action": "install"})
-        self.assertEqual(reply, {"ask": "install"})
         (self.state / "update-check.json").write_text(json.dumps({"available": True, "online": True, "latest": "1.4.0", "current": "1.3.0", "checked_at": 1}))
-        html = self.page.render("ask=install")
-        self.assertIn("<h1>升级到 1.4.0</h1>", html)
-        self.assertIn('<a class=done href="/#update">取消</a>', html)
-        self.assertIn('<button class="cell action" name=action value=install>立即升级</button>', html)
-        main = html.split("<main", 1)[1]
-        self.assertNotIn("<span>", main, "no line under a row")
-        self.assertNotIn("<p class=foot>", main, "no time estimate: the box refuses an upgrade while CarPlay is in use")
-        self.assertEqual(html.count("<button"), 1)
-        self.assertNotIn("confirm(", html)
-        with patch("settings_page.update.launch", return_value="正在升级，请稍候") as launch:
-            self.assertEqual(self.page.apply("/update", {"nonce": nonce, "action": "install", "confirmed": "1"}),
-                             {"m": "正在升级，请稍候", "at": "update"})
+        with patch("settings_page.update.launch", return_value="已开始升级") as launch:
+            self.assertEqual(self.page.apply("/update", {"nonce": nonce, "action": "install"}), "")
         launch.assert_called_once()
-        # nothing to install (offline or none found): the normal page instead of an empty question
-        (self.state / "update-check.json").write_text(json.dumps({"available": False, "latest": "1.3.0", "checked_at": 1}))
-        self.assertIn("添加 iPhone", self.page.render("ask=install"))
+        self.assertIn("添加 iPhone", self.page.render("ask=install"), "an old link to the question shows the page")
 
 
     def test_the_page_demands_the_typed_words(self):
@@ -315,7 +307,7 @@ class PageLayoutTests(unittest.TestCase):
         shown = html.replace("\u2011", "-").replace("<wbr>", "")
         for key, texts in {"iphone": ('class=chain', "小王的 iPhone", "添加 iPhone"),
                            "net": ("AutoPlay 热点", "Car-5G", "在 OpenWrt 后台设置", "在车机浏览器打开",
-                                   "https://mycar.duckdns.org:18443/", "https://100.96.0.1:18443/", "自己的网址", "证书"),
+                                   "https://mycar.duckdns.org:18443/", "https://100.96.0.1:18443/", "自定义域名", "证书"),
                            "update": ("程序更新", "检查更新"),
                            "more": ("盒子温度", "58 °C", "下载诊断记录", 'href="/reset"', "恢复出厂设置")}.items():
             pane = self.pane(shown, key)
@@ -365,7 +357,9 @@ class PageLayoutTests(unittest.TestCase):
                             ("100.96.0.1:18080", "https://100.96.0.1:18443/"), ("MYCAR.duckdns.org", "https://mycar.duckdns.org:18443/"),
                             ("autoplay.lan:18080", "https://mycar.duckdns.org:18443/"), ("", "https://mycar.duckdns.org:18443/")):
             html = self.page.render("", host)
-            self.assertIn(f'<a class="done out" href="{entry}"><span class=fwd>CarPlay 画面</span><span class=back>返回</span></a>', html, host)
+            # 1.5.4: Apple's Back button (the chevron alone) on the leading edge; 「CarPlay 画面」 on the trailing edge
+            self.assertIn(f'<header><div><a class="done icon out back" href="{entry}" aria-label="返回"><svg', html, host)
+            self.assertIn(f'<h1>AutoPlay 盒子</h1><a class="done out fwd" href="{entry}">CarPlay 画面</a></div></header>', html, host)
         # its own address first in the list as well
         net = self.pane(self.page.render("", "100.96.0.1:18080"), "net")
         self.assertLess(net.index("https://100.96.0.1<wbr>:18443/"), net.index("https://mycar.duckdns.org<wbr>:18443/"))
@@ -387,23 +381,65 @@ class PageLayoutTests(unittest.TestCase):
         self.assertNotIn("<nav", html)
         self.assertIn('<a class=done href="/#more">取消</a>', self.page.render_reset())
 
-    def test_a_new_iphone_that_never_comes_does_not_hold_the_page(self):
-        """1.5.4: after a pairing the page said "connecting" as a screen of its own, with no categories and no way
-        back, until the iPhone joined - for as long as it did not."""
-        now = time.time()
-        self.page.pairing.status = lambda: {"phase": "paired", "at": int(now)}
+    def test_the_review_against_apples_guidelines(self):
+        """1.5.4, the second review against Apple's guidelines: a known size downloads with a bar, an old check is
+        made when 更新 opens, a notice about the hotspot links to the page that fixes it, pairing says what it is
+        doing."""
+        import settings_ui as ui
+        # determinate progress while downloading (update.install writes the share)
+        (self.state / "update-status.json").write_text(json.dumps({"phase": "downloading", "message": "正在下载 1.5.4（38 MB）", "progress": 0.42, "at": int(time.time())}))
+        with patch("settings_page.update.running", return_value=True):
+            html = self.page.render("")
+        self.assertIn('<progress max=100 value=42 aria-label="已下载 42%"></progress>', html)
+        self.assertIn("<span class=value>42%</span>", html)
+        (self.state / "update-status.json").unlink()
+        # an old check is made when 更新 opens (the script submits the marked form); a fresh one is not
+        (self.state / "update-check.json").write_text(json.dumps({"latest": "1.5.4", "current": "1.5.4", "checked_at": int(time.time()) - 7200}))
+        self.assertIn("<form method=post action=/update data-auto>", self.page.render(""))
+        (self.state / "update-check.json").write_text(json.dumps({"latest": "1.5.4", "current": "1.5.4", "checked_at": int(time.time())}))
+        self.assertNotIn("<form method=post action=/update data-auto>", self.page.render(""))
+        self.assertIn('function auto(){if(location.hash!=="#update")return;var f=document.querySelector("form[data-auto]")', ui.SCRIPT)
+        self.assertIn('sessionStorage.setItem(k,n)}catch(e){}var b=f.querySelector("button[name=action]");if(b)b.click()}', ui.SCRIPT)
+        # a notice about the hotspot leads to OpenWrt's Wi-Fi page instead of saying where it is
+        self.status.update(warning="特斯拉看不到 AutoPlay 热点的信道 44，请改为 149（国家 CN）或 36。")
+        html = self.page.render("")
+        self.assertIn('<p class="banner bad" role=status><span>特斯拉看不到 AutoPlay 热点的信道 44，请改为 149（国家 CN）或 36。'
+                      '<a href="http://100.96.0.1/cgi-bin/luci/admin/network/wireless">在 OpenWrt 后台设置</a></span></p>', html)
+        self.assertNotIn("「网络 → 无线」", html)
+        self.status.update(warning="")
+        # pairing says what it is doing, not 「请稍候」
+        for phase, words in (("starting", "正在打开配对…"), ("finishing", "正在完成配对…")):
+            self.page.pairing.status = lambda phase=phase: {"phase": phase}
+            html = self.page.render("")
+            self.assertIn(words, html)
+            self.assertNotIn("请稍候", html)
+
+    def test_a_phone_being_invited_says_so_in_its_own_row(self):
+        """1.5.4: after a pairing (or 接入 CarPlay) the box invites the phone for 90 s; its row says 「正在接入…」 for that
+        long, the chain too, and the page refreshes. It said so as a screen of its own until 1.5.3 (for as long as the
+        phone did not come), then as a line under the group."""
+        import pairing_window
         self.page.pairing.presence = lambda: {}
+        self.page.pairing.status = lambda: {"phase": "paired", "at": 1}
+        grant = self.state / "receiver/pairing-request.json"
+        grant.parent.mkdir(parents=True, exist_ok=True)
+        boot = pairing_window.get_platform().boot_id()
+        grant.write_text(json.dumps({"phone": "02:00:00:00:00:01", "boot": boot, "expires": time.monotonic() + 60}))
         html = self.page.render("")
-        self.assertIn("<nav", html, "the normal page, the line under the iPhone group")
-        self.assertIn("CarPlay 画面", html)
-        self.assertIn("http-equiv=refresh content=3", html, "until the iPhone is there")
-        self.assertIn("<p class=foot>配对完成，iPhone 正在连上 AutoPlay 热点并打开 CarPlay。</p>", self.pane(html, "iphone"))
-        self.page.pairing.status = lambda: {"phase": "paired", "at": int(now) - 600}
-        html = self.page.render("")
-        self.assertNotIn("http-equiv=refresh", html)
+        self.assertIn("<nav", html, "the normal page")
+        self.assertIn("正在接入…", self.pane(html, "iphone"))
+        self.assertIn("<div class=name>小王的 iPhone</div><div class=state>正在接入</div>", html)
+        self.assertIn("http-equiv=refresh content=3", html)
         self.assertNotIn("<p class=foot>", html)
-        self.page.pairing.status = lambda: {"phase": "paired"}   # a status written before 1.5.4
-        self.assertNotIn("http-equiv=refresh", self.page.render(""))
+        grant.write_text(json.dumps({"phone": "02:00:00:00:00:01", "boot": boot, "expires": time.monotonic() - 1}))
+        html = self.page.render("")
+        self.assertNotIn("正在接入", html, "the invitation ran out")
+        self.assertNotIn("http-equiv=refresh", html)
+        grant.write_text(json.dumps({"phone": "02:00:00:00:00:01", "boot": "another boot", "expires": time.monotonic() + 60}))
+        self.assertNotIn("正在接入", self.page.render(""), "an invitation from before a restart")
+        self.page.pairing.presence = lambda: {"active": "02:00:00:00:00:01"}
+        grant.write_text(json.dumps({"phone": "02:00:00:00:00:01", "boot": boot, "expires": time.monotonic() + 60}))
+        self.assertIn(">正在使用<", self.page.render(""), "there: in use")
 
     def test_a_failed_check_is_one_sentence_and_its_details_go_to_the_diagnostics(self):
         import settings_page
@@ -450,7 +486,7 @@ class PageLayoutTests(unittest.TestCase):
         self.assertNotIn("class=done", refused)
         self.assertNotIn("Car-5G", refused, "nothing of the box for a browser that may not see it")
         self.assertIn("没有这一页。", missing)
-        self.assertIn('<a class=done href="/">返回</a>', missing)
+        self.assertIn('<a class="done icon" href="/" aria-label="返回"><svg', missing)
 
     def test_colours_follow_carplay_or_the_browser(self):
         import settings_ui as ui
@@ -463,8 +499,9 @@ class PageLayoutTests(unittest.TestCase):
             self.assertIn(part, ui.VISIT)
         # The way back: 返回 shows for a visit that came from the CarPlay page, and leads to its settings panel when
         # the visit began there (the CarPlay page opens the panel at 连接 for this fragment).
-        self.assertIn(":root[data-from] .done .back{display:inline}", ui.CSS)
-        self.assertIn(".done .back,:root[data-from] .done .fwd{display:none}", ui.CSS)
+        self.assertIn(":root[data-from] .done.back{display:inline-flex}", ui.CSS)
+        self.assertIn(".done.back,:root[data-from] .done.fwd{display:none}", ui.CSS)
+        self.assertIn('document.querySelector("a.done.back")', ui.SCRIPT)
         self.assertIn('getAttribute("data-from")==="panel")out.href=out.href.split("#")[0]+"#settings=connection"', ui.SCRIPT)
         # Both sets of colours: the handed-over theme wins, the browser's preference decides without one.
         self.assertIn(":root{" + ui.LIGHT, ui.CSS)
@@ -535,15 +572,21 @@ class PageLayoutTests(unittest.TestCase):
         self.assertIn("max(var(--s2),env(safe-area-inset-top))", here)
         self.assertIn("@media(max-width:760px){header>div{padding-left:var(--s3);padding-right:var(--s3)}h1{font-size:1.4rem}", mine)
         self.assertIn("dialogheader{padding-left:var(--space-3);padding-right:var(--space-3);}", theirs)
-        # the title and the button
-        self.assertEqual(one(r"--t-title:([\d.]+rem)", theirs), one(r"h1\{font-size:([\d.]+rem)", mine))
+        # the title and the button (1.5.4, Apple's toolbars and sheets: the button on the leading edge - the panel's
+        # close cross, this page's chevron back or 取消 - and the title in the middle)
+        self.assertIn("grid-template-columns:1frauto1fr;", bar)
+        self.assertIn("grid-template-columns:1frauto1fr;", here)
+        self.assertEqual(one(r"--t-title:([\d.]+rem)", theirs), one(r"h1\{[^}]*font-size:([\d.]+rem)", mine))
         self.assertIn("h2{font-size:var(--t-title);line-height:1.3;font-weight:600;", theirs)
-        self.assertIn("h1{font-size:1.6rem;line-height:1.3;font-weight:600;", mine)
+        self.assertIn("dialogheaderh2{grid-column:2;grid-row:1;min-width:0;text-align:center;", theirs)
+        self.assertIn("h1{grid-column:2;grid-row:1;font-size:1.6rem;line-height:1.3;font-weight:600;letter-spacing:normal;margin:0;min-width:0;text-align:center;", mine)
         self.assertEqual(re.findall(r"h2\{font-size:([\d.]+rem);\}", theirs), ["1.4rem", "1.3rem"])
         self.assertEqual(re.findall(r"h1\{font-size:([\d.]+rem)\}", mine), ["1.4rem", "1.3rem"])
-        self.assertIn("min-height:var(--hit-secondary);min-width:var(--hit-primary);", theirs)
-        self.assertIn("min-height:var(--hit2);min-width:var(--hit);padding:var(--s1)var(--s3);", mine)
-        self.assertIn("button.text{border-radius:var(--radius);background:var(--cell);color:var(--label);padding:var(--space-1)var(--space-3);}", theirs)
+        self.assertIn("button.bar-icon{grid-column:1;grid-row:1;justify-self:start;", theirs)
+        self.assertIn("width:var(--hit-secondary);height:var(--hit-secondary);padding:0;border:0;border-radius:50%;background:var(--cell);", theirs)
+        self.assertIn(".done{grid-column:1;grid-row:1;justify-self:start;", mine)
+        self.assertIn("min-height:var(--hit2);", mine)
+        self.assertIn(".done.icon{width:var(--hit2);min-width:0;padding:0;border-radius:50%}", mine)
 
     def test_the_style_sheet_keeps_its_lines_and_carries_no_comments(self):
         import settings_ui as ui
@@ -587,7 +630,8 @@ class PageLayoutTests(unittest.TestCase):
 
         with patch("settings_page.update.check"):
             self.assertEqual(post("/update", action="check"), (303, "/?m=#update"))
-        self.assertEqual(post("/update", action="install"), (303, "/?ask=install#update"))
+        with patch("settings_page.update.launch", return_value="已开始升级"):
+            self.assertEqual(post("/update", action="install"), (303, "/?m=#update"), "at once (1.5.4), back on 更新")
         self.page.pairing.stop = lambda: None
         self.assertEqual(post("/pair", action="cancel"), (303, "/?m="), "the first category needs no fragment")
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)

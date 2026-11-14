@@ -104,7 +104,7 @@ if (want('viewer')) for (const vp of SHAPES) {
   await page.keyboard.press('Escape'); await settle(page);
   await page.click('#settings-display details > summary'); await page.waitForTimeout(700); await shot(page, 'viewer-settings-display-advanced', vp);
   await page.click('[data-picker="codec"]'); await settle(page); await shot(page, 'viewer-picker-codec', vp);
-  await page.click('#picker-cancel'); await settle(page);
+  await page.keyboard.press('Escape'); await settle(page);   // a menu has no Cancel (1.5.4): Esc or a tap outside
   await page.click('[data-settings-page="connection"]'); await settle(page); await shot(page, 'viewer-settings-connection', vp);
   await page.locator('#settings-connection details > summary').first().click(); await page.waitForTimeout(700); await shot(page, 'viewer-settings-connection-diagnostics', vp);
   await page.click('#btn-close'); await page.waitForTimeout(400);
@@ -187,9 +187,9 @@ if (want('box')) for (const vp of SHAPES) {
 // browser with standing ones puts the box page's at the window's edge, beside the bar, and the panel's beside its page.)
 const PLACES = selectors => Object.fromEntries(Object.entries(selectors).map(([name, selector]) => {
   const r = document.querySelector(selector).getBoundingClientRect();
-  return [name, { x: r.left, y: r.top, r: innerWidth - r.right, h: r.height }];
+  return [name, { x: r.left, y: r.top, r: innerWidth - r.right, w: r.width, h: r.height }];
 }));
-const COMPARED = { bar: 'yh', title: 'xyh', button: 'ryh', category: 'xyh', heading: 'xy', group: 'xyr', row: 'xrh' };
+const COMPARED = { bar: 'yh', title: 'xyh', button: 'xywh', category: 'xyh', heading: 'xy', group: 'xyr', row: 'xrh' };
 // Two pairs (1.5.4): a page whose first group has a title (通用 / 网络) and one whose first group has none (连接 / 高级:
 // their group titles only repeated the category's name).
 const TWIN_PAGES = [{ panel: 'general', box: 'net', titled: true }, { panel: 'connection', box: 'more', titled: false }];
@@ -209,7 +209,7 @@ if (want('twins')) for (const vp of [...SHAPES, { w: 600, h: 800, dsf: 2, tag: '
   await ctx2.close();
   const apart = Object.entries(COMPARED).filter(([name]) => panel[name]).flatMap(([name, keys]) => [...keys].filter(k => Math.abs(panel[name][k] - twin[name][k]) > 0.5)
     .map(k => `${name}.${k} ${Math.round(panel[name][k] * 10) / 10} / ${Math.round(twin[name][k] * 10) / 10}`));
-  console.log(`twins ${vp.tag} ${vp.w}x${vp.h} ${pair.panel}/${pair.box}: ${apart.length ? 'APART (panel / box page) ' + apart.join('; ') : `same (bar ${Math.round(panel.bar.h)} px, title at ${Math.round(panel.title.x)}, button ${Math.round(panel.button.r)} from the right, first group at ${Math.round(panel.group.y)})`}`);
+  console.log(`twins ${vp.tag} ${vp.w}x${vp.h} ${pair.panel}/${pair.box}: ${apart.length ? 'APART (panel / box page) ' + apart.join('; ') : `same (bar ${Math.round(panel.bar.h)} px, title at ${Math.round(panel.title.x)}, button at ${Math.round(panel.button.x)}, first group at ${Math.round(panel.group.y)})`}`);
   if (apart.length) process.exitCode = 1;
 }
 await browser.close(); dist.server.close(); box.server.close();

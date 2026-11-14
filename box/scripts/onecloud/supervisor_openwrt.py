@@ -146,7 +146,7 @@ def channel_warning(channel):
         return "AutoPlay 热点在 2.4 GHz：能用，但 5 GHz（国内信道 149）更稳。" if channel else ""
     if 36 <= channel <= 48 or 149 <= channel <= 165:
         return ""
-    return f"特斯拉看不到 AutoPlay 热点的信道 {channel}，请在 OpenWrt「网络 → 无线」改为 149（国家 CN）或 36。"
+    return f"特斯拉看不到 AutoPlay 热点的信道 {channel}，请改为 149（国家 CN）或 36。"
 
 
 def trusted_networks(network):
@@ -178,7 +178,7 @@ def waiting_warning(why):
         if re.fullmatch(pattern, why):
             why = re.sub(pattern, text, why)
             break
-    return f"AutoPlay 热点还没准备好：{why}。请在 OpenWrt「网络 → 无线」检查。"
+    return f"AutoPlay 热点还没准备好：{why}。"
 
 
 TAILSCALE_DROP = re.compile(r'iifname != "tailscale0\*?" ip saddr 100\.64\.0\.0/10 .*\bdrop\b')

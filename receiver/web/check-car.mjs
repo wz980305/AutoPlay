@@ -413,8 +413,8 @@ console.log('Tesla fullscreen: only with its video sites reachable.');
   }
 }
 console.log('Compatible display: automatic below Chrome 120, neither low-latency canvas nor hardware preference.');
-{ // Option sheet (1.2.0, picker.ts): a car browser draws a native <select> list at the OS size, so the rows open an
-  // in-page sheet; the hidden <select> keeps the value and its change event, which main.ts listens to.
+{ // Option menu (1.2.0, picker.ts; a menu from the row since 1.5.4): a car browser draws a native <select> list at
+  // the OS size, so the rows open the page's own list; the hidden <select> keeps the value and its change event.
   class Node {
     constructor(tag){this.tag=tag;this.children=[];this.attrs={};this.listeners={};this.textContent='';this.hidden=false;this.disabled=false;this.open=false;}
     setAttribute(k,v){this.attrs[k]=String(v);} getAttribute(k){return this.attrs[k]??null;}
@@ -436,7 +436,7 @@ console.log('Compatible display: automatic below Chrome 120, neither low-latency
   const select=new Node('select');select.id='fps';select.options=[option('30','30 fps',true),option('60','60 fps')];
   const trigger=new Node('button');trigger.dataset={picker:'fps'};const main=new Node('span');const b=new Node('b');b.textContent='帧率';main.children=[b];const value=new Node('span');value.className='value';trigger.children=[main,value];
   const root=new Node('section');root.children=[trigger,select];
-  const sheet=new Node('dialog');const title=new Node('h2');title.id='picker-title';const list=new Node('div');list.id='picker-options';const cancel=new Node('button');cancel.id='picker-cancel';sheet.children=[title,list,cancel];
+  const sheet=new Node('dialog');const list=new Node('div');list.id='picker-options';sheet.children=[list];
   let shown=0;sheet.showModal=()=>{shown++;sheet.open=true;};sheet.close=()=>{sheet.open=false;sheet.dispatchEvent({type:'close'});};
   globalThis.document={getElementById:id=>id==='fps'?select:null,createElement:tag=>new Node(tag)};
   globalThis.MutationObserver=class{constructor(fn){this.fn=fn;}observe(){observers.push(this);}};const observers=[];
@@ -445,7 +445,7 @@ console.log('Compatible display: automatic below Chrome 120, neither low-latency
   assert.equal(value.textContent,'30 fps','the row shows the current option');
   let changes=0;select.onchange=()=>changes++;
   trigger.onclick();
-  assert.equal(shown,1);assert.equal(title.textContent,'帧率','the sheet is titled after the row');
+  assert.equal(shown,1);assert.equal(sheet.attrs['aria-label'],'帧率','the menu is named after its row (no title: Apple\'s pop-up button)');
   assert.deepEqual(list.children.map(r=>[r.querySelector('b').textContent,r.attrs['aria-selected']]),[['30 fps','true'],['60 fps','false']]);
   assert.equal(focused,list.children[0],'the current option takes focus');
   list.children[1].onclick();
@@ -457,4 +457,13 @@ console.log('Compatible display: automatic below Chrome 120, neither low-latency
   select.disabled=true;observers[0].fn();assert.equal(trigger.disabled,true,'a disabled select greys its row');
   delete globalThis.document;delete globalThis.MutationObserver;
 }
-console.log('Option sheet: rows mirror and set their hidden select, one change event per real change, the current option focused.');
+{ // 1.5.4: no title and no Cancel in the menu; a row that opens one shows the up-down chevron
+  const html=readFileSync(new URL('./index.html',import.meta.url),'utf8'),css=readFileSync(new URL('./src/style.css',import.meta.url),'utf8');
+  assert.match(html,/<dialog id="picker" class="picker"><div id="picker-options" class="options" role="listbox"><\/div><\/dialog>/);
+  assert.match(css,/\.select-row \.chev::before, \.select-row \.chev::after/);assert.match(css,/dialog\.picker::backdrop \{ background:transparent; \}/);
+}
+{ // 1.5.4: until a language is chosen, the car browser's own (Apple: detect what can be detected); it was zh for all
+  const {defaultLanguage}=await load('i18n');
+  assert.deepEqual(['zh-CN','zh-TW','zh','en-US','en-AU','de-DE',''].map(defaultLanguage),['zh','zh','zh','en','en','en','zh']);
+}
+console.log('Option menu: rows mirror and set their hidden select, one change event per real change, the current option focused, no title or Cancel.');

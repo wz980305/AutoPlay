@@ -9,7 +9,7 @@ const messages = {
   locationReconnecting: ['已开启，正在重新连接 CarPlay。', 'On. Reconnecting CarPlay.'],
   locationFail: ['设置失败，请检查盒子连接后重试。', 'Could not change the setting. Check the box connection and retry.'],
   boxLink: ['AutoPlay 盒子', 'AutoPlay box'],
-  playerSettings: ['设置', 'Settings'], performanceMode: ['增强模式', 'Enhanced mode'], language: ['语言', 'Language'],
+  playerSettings: ['AutoPlay 设置', 'AutoPlay settings'], performanceMode: ['增强模式', 'Enhanced mode'], language: ['语言', 'Language'],
   waiting: ['等待 iPhone', 'Waiting for iPhone'],
   connecting: ['正在连接盒子', 'Connecting to box'], reconnecting: ['正在重新连接', 'Reconnecting'],
   reconnectingHint: ['连不上盒子，请检查盒子电源和 AutoPlay 热点。', 'Can’t reach the box. Check its power and the AutoPlay hotspot.'],
@@ -46,13 +46,20 @@ const messages = {
   insecure: ['不是安全连接，请用盒子的 https:// 地址打开本页。', 'Not a secure connection. Open this page at the box’s https:// address.'],
   noStream: ['尚无画面', 'No picture yet'],
   hevcAuto: ['这台车机解不了 H.265，已改用 H.264。', "This car cannot decode H.265; switched to H.264."],
-  hevcManual: ['这台车机解不了 H.265，请在「显示 › 画质与兼容」把视频编码改为自动。', 'This car can’t decode H.265. Set the video codec to Automatic in Display › Quality and compatibility.'],
+  hevcManual: ['这台车机解不了 H.265，请把视频编码改为自动。', 'This car can’t decode H.265. Set the video codec to Automatic.'],
+  goToSetting: ['前往设置', 'Open Setting'],
   decodeFail: ['画面解码出错，正在重新请求画面。', 'The picture failed to decode; asking for a new one.'], technical: ['详细信息', 'Details'],
   cancel: ['取消', 'Cancel'],
 } as const;
 export type Key = keyof typeof messages;
-/** Storage can be blocked or throw in a car browser (private mode, cleared site data): then zh, remembered for the page. */
-function savedLanguage(): 'zh' | 'en' { try { return localStorage.getItem('f50-language') === 'en' ? 'en' : 'zh'; } catch { return 'zh'; } }
+/** The language chosen in 「语言」; until one is chosen, the car browser's own (1.5.4, Apple's settings guidance: detect
+ *  what can be detected - it was 简体中文 for every car). Chinese for a zh browser or one that names none, else English.
+ *  Storage can be blocked or throw in a car browser (private mode, cleared site data): then the browser's, for the page. */
+export function defaultLanguage(asked: string): 'zh' | 'en' { return !asked || asked.toLowerCase().startsWith('zh') ? 'zh' : 'en'; }
+function savedLanguage(): 'zh' | 'en' {
+  try { const saved = localStorage.getItem('f50-language'); if (saved === 'en' || saved === 'zh') return saved; } catch { /* the browser's */ }
+  try { return defaultLanguage(navigator.languages?.[0] ?? navigator.language ?? ''); } catch { return 'zh'; }
+}
 export let language: 'zh' | 'en' = savedLanguage();
 export function t(key: Key): string { return messages[key][language === 'zh' ? 0 : 1]; }
 export function setLanguage(value: string): void {
@@ -60,4 +67,6 @@ export function setLanguage(value: string): void {
   try { localStorage.setItem('f50-language', language); } catch { /* Kept for this page only. */ }
   document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
   document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(e => { e.textContent = t(e.dataset.i18n as Key); });
+  // Buttons that are a symbol alone (1.5.4: the panel's close) carry their name for a screen reader.
+  document.querySelectorAll<HTMLElement>('[data-i18n-label]').forEach(e => { e.setAttribute('aria-label', t(e.dataset.i18nLabel as Key)); });
 }
