@@ -63,7 +63,7 @@ let display: Display | null = null;
 const performanceMode = el<HTMLInputElement>('performance-mode');
 performanceMode.checked = readFlag('f50-performance-mode') === '1';
 /** The long side is capped at 1920 (1.3.2). The "Allow 2560" switch of 1.0-1.3.1 is gone: it only raised the cap for a
- *  2.5K screen, a Tesla's widest page (borderless, 1256 CSS px at 1.53) is 1922 px and came out 2 px wider with it, and
+ *  2.5K screen, a Tesla's widest page (borderless, 1256 CSS px at 1.53, a mode gone since 1.6.6) was 1922 px and came out 2 px wider with it, and
  *  an MCU2 (Atom) Tesla must never be sent 2560 (hardware review H1). The flag a browser may still hold is dropped. */
 try { localStorage.removeItem('f50-allow-2560'); } catch { /* Nothing to drop. */ }
 const performanceOn = () => performanceMode.checked;
@@ -516,7 +516,7 @@ function pageEvent(ev: number) {
   connection.send({type:'stats',stats:{ev,hidden:document.hidden?1:0,width:screen.clientWidth,height:screen.clientHeight,...viewport()}});
 }
 /** Which page build runs (raised with each build tried in the car). */
-const BUILD = 202611142100;
+const BUILD = 202611160030;
 /** What the browser says of the space it gives the page, to find the car's bar over a fullscreen page (2026-10-13):
  *  window, visual viewport (and its offset), screen, available screen, outer window, pixel ratio. */
 function viewport(): Record<string, number> {

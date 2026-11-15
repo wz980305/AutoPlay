@@ -16,7 +16,7 @@ data class ServerConfig(
     val displayHeight: Int = 720,
     val displayFps: Int = 60,
     /** CarPlay's size as the physical width told to the phone (DisplayState.SIZE_MM): 85 = 300 mm, the Tesla default.
-     *  A Model 3/Y panel is 332 mm wide; its borderless 1920 px stream at 300 mm draws controls ~11 % larger than
+     *  A Model 3/Y panel is 332 mm wide; a full-width 1920 px stream at 300 mm (the borderless page, gone in 1.6.6) draws controls ~11 % larger than
      *  true, which read better from the driver's seat than the 250 mm "standard" (tesla_only_web_delta item 9). */
     val uiScale: Int = DEFAULT_UI_SCALE,
     val hevc: Boolean = false,
