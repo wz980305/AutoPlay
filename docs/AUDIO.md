@@ -36,3 +36,38 @@
 - 接收端：`CarPlayServer.airPlayConfig`（`disableAudioOutput = true`），`AirPlayInfoPlist.build`；测试 `AudioCapabilitiesTest`（不声明音频；旧参数被忽略）。
 - 盒子：`run-receiver.py`（JVM 参数、`receiver-access.json`）；`supervisor_openwrt.OBSOLETE_OPTIONS` 与 `90-autoplay-tesla` 删除旧键。
 - 网页：`main.ts` 对 wire 类型 3/4/6（旧接收端可能仍转发的音频帧）只解析不处理；`debug-hud.ts` 两行；`public/browser-check.js` 不检查音频 API。
+
+## 六、用过车机自带的媒体后，CarPlay 里播放没有声音（2026-11-16 审查）
+
+车主报告：在 CarPlay 里放 Apple Music、暂停；在车机自带的 Apple Music 里放、暂停；回到 CarPlay 再放，有时没有声音。问这是否说明声音这一块还有问题，并要求全面审查。
+
+**结论：盒子和页面的代码里没有找到问题；声音断在特斯拉的媒体来源上。** 这是「声音全部走特斯拉蓝牙」这个设计本来就有的前提（第三节：iPhone 要被选为车机的媒体来源），车机自带的媒体一播放，这个前提就被换掉了。
+
+| 步骤 | iPhone | 特斯拉 | 盒子和页面 |
+|---|---|---|---|
+| 1. 在 CarPlay 里播放 | 声音经蓝牙发给特斯拉 | 媒体来源是「手机」（蓝牙），出声 | 只传画面和触摸，不经手声音 |
+| 2. 在车机自带的 Apple Music 里播放 | 已暂停 | 媒体来源换成自带的 Apple Music | 页面在后台，CarPlay 会话保持（十几分钟不回来才断开） |
+| 3. 回到 CarPlay 再播放 | 照常经蓝牙发声音 | 来源仍是自带的 Apple Music（暂停着）：有时自己切回「手机」，有时不切，不切就没有声音 | 和第 1 步一样 |
+
+依据：
+
+- 特斯拉的用户手册把手机（蓝牙）列为在媒体播放器里选的一个来源，没有说手机一播放车就自动切过去。
+- 特斯拉车主论坛上有同样的现象：选过别的来源（比如车机的 Spotify）之后，车不再自动切回蓝牙来源，手机的音乐和导航播报都没有声音，在菜单里手动选回蓝牙来源后恢复。「有时候」正是因为车有时会自己切、有时不会。
+- 做同一件事的产品（在特斯拉浏览器里显示 CarPlay、声音走车机蓝牙的 Carlinkit T2C）的说明里也写着：不要让车机自带的应用和 CarPlay 同时播放，并在车机上选蓝牙作为声音来源。
+
+**恢复办法：** 在车机的媒体播放器里把来源选回「手机」（蓝牙）。想听 Apple Music 时只在 CarPlay 里放，就不会遇到（两边是同一个账号、同一个资料库）。
+
+**确认办法：** 没有声音时看车机的媒体栏：显示的是车机自带的 Apple Music（暂停着）而不是 iPhone 正在放的歌，就是这个原因；选回「手机」后声音回来即可确认。若来源已经是「手机」、iPhone 的音频输出也显示车机，仍然没有声音，那是另一回事：在「AutoPlay 设置」下载诊断记录再查。
+
+**盒子为什么帮不上：** iPhone 的声音不经过盒子；盒子和页面既看不到、也改不了特斯拉的媒体来源，也不知道车机此刻有没有在出声。
+
+审查过的地方（都没有发现会让 iPhone 不出声或把声音引到别处的行为）：
+
+- 接收端告诉 iPhone 的能力（`AirPlayInfoPlist.build`）：没有 `audioFormats`/`audioLatencies`，功能位里没有音频位；`bluetoothIDs` 只有盒子自己的蓝牙地址，所以 CarPlay 期间 iPhone 只会停掉它和盒子之间的声音通道，和特斯拉之间的不动（`BluetoothIdentityTest`）。
+- 屏幕和主音频的归属（`modes`）：盒子在会话开始时声明一次，约束全是「随时可以拿走」；之后从不向 iPhone 发改变归属的命令（代码里没有这条命令），所以重连前后 iPhone 都可以随时播放。新增 `AirPlayInfoPlistTest.theIphoneMayTakeMainAudioAtAnyTime` 固定这一点。
+- 页面到后台再回来：页面的连接最多保留 10 分钟，其后没有页面满 5 分钟才结束 CarPlay 会话；这段时间盒子不向 iPhone 发任何和声音有关的东西。
+- 盒子的蓝牙：只注册 iAP2 一个服务（`bridge.py`，`test_bluez`），不提供 A2DP、HFP，iPhone 不会把它当成能出声的设备。
+- 页面：不播放任何声音，旧接收端可能转发的音频帧和压低音量的消息只解析、不处理。
+
+诊断记录里和声音有关的两行（接收端日志）：`CarPlay resource ownership`（iPhone 报告屏幕、主音频归属变化时）、`audio duckAudio/unduckAudio`（iPhone 要求压低或恢复音乐音量时）。真车上的声音只能在车里验证，这次审查是读代码和跑测试，没有实车录音。
+

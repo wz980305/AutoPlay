@@ -306,4 +306,33 @@ class AirPlayInfoPlistTest {
             .toSet()
         assertEquals(setOf(100, 101, 102), types)
     }
+
+    @Test
+    fun theIphoneMayTakeMainAudioAtAnyTime() {
+        // AutoPlay carries no sound (docs/AUDIO.md): the iPhone plays over the Tesla's Bluetooth. The receiver declares
+        // the main-audio resource once, taken "nice to have" with every constraint "anytime", and has no command that
+        // changes it later, so nothing the box says keeps the iPhone from playing before or after a reconnect. (The
+        // owner's report of 2026-11-16, no sound after the Tesla's own Apple Music had played, is the Tesla's media
+        // source: docs/AUDIO.md §六.)
+        val info = AirPlayInfoPlist.build(
+            AirPlayConfig(
+                deviceName = "test",
+                deviceId = "02:00:00:00:00:02",
+                btMac = "02:00:00:00:00:02",
+                sourceVersion = "366.0",
+                main = AirPlayDisplayConfig(widthPixels = 1280, heightPixels = 720),
+                disableAudioOutput = true,
+            ),
+        )
+
+        val resources = ((info["modes"] as Map<*, *>)["resources"] as List<*>).map { it as Map<*, *> }
+        assertEquals(listOf<Any?>(1, 2), resources.map { it["resourceID"] })
+        val audio = resources.single { it["resourceID"] == 2 }
+        for (key in listOf("transferPriority", "takeConstraint", "borrowConstraint", "unborrowConstraint")) {
+            assertEquals(key, 100, audio[key])
+        }
+        assertFalse(info.containsKey("audioFormats"))
+        assertFalse(info.containsKey("audioLatencies"))
+        assertEquals(listOf("02:00:00:00:00:02"), info["bluetoothIDs"])
+    }
 }
