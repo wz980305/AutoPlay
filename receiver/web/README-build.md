@@ -41,6 +41,9 @@ mkdir -p node_modules && ln -sfn /opt/npm-tools/node_modules/typescript node_mod
 ## Since then (1.1.0 – 1.5.0)
 
 - `npm run build:offline` = `tsc --noEmit -p tsconfig.offline.json && node scripts/build-esbuild.mjs`.
+- `node scripts/check-dist.mjs` checks a built `dist/`: the one module script `index.html` names must be the
+  chunk that holds `boot.ts`, because the page tells whether the box still serves it by that script's file name
+  (`src/fresh.ts`, 1.6.7). `box/scripts/release.sh` runs it after the Vite build.
 - `npm test` runs five scripts: `check.mjs`, `check-car.mjs`, `check-browser.mjs`, `check-runtime.mjs` and, since 1.4.0, `check-location.mjs` (`check-audio.mjs` went with the page's audio in 1.3.0).
 - 1.1.0 deleted the MSE music path (`music-output.ts`, `aac-mp4.ts`); 1.3.0 deleted the rest of the page's audio (`audio.ts`, `audio-timing.ts`, the sound flags): `flags.ts` only has `TESLA` left (`../../docs/AUDIO.md`).
 - 1.2.0 added `src/picker.ts` (the in-page option sheet that replaces native `<select>` lists) and

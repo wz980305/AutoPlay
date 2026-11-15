@@ -206,6 +206,33 @@ assert.equal(isNight('day',at(23,0),true),false);assert.equal(isNight('night',at
   assert.match(main,/if \(nightSelect\.value === 'schedule'\) placeForSun\(true\);/,'picking 「日落到日出」 asks for a position once');
   assert.match(main,/if \(state\.state === 'granted'\) ask\(\);/,'at start-up only where the browser allows it already: no prompt');
 }
+{ // 1.6.7: an open page reloads once when the box no longer serves it (the drive record of 2026-11-15 began with the
+  // Tesla on a page from 1.4.x or earlier against a 1.6.5 box: the car keeps its tab for days).
+  const {PageWatch,pageMark}=await load('fresh');
+  const page=name=>`<!doctype html><script type="module" crossorigin src="./assets/${name}"></script>`;
+  let watch=new PageWatch('index-aaa111.js');
+  assert.equal(watch.changed(null),false,'not read: nothing concluded');assert.equal(watch.changed(''),false);
+  assert.equal(watch.changed(page('index-aaa111.js')),false,'the first reading is this page');
+  assert.equal(watch.changed(page('index-aaa111.js')),false,'the link opened again, the box unchanged');
+  assert.equal(watch.changed(null),false,'the box did not answer');
+  assert.equal(watch.changed(page('index-bbb222.js')),true,'the box was upgraded: another entry script');
+  assert.equal(watch.changed(page('index-aaa111.js')+'<!-- markup -->'),true,'the same script, other markup');
+  watch=new PageWatch('index-aaa111.js');
+  assert.equal(watch.changed(page('index-bbb222.js')),true,'a page the browser brought back from its cache: caught on the first reading');
+  watch=new PageWatch('');   // the entry is not known (an old browser): only the first reading counts
+  assert.equal(watch.changed(page('index-bbb222.js')),false);assert.equal(watch.changed(page('index-bbb222.js')),false);
+  assert.equal(watch.changed(page('index-ccc333.js')),true);
+  watch=new PageWatch('boot.js');   // the offline build keeps its names: only other text shows
+  assert.equal(watch.changed(page('boot.js')),false);assert.equal(watch.changed(page('boot.js')),false);assert.equal(watch.changed(page('boot.js')+' '),true);
+  assert.equal(pageMark(page('a.js')),pageMark(page('a.js')));assert.notEqual(pageMark(page('a.js')),pageMark(page('b.js')));
+  assert.match(pageMark('abc'),/^3\.-?\d+$/);
+  const main=readFileSync(new URL('./src/main.ts',import.meta.url),'utf8'),boot=readFileSync(new URL('./src/boot.ts',import.meta.url),'utf8');
+  assert.match(main,/else \{ state = 'waiting'; void loadDisplay\(\); void checkPage\(\); \}/,'asked whenever the link opens');
+  assert.match(main,/fetch\('\.\/index\.html', \{ cache: 'no-store'/,'never from the cache');
+  assert.match(main,/if \(sessionStorage\.getItem\(RELOADED_FOR\) === mark\) return;/,'one reload for one served page: no loop');
+  assert.match(main,/if \(panel\.open\) panel\.addEventListener\('close', go, \{ once: true \}\); else go\(\);/,'not under an open panel');
+  assert.match(boot,/playportEntry = new URL\(import\.meta\.url\)\.pathname\.split\('\/'\)\.pop\(\)/,'the entry script names itself');
+}
 { // 1.5.0: the link to the box page says which colours CarPlay is showing and where it was tapped; the box page
   // takes the colours, and its 返回 leads back to the panel (#settings=connection) or to the page.
   const {boxPageUrl,panelFromHash}=await load('night');
@@ -376,7 +403,8 @@ console.log('View areas: shapes learned once, switched without reconnecting.');
   const {access}=await load('boot',s=>s.replace(/^import .*?;$/gm,'const startup={mark(){}};').replace('async function access()', 'export async function access()'));
   globalThis.fetch=async()=>({ok:true,json:async()=>({token:'0123456789abcdef0123456789abcdef',settingsPort:18080,tesla:false,carMusic:false,audioRouteNavigation:'carplay'})});await access();
   assert.equal(stored['playport-token'],'0123456789abcdef0123456789abcdef');assert.equal(window.playportBoxSettingsPort,18080);
-  assert.deepEqual(Object.keys(window),['playportBoxSettingsPort'],'no runtime car or sound flags any more');
+  assert.deepEqual(Object.keys(window),['playportEntry','playportBoxSettingsPort'],'no runtime car or sound flags any more; the entry script names itself for fresh.ts (1.6.7)');
+  assert.equal(typeof window.playportEntry,'string');
   globalThis.window=savedWindow;globalThis.fetch=savedFetch;globalThis.localStorage=savedStorage;
 }
 

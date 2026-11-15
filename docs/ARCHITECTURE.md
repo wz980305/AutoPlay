@@ -94,6 +94,15 @@ F50 不解码、不转码，只解密、重封装、再加密。每帧在 JVM �
 
 0.1.0 已实现的：`recovering`（保留画面 + 遮罩 + 常驻提示）、`renegotiating`、`live-muted`（整宽底部解锁条，只在 AudioContext 挂起且确实收到页面要播的流时显示）、`connecting-box`/`box-unreachable`/`waiting-iphone`/`starting` 的提示语由 `src/status.ts` 按状态派生（含已等待秒数、盒子失联时隐藏"添加 iPhone"）、`unsupported` 的驾驶者可读双语检测页。还没有的：`busy`、`box-restarting`、`overheating`、`paused-by-box` 的显示，以及从盒子的 `status.json` 派生 `waiting-iphone` 的原因——这是下一步（ROADMAP 第 2–3 周）。`mic-blocked` 在特斯拉专属形态下不存在（不提供麦克风）。
 
+### 4.1 甲 开着的页面和盒子的版本（1.6.7）
+
+车机会把一个标签页留好几天，盒子升级后它还是旧页面（2026-11-15 的行车记录：1.6.5 的盒子，页面是 1.4.x 或更早的）。每次和盒子的连接打开（第一次、断开后重连、冻结后换新连接），页面用 `fetch('./index.html', {cache: 'no-store'})` 重新读一次自己的入口：
+
+- 里面没有本页入口脚本的名字（发布构建的脚本名带哈希，每个版本不同；`boot.ts` 把自己的文件名记在 `window.playportEntry`），或者内容和本页第一次读到的不同 → 重新载入一次（`fresh.ts` 的 `PageWatch`）。
+- 同一份 `index.html` 只为它载入一次（`sessionStorage` 里记下它的指纹），所以一直对不上的页面不会循环；设置面板开着时等它关上；读不到（盒子没应答）就什么也不做，下次连接打开时再问。
+- 接收端给 `assets/` 以外的页面文件加 `Cache-Control: no-cache`，重新载入拿到的一定是盒子上现在的文件。
+- 日志里是 `ev=12 newer=1`。CarPlay 会话不受影响：新页面要的是同样的画面尺寸。
+
 ### 4.2 盒子状态通道（STATUS-MODEL，已实现）
 
 设置页、LuCI 概览和（下一步）投屏页读同一份状态，而不是各自拼。实现：`box/scripts/onecloud/status_model.py`（`Status`），由 `supervisor_openwrt.py` 填充，只在变化时写到 `/var/run/autoplay/status.json`（tmpfs），设置页在 `/status.json` 转发；`phone` 域的原因词来自 `/var/run/autoplay/receiver.log` 里 bt-bridge 的 `reason=<词>` 行。完整的域、状态、原因词和页面文案见 `box/docs/STATUS-MODEL.md`，这里只给形状：

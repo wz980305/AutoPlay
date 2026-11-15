@@ -10,6 +10,7 @@ import { statusHint } from './status';
 import { t, language, setLanguage, type Key } from './i18n';
 import { boxPageUrl, isNight, nextTurn, panelFromHash, parseNightMode, type BoxLinkFrom } from './night';
 import { roughPlace, sunTimes, zonePlace, type Place, type SunTimes } from './sun';
+import { PageWatch, pageMark } from './fresh';
 import { hudLines } from './debug-hud';
 import { compatDisplayOn } from './compat-display';
 import { askBox, READ_MS, WRITE_MS } from './ask-box';
@@ -260,7 +261,7 @@ const connection = new Connection(token, {
     if (value === 'open' && closedAt) { lifeEvent(11, { downMs: Math.round(performance.now() - closedAt), failures: connection.failures }); closedAt = 0; }
     if (value === 'closed') { if (!closedAt) { closedAt = performance.now(); linkDownAt = closedAt; } if (!wokeAt) wokeAt = closedAt; reset(shownOnce); state = 'reconnecting'; }
     else if (value === 'connecting') { if (state !== 'reconnecting') state = 'connecting'; }
-    else { state = 'waiting'; void loadDisplay(); }
+    else { state = 'waiting'; void loadDisplay(); void checkPage(); }
     render();
   },
 });
@@ -516,7 +517,7 @@ function pageEvent(ev: number) {
   connection.send({type:'stats',stats:{ev,hidden:document.hidden?1:0,width:screen.clientWidth,height:screen.clientHeight,...viewport()}});
 }
 /** Which page build runs (raised with each build tried in the car). */
-const BUILD = 202611160030;
+const BUILD = 202611160200;
 /** What the browser says of the space it gives the page, to find the car's bar over a fullscreen page (2026-10-13):
  *  window, visual viewport (and its offset), screen, available screen, outer window, pixel ratio. */
 function viewport(): Record<string, number> {
@@ -547,7 +548,8 @@ window.setInterval(()=>{ if (active) { lag.sent(performance.now()); connection.s
  *  replaces it (the box drops the old one by this page's id). A reload, which loses the sound's unlock, only as the
  *  last resort: no link for RELOAD_AFTER_MS while the box answers. The last picture stays up meanwhile (reset, hold).
  *  A Tesla also leaves its Wi-Fi out of Park unless "Remain connected in Drive" is on: then the link comes back on
- *  "online". Viewer log: ev 8 frozen (gapMs), 11 link open again (downMs), 12 reloading, 13 back (how: 1 same link,
+ *  "online". Viewer log: ev 8 frozen (gapMs), 11 link open again (downMs), 12 reloading (newer=1: for a page the box
+ *  has replaced, checkPage), 13 back (how: 1 same link,
  *  2 new link, 3 network back), 14 first picture (pictureMs since waking), 17 decoder (see decoderError). */
 const PROBE_MS = 600, RELOAD_AFTER_MS = 15000;
 let lastTick = performance.now(), lastHeard = performance.now(), revived = 0, hiddenMeanwhile = document.hidden;
@@ -572,6 +574,28 @@ function wake(why: number) {
   }, PROBE_MS);
   connection.send({ type:'ping' });
   connection.send({ type:'keyframe' });
+}
+/** A box upgraded under an open page (1.6.7, fresh.ts): whenever the link opens, the page reads index.html again and
+ *  reloads once when the box no longer serves the page this tab runs. The car keeps a tab for days: on 2026-11-15 it
+ *  still ran a page from 1.4.x or earlier against a 1.6.5 box. CarPlay goes on meanwhile (the new page asks for the
+ *  same picture, about half a second). With the panel open the reload waits until it is closed. Viewer log: ev 12
+ *  with newer=1. */
+const pageWatch = new PageWatch((window as unknown as { playportEntry?: string }).playportEntry ?? '');
+const RELOADED_FOR = 'f50-reloaded-for';
+async function checkPage() {
+  let served: string | null = null;
+  try {
+    const response = await fetch('./index.html', { cache: 'no-store', signal: AbortSignal.timeout(8000) });
+    if (response.ok) served = await response.text();
+  } catch { /* the box did not answer: the next opening asks again */ }
+  if (!served || !pageWatch.changed(served) || reloading) return;
+  const mark = pageMark(served);
+  try {
+    if (sessionStorage.getItem(RELOADED_FOR) === mark) return;   // reloaded for this page already and still not it
+    sessionStorage.setItem(RELOADED_FOR, mark);
+  } catch { return; }   // without the note a page that stays different would reload for ever
+  const go = () => { reloading = true; lifeEvent(12, { newer: 1 }); location.reload(); };
+  if (panel.open) panel.addEventListener('close', go, { once: true }); else go();
 }
 /** The last resort: a reload, as a refresh by hand always came back, while the box answers (a reload while the box
  *  restarts would leave the browser's own error page). */

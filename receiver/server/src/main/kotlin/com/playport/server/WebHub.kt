@@ -543,6 +543,11 @@ class WebHub(
                     )
                     return@get
                 }
+                // The page and the files beside it keep their names from release to release, so a browser must ask
+                // each time (1.6.7): without a word on caching it kept index.html and browser-check.js for hours on
+                // its own estimate, and a page that reloads for an upgraded box (web/src/fresh.ts) has to get the new
+                // ones. Files under assets/ carry a hash in their names in a release build and may be kept.
+                if (!file.startsWith(webRoot.resolve("assets"))) call.response.headers.append("Cache-Control", "no-cache")
                 call.respondFile(file.toFile())
             }
         }

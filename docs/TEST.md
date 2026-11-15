@@ -105,6 +105,7 @@ sh -n openwrt/autoplay/files/autoplay.init && sh -n box/scripts/build-bundle.sh
 4. 配对存储：第一次新配对后 `state/receiver/pairings.properties.bak` 出现；故意清空主文件后下次启动要回退到 `.bak`。
 5. DSCP：盒子上 `tcpdump -v` 看 18443 的流量 TOS 是否 0x88。
 6. 触摸释放：手指按着时挂倒挡冻结页面，日志应出现 `viewer client=N paused with a finger down: lifting it`，iPhone 上不能留下按住的按钮。
+7. 页面跟上盒子的版本（1.6.7）：车机里开着 CarPlay 页面，在别处把盒子升级；回到车里，页面应在连上盒子后自己重新载入一次，诊断记录里有 `ev=12 newer=1`，其后的 `build=` 是新版本的；CarPlay 不应重新连接。
 
 技术路径 §八的问题：
 

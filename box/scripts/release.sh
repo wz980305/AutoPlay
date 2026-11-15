@@ -51,6 +51,8 @@ set -- "$repo"/receiver/server/build/install/server/lib/server-*.jar
 
 say "3. web viewer (npm)"
 (cd "$repo/receiver/web" && npm ci --no-audit --no-fund --silent && npm run -s build)
+# The page tells its own version by its entry script's name (1.6.7, src/fresh.ts): the built page must name it.
+node "$repo/receiver/web/scripts/check-dist.mjs" "$repo/receiver/web/dist"
 
 say "4. program bundle"
 rm -rf "$out"

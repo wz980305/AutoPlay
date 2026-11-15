@@ -1,5 +1,9 @@
 import { startup } from './startup';
 startup.mark('bootMs');
+// This tab's entry script as index.html names it (a release build: index-<hash>.js), for main.ts to see whether the
+// box still serves this page (fresh.ts, 1.6.7).
+try { (window as unknown as { playportEntry?: string }).playportEntry = new URL(import.meta.url).pathname.split('/').pop() ?? ''; }
+catch { /* unknown: the page then only compares index.html with its first reading */ }
 interface BrowserCheck { done: boolean; allowed: boolean; appReady(): void; appFailed(): void }
 const check = (window as unknown as { F50BrowserCheck?: BrowserCheck }).F50BrowserCheck;
 function start() {
