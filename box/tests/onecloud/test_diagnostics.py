@@ -100,6 +100,15 @@ class DiagLogTests(unittest.TestCase):
                      '1 [x] INFO playport - car location: last 60 s new=58 repeated=2 datum=auto(gcj02)'):
             self.assertEqual(diagnostics.keep([line]), [line])
 
+    def test_what_the_iphone_says_about_sound_is_kept(self):
+        # 2026-11-15: the owner asked about silence after the Tesla's own Apple Music; the drive record held no line
+        # about sound at all, as the receiver's two were not kept (docs/AUDIO.md §六).
+        for line in ('1 [airplay-control] INFO playport - CarPlay resource ownership: [resourceID=1,entity=1, resourceID=2,entity=1]',
+                     '1 [airplay-control] INFO playport - audio duckAudio level=0.200 ms=500 volume=-14.0 count=3',
+                     '1 [airplay-control] INFO playport - audio unduckAudio level=1.000 ms=500 volume=- count=3'):
+            self.assertEqual(diagnostics.keep([line]), [line])
+        self.assertEqual(diagnostics.keep(['1 [x] DEBUG playport - AirPlay command type=modesChanged params=resources']), [])
+
     def test_a_download_opens_with_the_release_and_the_clock(self):
         log = diagnostics.DiagLog(Path(self.tmp.name) / 'd')
         log.append({'uptime': 5})

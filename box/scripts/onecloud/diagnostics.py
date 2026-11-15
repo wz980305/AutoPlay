@@ -28,7 +28,11 @@ KEEP = re.compile(r"viewer stats|Receive: (video|audio)|session (active|ended)|d
                   r"|no viewer for|a viewer opened the page|wireless session dropped|idle release|incomplete after"
                   # 1.5.0: switching car location on reconnects CarPlay on purpose. Without this line the two
                   # reconnections of 2026-11-10 read as drops; its summary each minute says which datum is applied.
-                  r"|car location")
+                  r"|car location"
+                  # 1.6.7: the only two lines the receiver has about sound (the iPhone taking or giving back the main
+                  # audio, and asking for the music to be lowered under a prompt). The drive record of 2026-11-15 had
+                  # nothing to say on the owner's "no sound after the Tesla's own Apple Music" (docs/AUDIO.md §六).
+                  r"|resource ownership|audio (un)?duckAudio")
 LINE_CHARS = 300
 # The page's own report is the longest line and its end is what explains a frozen picture (stalls, lag, revived,
 # location); cut at 300 it ended in the middle of "height" (1.4.3).
