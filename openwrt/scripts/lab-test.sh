@@ -45,7 +45,7 @@ EOF
      chmod +x /tmp/fake/ubus /tmp/fake/iw
      PATH=/tmp/fake:$PATH python3 /opt/autoplay/supervisor_openwrt.py --root /opt/autoplay > /tmp/sup.log 2>&1 &
      pid=$!; sleep 45; cat /tmp/sup.log
-     echo "-- settings page"; wget -qO- http://127.0.0.1:18080/ | grep -o "AutoPlay 热点\|Lab-5G\|在 OpenWrt 后台设置 Wi-Fi\|https://autoplay.lan:18443/\|还缺 CarPlay 认证文件" | sort -u
+     echo "-- settings page"; wget -qO- http://127.0.0.1:18080/ | grep -o "AutoPlay 热点\|Lab-5G\|在 OpenWrt 后台设置 Wi-Fi\|https://autoplay.lan[:0-9]*/\|还缺 CarPlay 认证文件" | sort -u
      echo "-- status"; cat /var/run/autoplay/status.json
      echo "-- certificate names"; cat /opt/autoplay/state/tls/leaf.san.json; echo
      kill $pid; sleep 3; tail -1 /tmp/sup.log
@@ -60,7 +60,7 @@ EOF
          --hotspot /tmp/lab-handoff.json --java /usr/lib/autoplay-jre/bin/java --settings-port 18080 \
          --no-wireless --web-host 0.0.0.0 > /tmp/receiver.log 2>&1 &
      pid=$!; sleep 40
-     python3 -c "import ssl,urllib.request; c=ssl._create_unverified_context(); print(urllib.request.urlopen(\"https://127.0.0.1:18443/\", context=c, timeout=10).read()[:2000].decode(errors=\"replace\").count(\"<script\"), \"script tags in the viewer page\")" 2>&1 | tail -1
+     python3 -c "import ssl,urllib.request; c=ssl._create_unverified_context(); print(urllib.request.urlopen(\"https://127.0.0.1:17989/\", context=c, timeout=10).read()[:2000].decode(errors=\"replace\").count(\"<script\"), \"script tags in the viewer page\")" 2>&1 | tail -1
      grep -v "\[cds\]" /tmp/receiver.log | tail -12
      kill $pid; rm -f $d/identity.pk8 $d/certificate.p7b'
 

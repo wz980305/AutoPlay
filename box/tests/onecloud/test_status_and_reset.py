@@ -190,6 +190,7 @@ class PageBannerTests(unittest.TestCase):
         self.assertEqual(html, '<p>连上 Wi\u2011Fi 后</p><input name=ssid value="My Wi-Fi">'
                                '<span title="Wi-Fi">Wi\u2011Fi</span>')
         self.assertEqual(ui.url("https://car.example.com:18443/"), "https://car.example.com<wbr>:18443/")
+        self.assertEqual(ui.url("https://car.example.com/"), "https://car.example.com/")   # 1.6.8: no port to break at
         self.assertEqual(ui.url("https://a.example/?x=<1>"), "https://a.example/?x=&lt;1&gt;")
 
     def test_pairing_lost_tells_the_owner_to_re_add(self):
@@ -429,6 +430,16 @@ class PageLayoutTests(unittest.TestCase):
         # its own address first in the list as well
         net = self.pane(self.page.render("", "100.96.0.1:18080"), "net")
         self.assertLess(net.index("https://100.96.0.1<wbr>:18443/"), net.index("https://mycar.duckdns.org<wbr>:18443/"))
+        # 1.6.8: port 443 of the box leads to the page, so the addresses carry no port; the same choice by name
+        self.status.update(entries=["https://mycar.duckdns.org/", "https://100.96.0.1/"])
+        for host, entry in (("mycar.duckdns.org:18080", "https://mycar.duckdns.org/"), ("100.96.0.1:18080", "https://100.96.0.1/"),
+                            ("", "https://mycar.duckdns.org/")):
+            html = self.page.render("", host)
+            self.assertIn(f'<a class="done icon out back" href="{entry}" aria-label="返回">', html, host)
+            self.assertIn(f'<a class="done out fwd" href="{entry}">CarPlay 画面</a>', html, host)
+        net = self.pane(self.page.render("", "mycar.duckdns.org:18080"), "net")
+        self.assertIn("<b>https://mycar.duckdns.org/</b>", net)
+        self.assertNotIn(":18443", net)
         self.status.update(entries=[])
         self.assertNotIn("class=done", self.page.render(""), "no CarPlay page yet (the Wi-Fi is not up), no button")
         # A task's screen has no way out but 取消 in the bar (1.6.0: the pairing's cancel was a button in the body).

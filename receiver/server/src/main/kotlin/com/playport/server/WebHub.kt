@@ -637,21 +637,31 @@ class WebHub(
          * Whether a request comes from this box's own page: [origin] (absent on a same-origin GET or outside a browser)
          * must be the address the request went to, [host], and [fetchSite] (Sec-Fetch-Site) must not name another
          * site. Another site could load the viewer token and open the viewer channel (audit 2026-10-13, A2).
+         *
+         * [listening] is the port this server listens on. Since 1.6.8 the box leads port 443 of its own address
+         * here, so the page is opened as https://name/ and its Origin names no port. HTTP/1.1 then has `Host: name`
+         * and Ktor answers 443 for it; HTTP/2 has `:authority: name` and Ktor 3.6 answers the listening port
+         * instead (HttpMultiplexedConnectionPoint.serverPort), which would refuse the box's own page. So an https
+         * Origin on port 443 of the same host is this box's page as well when [host] carries the listening port:
+         * whatever answers there is this box (the page, or LuCI when the redirect is not in place).
          */
-        internal fun ownPage(origin: String?, host: String?, fetchSite: String?): Boolean {
+        internal fun ownPage(origin: String?, host: String?, fetchSite: String?, listening: Int? = null): Boolean {
             if (fetchSite != null && fetchSite != "same-origin" && fetchSite != "none") return false
             if (origin == null) return true
             val uri = runCatching { java.net.URI(origin) }.getOrNull() ?: return false
             val defaultPort = when (uri.scheme) { "https" -> 443; "http" -> 80; else -> return false }
             val wanted = runCatching { java.net.URI("${uri.scheme}://$host") }.getOrNull() ?: return false
-            return uri.host != null && uri.host.equals(wanted.host, ignoreCase = true) &&
-                (if (uri.port == -1) defaultPort else uri.port) == (if (wanted.port == -1) defaultPort else wanted.port)
+            if (uri.host == null || !uri.host.equals(wanted.host, ignoreCase = true)) return false
+            val from = if (uri.port == -1) defaultPort else uri.port
+            val to = if (wanted.port == -1) defaultPort else wanted.port
+            return from == to || (uri.scheme == "https" && from == 443 && listening != null && to == listening)
         }
 
         // The address the request went to: the Host header (HTTP/1.1) or :authority (HTTP/2, no Host header,
         // so the phone's display request got a 403 on 2026-10-13), from the connection point of either.
         private fun io.ktor.server.application.ApplicationCall.fromOwnPage(): Boolean = ownPage(
-            request.headers["Origin"], "${request.local.serverHost}:${request.local.serverPort}", request.headers["Sec-Fetch-Site"])
+            request.headers["Origin"], "${request.local.serverHost}:${request.local.serverPort}",
+            request.headers["Sec-Fetch-Site"], request.local.localPort)
 
         private const val SEND_QUEUE_CAPACITY = 1024
         /** Written by the box's startup (run-receiver.py): {"token": ..., "settingsPort": ...}. */

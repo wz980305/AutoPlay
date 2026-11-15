@@ -133,7 +133,7 @@ def main():
     parser.add_argument("--java", default="/usr/bin/java", help="Java 21 (OpenWrt: the autoplay-jre package)")
     parser.add_argument("--settings-port", type=int, default=18080, help="port of the box settings page")
     parser.add_argument("--viewer-port", type=int, default=0,
-                        help="port of the viewer page (default: the saved config's, else 18443)")
+                        help="port of the viewer page (default: the saved config's, else 17989)")
     # Tesla mode (constant on this box; the flag stays so that a lab receiver can run without it, D8): every sound
     # over the car's own Bluetooth (the receiver offers no audio and no microphone).
     parser.add_argument("--tesla", action="store_true", help="Tesla mode: every sound over the car's Bluetooth")
@@ -162,7 +162,7 @@ def main():
     viewer = args.viewer_port if 1024 <= args.viewer_port <= 65535 else 0
     config = {
         "deviceName": "AutoPlay", "model": "AutoPlay", "manufacturer": "AutoPlay",
-        "airPlayPort": 7000, "httpPort": viewer or saved.get("httpPort", 18443),
+        "airPlayPort": 7000, "httpPort": viewer or saved.get("httpPort", 17989),
         "display": saved.get("display", {"width": 1280, "height": 720, "fps": 30, "uiScale": 100, "hevc": False}),
         "wireless": not args.no_wireless, "wifiSsid": ssid, "wifiPassphrase": password,
         "wifiChannel": args.channel, "wifiSecurity": args.security,

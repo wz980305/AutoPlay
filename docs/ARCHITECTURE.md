@@ -12,13 +12,13 @@
   └─④ 特斯拉蓝牙：音乐、导航播报、通话、Siri、方向盘按键（原生） ──────▶ 车机
 
  F50（OpenWrt 25.12 / mu300-linux，5.4 内核；热点 100.96.0.1/24；5G SIM 给车机上网和证书续期）
-  └─③ HTTPS/WSS :18443：H.264 / H.265 原样转发（二进制帧）、状态 ─────────────▶ 车机浏览器（WebCodecs → canvas）
+  └─③ HTTPS/WSS :17989：H.264 / H.265 原样转发（二进制帧）、状态 ─────────────▶ 车机浏览器（WebCodecs → canvas）
         ◀──────────── WSS 文本帧：触摸、按键、显示设置 ───────────────── 车机浏览器
 ```
 
 拓扑是硬件定死的（技术路径 §一第 2 条）：SC2355 同一时间只能开一个 Wi-Fi 接口，所以 F50 只能当热点，车机和 iPhone 都连它；F50 不能同时连别的热点。F50 没有 USB 主机，有线 CarPlay 不可能。
 
-地址：局域网 100.96.0.1/24（CGNAT 段；特斯拉浏览器拒绝 192.168/10/172.16，用域名也不行）。车机打开的地址是 `https://<自己的域名>:18443/`（DuckDNS 或 DNSPod 托管的域名），由盒子上的 dnsmasq 以 `address=/<名>/100.96.0.1` 本地应答（OpenWrt 的 DNS 重绑定保护会丢弃上游返回的 100.64/10 地址，所以必须本地应答）。
+地址：局域网 100.96.0.1/24（CGNAT 段；特斯拉浏览器拒绝 192.168/10/172.16，用域名也不行）。车机打开的地址是 `https://<自己的域名>/`（DuckDNS 或 DNSPod 托管的域名；1.6.8 起不带端口，盒子的 nft 把自己地址上 443 和旧的 18443 转给投屏页的 17989，`tesla_openwrt.page_rules`，ADR-24），由盒子上的 dnsmasq 以 `address=/<名>/100.96.0.1` 本地应答（OpenWrt 的 DNS 重绑定保护会丢弃上游返回的 100.64/10 地址，所以必须本地应答）。
 
 ## 2. 进程与端口（1.3.0）
 
@@ -31,7 +31,7 @@ procd
       ├─ ReceiverManager → python3 run-receiver.py → java (Temurin 21, -Xmx384m, AppCDS, ExitOnOOM)   接收端（PlayPort 分叉）
       │     ├─ mDNS _airplay._tcp                                                   iPhone 发现
       │     ├─ :7000  AirPlay RTSP（配对、/info、SETUP）+ 视频 TCP 流 + 音频 UDP     ← iPhone
-      │     ├─ :18443 HTTPS 静态页 + WSS /ws + JSON API（/api/display 也是存活探测）  ← 车机浏览器；连接打 DSCP AF41
+      │     ├─ :17989 HTTPS 静态页 + WSS /ws + JSON API（/api/display 也是存活探测）  ← 车机浏览器；连接打 DSCP AF41
       │     ├─ bt-bridge（python3, dbus-next）                                        每次邀请 iPhone 时起一个，走 iAP2 RFCOMM；失败时打印 reason=<词>
       │     └─ phone-presence.py                                                    无会话时每 2 秒 fork 一次做 ARP 探测，在线文件只在变化时写（硬件审查 H5 要改常驻）
       └─ logread -f                                                                  看 dnsmasq 查询，常驻应答车机的联网检测（tesla 域）
@@ -44,7 +44,8 @@ procd
 | 7000/tcp | AirPlay RTSP + 事件 | iPhone → F50 | 视频流和 HID 事件在 RTSP 协商出的连接上 |
 | 动态 udp | RTP 音频、RTCP | iPhone → F50 | |
 | 5353/udp | mDNS | iPhone ↔ F50 | 热点必须放行组播，不开客户端隔离 |
-| 18443/tcp | HTTPS + WSS | 车机 → F50 | 投屏页、`/ws`、`/api/display`、`receiver-access.json`（仅本页令牌，仍写在 `web/dist/`，挪进 tmpfs 是待办）；端口可配（uci `viewer_port`） |
+| 17989/tcp | HTTPS + WSS | 车机 → F50 | 投屏页、`/ws`、`/api/display`、`receiver-access.json`（仅本页令牌，仍写在 `web/dist/`，挪进 tmpfs 是待办）；端口可配（uci `viewer_port`；1.6.7 及以前默认 18443） |
+| 443、18443/tcp | → 17989 | 车机 → F50 | 1.6.8：只对盒子自己的 LAN 地址、只对从 LAN 进来的连接，nft 转到投屏页的端口。443 让车机打开 `https://<域名>/`、地址栏不显示端口；18443 让旧书签和开着的旧页面继续能用。uhttpd 没动：LuCI 仍在 80，它在这个地址上的 HTTPS 对 Wi-Fi 上的设备不再应答（uhttpd 开着 `redirect_https` 的盒子不转 443） |
 | 18080/tcp | HTTP | 手机 → F50 | 设置页（iPhone、蓝牙、证书、更新、出厂重置）和 `/status.json`；明文、无认证，有 Host 白名单和 `X-Frame-Options: DENY`（见 SECURITY） |
 | 80/tcp | HTTP | 车机、手机 → F50 | LuCI（概览 + 网络 / iPhone / 自有地址 / 更新四个标签）；`100.96.0.2` 别名上的 80 转到设置页，并应答车机的联网检测 |
 | 53/67 | DNS/DHCP | 车机、iPhone | dnsmasq；`address=` 把域名指到 100.96.0.1 |

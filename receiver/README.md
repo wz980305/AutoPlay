@@ -27,14 +27,14 @@ The viewer page is built separately (`web/README-build.md`): `npm ci && npm run 
 
 ## Running
 
-On the box the receiver is not started by hand: `box/scripts/onecloud/run-receiver.py` writes the receiver's `config.json` (viewer port 18443 with TLS, display defaults) and starts the JVM with the flags below, under the procd service `autoplay`. The flags are listed here for reading logs and for running the server on a desk:
+On the box the receiver is not started by hand: `box/scripts/onecloud/run-receiver.py` writes the receiver's `config.json` (viewer port 17989 with TLS, display defaults; 18443 up to 1.6.7) and starts the JVM with the flags below, under the procd service `autoplay`. The flags are listed here for reading logs and for running the server on a desk:
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `--device-name <name>` | `PlayPort` | AirPlay device name shown on the iPhone |
 | `--model`, `--manufacturer` | `playport` | AirPlay model / manufacturer strings |
 | `--airplay-port <port>` | 7000 | AirPlay RTSP port |
-| `--http-port <port>` | 8080 | viewer page and WebSocket (the box sets 18443) |
+| `--http-port <port>` | 8080 | viewer page and WebSocket (the box sets 17989, and leads ports 443 and 18443 of its own address to it) |
 | `--width`, `--height`, `--fps` | 1280, 720, 60 | display negotiated with the phone; the page adapts them at runtime |
 | `--ui-scale <75\|85\|100\|115>` | 85 | CarPlay content size as the physical width told to the phone (350/300/250/200 mm; 85 = 300 mm, the Tesla default) |
 | `--hevc` | off | offer H.265 (the page asks for it when the browser decodes it) |

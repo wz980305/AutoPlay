@@ -34,7 +34,7 @@ return view.extend({
 	render: function(data) {
 		var host = window.location.hostname;
 		var port = '18080';
-		var viewer = uci.get('autoplay', 'main', 'viewer_port') || '18443';
+		var viewer = uci.get('autoplay', 'main', 'viewer_port') || '17989';
 		var m, s, o;
 
 		m = new form.Map('autoplay', _('AutoPlay'),
@@ -84,8 +84,8 @@ return view.extend({
 
 		o = s.taboption('network', form.Value, 'viewer_port', _('CarPlay screen port'));
 		o.datatype = 'port';
-		o.placeholder = '18443';
-		o.description = _('The HTTPS port of the CarPlay page. Empty is 18443, or the port an older install saved; a change takes about a minute and interrupts CarPlay briefly. It must differ from 18080, 80, 443 and 7000.');
+		o.placeholder = '17989';
+		o.description = _('The HTTPS port of the CarPlay page. Empty is 17989 (18443 until 1.6.7), or the port an older install saved; a change takes about a minute and interrupts CarPlay briefly. It must differ from 18080, 80, 443 and 7000. The Tesla opens the name without any port: the box leads port 443 of its own address to this one, and 18443 too.');
 
 		o = s.taboption('network', form.DummyValue, '_debug', _('Diagnostics'));
 		o.cfgvalue = function() { return _('Download diagnostics on the AutoPlay settings page (Advanced). Saving changes here restarts the service and interrupts CarPlay briefly.'); };
@@ -113,10 +113,10 @@ return view.extend({
 		o.value('dnspod', _('Tencent Cloud (DNSPod)'));
 		o.default = 'duckdns';
 		o.rmempty = false;
-		o.description = _('Which DNS service owns the name below. Without any name the Tesla opens https://autoplay.lan:18443/ with the box\'s own certificate; whether its warning page offers "continue" is not verified.');
+		o.description = _('Which DNS service owns the name below. Without any name the Tesla opens https://autoplay.lan/ with the box\'s own certificate; whether its warning page offers "continue" is not verified.');
 
 		o = s.taboption('reach', form.Value, 'duckdns_domain', _('DuckDNS sub-domain'),
-			_('Sign up for free at duckdns.org, add a sub-domain and enter it with the token shown there. The name becomes that name (e.g. mycar.duckdns.org): AutoPlay points it at this box and obtains a free Let\'s Encrypt certificate, renewed automatically over the SIM, so the Tesla opens https://mycar.duckdns.org:18443/ without a warning.'));
+			_('Sign up for free at duckdns.org, add a sub-domain and enter it with the token shown there. The name becomes that name (e.g. mycar.duckdns.org): AutoPlay points it at this box and obtains a free Let\'s Encrypt certificate, renewed automatically over the SIM, so the Tesla opens https://mycar.duckdns.org/ without a warning.'));
 		o.datatype = 'and(hostname,maxlength(63))';
 		o.placeholder = 'mycar';
 		o.depends('dns_provider', 'duckdns');
@@ -126,7 +126,7 @@ return view.extend({
 		o.depends('dns_provider', 'duckdns');
 
 		o = s.taboption('reach', form.Value, 'own_domain', _('Own domain (DNSPod)'),
-			_('A full domain you manage in Tencent Cloud DNS (DNSPod), e.g. car.example.com. AutoPlay obtains the Let\'s Encrypt certificate with a DNS-01 challenge through the DNSPod API and answers the name locally for the Tesla; also add an A record for it pointing at 100.96.0.1 in the DNSPod console, so the name resolves through a public resolver too. The Tesla opens https://car.example.com:18443/ without a warning.'));
+			_('A full domain you manage in Tencent Cloud DNS (DNSPod), e.g. car.example.com. AutoPlay obtains the Let\'s Encrypt certificate with a DNS-01 challenge through the DNSPod API and answers the name locally for the Tesla; also add an A record for it pointing at 100.96.0.1 in the DNSPod console, so the name resolves through a public resolver too. The Tesla opens https://car.example.com/ without a warning.'));
 		o.placeholder = 'car.example.com';
 		o.depends('dns_provider', 'dnspod');
 

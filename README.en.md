@@ -22,7 +22,7 @@ Every H.264 or H.265 frame the JVM receiver gets is pushed, unchanged, over one 
 
 Sound does not take this path. The receiver offers the iPhone no audio formats at all, so the iPhone falls back to its non-CarPlay rule and sends music, navigation prompts, calls and Siri to the Bluetooth device it is connected to, which is the Tesla. The car's native media card and wheel controls keep working, the page is silent, and there is no "tap to enable sound" step. 1.1.0 made this the default and kept an alternative in which the page played the prompts; once the owner had confirmed in the car that Bluetooth works, 1.3.0 removed the alternative together with every line of audio code in the page, which no longer needs Web Audio at all (`docs/AUDIO.md`). Nor can the page play music: a moving Tesla answers a music-playing page with a "video is audio-only" banner that resizes the page, and CarPlay renegotiates every few seconds.
 
-The car opens `https://<your domain>:18443/`. The domain is your own (DuckDNS or Tencent DNSPod); the certificate comes from Let's Encrypt via acme.sh on the box, DNS-01, no open ports; the box's dnsmasq resolves the name to 100.96.0.1. That is why a SIM is not optional: issuing and renewing need the internet, and a Tesla will not stay on a Wi-Fi network that has none.
+The car opens `https://<your domain>/`, and its address bar shows the name alone (since 1.6.8 the box leads port 443 of its own address to the viewer; the viewer's own port is 17989, 18443 up to 1.6.7, and the old address with the port still opens). The domain is your own (DuckDNS or Tencent DNSPod); the certificate comes from Let's Encrypt via acme.sh on the box, DNS-01, no open ports; the box's dnsmasq resolves the name to 100.96.0.1. That is why a SIM is not optional: issuing and renewing need the internet, and a Tesla will not stay on a Wi-Fi network that has none.
 
 The fuller architecture is in `docs/ARCHITECTURE.md`, every "why" in `docs/DECISIONS.md`, and the Tesla browser's constraints together with what we confirmed in the car in `docs/TESLA.md` (all in Chinese).
 
@@ -44,7 +44,7 @@ Still to confirm in the car: the keyboard fix (its trigger could not be reproduc
 
 **A CarPlay accessory identity** (`identity.pk8` and `certificate.p7b`). CarPlay requires accessories to pass Apple's MFi authentication; AutoPlay is not an Apple-certified product, and nothing in this repository, its packages, docs or tests contains identity material, nor does the software download any. It only reads the files you place in `/opt/autoplay/identity/offline-mfi/`. Shared identities circulating publicly may be revoked at any time; how to obtain a legitimate one is outside this project's scope (`docs/SECURITY.md`, `NOTICE.md`).
 
-**In the car** there are three settings: join the box's Wi-Fi and turn on "Remain connected in Drive" (otherwise Wi-Fi drops as soon as you leave Park); pair the iPhone over Bluetooth and make it the media source; bookmark `https://<your domain>:18443/`.
+**In the car** there are three settings: join the box's Wi-Fi and turn on "Remain connected in Drive" (otherwise Wi-Fi drops as soon as you leave Park); pair the iPhone over Bluetooth and make it the media source; bookmark `https://<your domain>/`.
 
 ## Installing and using it
 
@@ -52,9 +52,9 @@ The full procedure is in the [install guide](交付资料/AutoPlay-1.6.7-安装�
 
 After that there are three places to look and change things:
 
-- `https://<your domain>:18443/` is the **viewer**, the page the car opens. Waiting, connecting and reconnecting states are written on the page; the waiting screen has an 「AutoPlay」 row, and once the picture is up the 「AutoPlay」 icon on the CarPlay home screen opens the same panel: night mode, language, CarPlay content size, frame rate, codec, and a few compatibility switches.
+- `https://<your domain>/` is the **viewer**, the page the car opens. Waiting, connecting and reconnecting states are written on the page; the waiting screen has an 「AutoPlay」 row, and once the picture is up the 「AutoPlay」 icon on the CarPlay home screen opens the same panel: night mode, language, CarPlay content size, frame rate, codec, and a few compatibility switches.
 - `http://100.96.0.1:18080/` is the **AutoPlay settings** page (「AutoPlay 设置」, reached from the CarPlay page's 「AutoPlay → 连接 → AutoPlay 设置」; 「AutoPlay 盒子」 in 1.6.0), for the owner. Since 1.5.0 it looks like the CarPlay page's 「AutoPlay」 panel, with four categories on the left: *iPhone* (the hotspot–box–iPhone chain at a glance, adding and removing iPhones; the pairing code is confirmed here), *网络* (the AutoPlay hotspot handed to the iPhone, the addresses the car opens, certificate expiry), *更新* (checking for and installing a new version) and *高级* (the box's temperature, a diagnostics download, a factory reset). Like the CarPlay page's waiting screen and panel, its colours follow CarPlay's day or night; opened from the panel, the ‹ back button at the top left returns there. It works without JavaScript.
-- `http://100.96.0.1/` is **LuCI**; under Services → AutoPlay there are four tabs: Network, iPhone, Custom domain (DuckDNS / DNSPod credentials), Program update.
+- `http://100.96.0.1/` is **LuCI** (over http; since 1.6.8 https on this address is the viewer); under Services → AutoPlay there are four tabs: Network, iPhone, Custom domain (DuckDNS / DNSPod credentials), Program update.
 
 Since 1.3.1 every version is a signed GitHub Release (`docs/RELEASE.md`): the box checks once a day, announces a new version on its settings page and in LuCI, and on "upgrade now" backs up pairings, certificate and settings, downloads the way back first, installs, and rolls back by itself if the new version does not come up. A box still on an earlier version is updated by hand once, to 1.3.1 or later (which carry the project's own public key); after that no computer is needed. Pairings, certificates and identity stay under `/opt/autoplay/`.
 

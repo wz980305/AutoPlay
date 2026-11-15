@@ -15,7 +15,7 @@ log at `/var/run/autoplay/receiver.log` is the source of the `phone` reasons.
 {
   "updated": 1761475200,
   "mode": "openwrt", "ssid": "AutoPlay", "home": "http://100.96.0.1:18080/",
-  "entries": ["https://autoplay.lan:18443/"], "name": "autoplay.lan",
+  "entries": ["https://autoplay.lan/"], "name": "autoplay.lan",
   "bluetooth":   {"state": "on",       "reason": null, "since": 1761475130},
   "wifi":        {"state": "up",       "reason": null, "since": 1761475125, "ssid": "AutoPlay", "channel": 149, "address": "100.96.0.1"},
   "uplink":      {"state": "offline",  "reason": null, "since": 1761475125},
