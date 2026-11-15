@@ -6,8 +6,8 @@
 //   python3 ../../box/tools/render_settings_states.py out/box-states
 //   node scripts/ui-shots.mjs out/ui-shots [viewer|box|twins]   # needs playwright-core and a Chromium (CHROME=<path>)
 //
-// Shapes (docs/TESLA.md): the windowed browser is about 773x601 CSS px and the borderless page 1256x706, both at a
-// device scale of about 1.53; a 560 px tall case stands in for a keyboard or a taller bottom bar; 1920x1200 at 1.0 is
+// Shapes (docs/TESLA.md): the Tesla browser's window is about 773x601 CSS px at a device scale of about 1.53 (its
+// borderless 1256x706 went with 「无边框模式」 in 1.6.6); a wide 560 px tall case stands in for a keyboard or a taller bar; 1920x1200 at 1.0 is
 // the reference; the phone case is for the box page only (a pairing is also confirmed from a phone).
 // The viewer's box link, display API and WebSocket are mocked; its H.264 support probe is forced to "supported" so a
 // headless Chromium without a hardware decoder shows the page and not the browser check.
@@ -26,7 +26,6 @@ const BOX_STATES = resolve(process.env.BOX_STATES ?? 'out/box-states');
 const TOKEN = '0123456789abcdef0123456789abcdef';
 const SHAPES = [
   { w: 773, h: 601, dsf: 1.53, tag: 'tesla-window' },
-  { w: 1256, h: 706, dsf: 1.53, tag: 'tesla-borderless' },
   { w: 1256, h: 560, dsf: 1.53, tag: 'tesla-short' },
   { w: 1920, h: 1200, dsf: 1, tag: 'ref-1920' },
   { w: 390, h: 844, dsf: 3, tag: 'phone' },

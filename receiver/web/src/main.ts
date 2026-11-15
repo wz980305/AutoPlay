@@ -10,7 +10,6 @@ import { statusHint } from './status';
 import { t, language, setLanguage, type Key } from './i18n';
 import { boxPageUrl, isNight, nextTurn, panelFromHash, parseNightMode, type BoxLinkFrom } from './night';
 import { roughPlace, sunTimes, zonePlace, type Place, type SunTimes } from './sun';
-import { reachable, TESLA_HOPS } from './tesla-fullscreen';
 import { hudLines } from './debug-hud';
 import { compatDisplayOn } from './compat-display';
 import { askBox, READ_MS, WRITE_MS } from './ask-box';
@@ -144,7 +143,6 @@ applyTheme();
 function render() {
   applyTheme();
   setLanguage(language);
-  updateFullscreen();
   el<HTMLSelectElement>('language').value = language;
   refreshPickers();
   el('app').dataset.state = state;
@@ -385,48 +383,6 @@ panel.addEventListener('close', () => {
 panel.addEventListener('cancel', event => { event.preventDefault(); closePanel(); });
 el<HTMLSelectElement>('language').onchange = event => { setLanguage((event.target as HTMLSelectElement).value); render(); };
 panel.addEventListener('click', event => { if (event.target !== panel) return; const r=panel.getBoundingClientRect(); if(event.clientX<r.left || event.clientX>r.right) closePanel(); });
-/** A Tesla's browser ignores a page's fullscreen request (so the DOM requestFullscreen path and an Xpeng's
- *  reverse-camera restore are gone, TESLA in flags.ts); it shows a page without its address bar when it comes through
- *  a video site it lists (in China v.qq.com and 1905.com, as tesla-kit.com does; elsewhere youtube.com/redirect). The
- *  "borderless" rows on the welcome screen and in Settings take that way back to this page (2026-10-14). The
- *  "?www.1905.com" the hop ends with marks a page shown that way; so does a window as wide as the screen (95 %: the
- *  3/Y page is 773 of 1254 CSS px windowed, 1256 borderless), which still holds after the marker is gone. */
-function teslaBorderless() { return location.search.includes('www.1905.com') || window.innerWidth >= 0.95 * window.screen.width; }
-function teslaFullscreenUrl() {
-  // 1905.com goes on only when the text between "//" and the first "/" ends in "1905.com": no "/" before the "?"
-  // (with "/?" it went to its own home page, 2026-10-14); this page is the site's root anyway.
-  return 'https://v.qq.com/search_redirect.html?url=https://www.1905.com/api/redirec.html?redirect_url='
-    + `${location.origin}?www.1905.com`;
-}
-let teslaChecking = false;
-function updateFullscreen() {
-  const borderless = teslaBorderless();
-  // The row's name stays 「无边框模式」 and its state is the grey value, as every other row (1.6.0; it used to turn into
-  // 「已开启无边框」 or 「正在检查网络」). Bare rows on the waiting screen as in the settings panel (1.5.0).
-  const value = borderless ? t('borderlessOn') : teslaChecking ? t('checkingNetwork') : '';
-  el('fullscreen-value').textContent = value; el('welcome-fullscreen-value').textContent = value;
-  const label = value ? `${t('fullscreen')}, ${value}` : t('fullscreen');
-  for (const id of ['fullscreen', 'welcome-fullscreen']) {
-    el(id).setAttribute('aria-label', label);
-    // Off: a row that leaves for the video site, so it shows ›. On: a status row - not greyed out as a disabled
-    // button (1.6.0), only nothing to tap (it can be left in the car browser's own controls only).
-    el(id).classList.toggle('static', borderless);
-    el<HTMLButtonElement>(id).disabled = teslaChecking;
-    el(id).setAttribute('aria-disabled', String(borderless || teslaChecking));
-  }
-}
-/** The hop leaves this page for the video sites, which need the car's own internet (the box answers the Tesla's
- *  connectivity checks but gives the browser no internet without a SIM): the page looks first, and says so inline. */
-async function toggleFullscreen() {
-  if (!TESLA || teslaBorderless() || teslaChecking) return;
-  teslaChecking = true; updateFullscreen();
-  try {
-    if (await reachable(TESLA_HOPS)) { location.href = teslaFullscreenUrl(); return; }
-    toast(t('teslaFullscreenOffline'));
-  } finally { teslaChecking = false; updateFullscreen(); }
-}
-el('fullscreen').onclick = () => { void toggleFullscreen(); };
-el('welcome-fullscreen').onclick = () => { void toggleFullscreen(); };
 /** The box's display as it is now: another page may have changed it (it sent back that page's fps, 2026-10-16). */
 async function fetchDisplay(): Promise<Display | null> {
   try { const { ok, body } = await askBox<Display>('/api/display', { cache: 'no-store' }, READ_MS); return ok ? body : null; }
@@ -557,7 +513,7 @@ document.addEventListener('visibilitychange',()=>{
 });
 /** Straight into the viewer log, not only every 10 s: ev 1 hidden, 2 shown, 5 resized (3/4, DOM fullscreen, are gone). */
 function pageEvent(ev: number) {
-  connection.send({type:'stats',stats:{ev,hidden:document.hidden?1:0,borderless:teslaBorderless()?1:0,width:screen.clientWidth,height:screen.clientHeight,...viewport()}});
+  connection.send({type:'stats',stats:{ev,hidden:document.hidden?1:0,width:screen.clientWidth,height:screen.clientHeight,...viewport()}});
 }
 /** Which page build runs (raised with each build tried in the car). */
 const BUILD = 202611142100;
@@ -644,7 +600,7 @@ window.setInterval(() => {
 window.setInterval(()=>{
   const now=performance.now(),seconds=Math.max(1,(now-reportStart)/1000),stalls=video.takeStalls();
   send({type:'stats',stats:{fps:reportFrames/seconds,decodeMs:video.decodeLatencyMs,queue:video.decodeQueueSize,
-    kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,borderless:teslaBorderless()?1:0,
+    kbps:reportBytes*8/1000/seconds,hidden:document.hidden?1:0,
     width:canvas.width,height:canvas.height,...(touchCount?{touchMs:touchSum/touchCount,touches:touchCount}:{}),
     ...startupStats(),chrome:chromeMajor,compat:compatDisplay?1:0,desync:video.desynchronized,build:BUILD,webView,teslaMode:TESLA?1:0,...(revived?{revived}:{}),fastDecoder:fastDecoder()?1:0,hevcDecodes:hevcDecodes?1:0,hevc:display?.hevc?1:0,...stalls,...lag.take(performance.now()),...locationFeed.take(),...sunStats(),...(locationFeed.enabled?{locGcj:datumInUse()==='gcj02'?1:0,locAuto:datumSelect.value==='auto'?1:0}:{})}});
   judgeDecoder(video.decodeLatencyMs, reportFrames/seconds);

@@ -355,20 +355,6 @@ console.log('Car checks passed: aspect fit, hiccups, decode backlog, night sched
     assert.deepEqual(back.display.areas,[two,whole],'the 2/3 area does not shrink'); }
 }
 console.log('View areas: shapes learned once, switched without reconnecting.');
-{ // Tesla fullscreen leaves the page only when its video sites answer (offline Tesla, simulated 2026-10-14).
-  const {reachable,TESLA_HOPS}=await load('tesla-fullscreen');
-  assert.ok(TESLA_HOPS.length===2&&TESLA_HOPS.every(u=>u.startsWith('https://')));
-  const seen=[];
-  assert.equal(await reachable(TESLA_HOPS,(u,init)=>{seen.push([u,init.mode]);return Promise.resolve({});}),true,'both answer');
-  assert.deepEqual(seen.map(s=>s[1]),['no-cors','no-cors'],'any answer counts, no CORS needed');
-  assert.equal(await reachable(TESLA_HOPS,u=>u.includes('1905')?Promise.reject(new TypeError('Failed to fetch')):Promise.resolve({})),false,'one unreachable');
-  const hang=(u,init)=>new Promise((_,reject)=>init.signal.addEventListener('abort',()=>reject(init.signal.reason)));
-  const started=Date.now(), alive=setTimeout(()=>{},5000);   // AbortSignal.timeout alone does not keep Node running
-  assert.equal(await reachable(TESLA_HOPS,hang,50),false,'no answer within the timeout');
-  clearTimeout(alive);
-  assert.ok(Date.now()-started<1000,'gives up at the timeout');
-}
-console.log('Tesla fullscreen: only with its video sites reachable.');
 
 { // Refresh timing must survive reconnects and never confuse connection time with the first painted frame.
   const {StartupTiming}=await load('startup'); let clock=12;

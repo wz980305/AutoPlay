@@ -64,7 +64,6 @@ button:disabled { opacity:.45; cursor:default; }
 a.cell, button.cell, summary.cell, label.cell { cursor:pointer; transition:background-color .12s ease-out; }
 a.cell:active, button.cell:active, summary.cell:active, label.cell:active { background:var(--press); transition:none; }
 button.cell:disabled { opacity:1; color:var(--secondary); }
-button.cell.static { cursor:default; } button.cell.static:active { background:var(--cell); } button.cell.static .chev { display:none; }
 .cell .main { flex:1; min-width:0; }
 .cell .main b { display:block; font-weight:500; }
 .cell .main span { display:block; color:var(--secondary); font-size:1rem; line-height:1.45; margin-top:.25rem; }

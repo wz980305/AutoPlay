@@ -36,7 +36,7 @@ node scripts/build-esbuild.mjs                                   # 或 npm run b
 ```sh
 cd receiver/web && npm run build:offline
 python3 ../../box/tools/render_settings_states.py out/box-states              # 盒子设置页 13 个状态 → 静态 HTML（加 #net / #update / #more 看其他分类，加 ?night=1|0 看夜间/日间）
-CHROME=/path/to/chromium node scripts/ui-shots.mjs out/ui-shots [viewer|box|twins]  # 特斯拉 773×601、1256×706、1256×560、1920×1200、手机；twins（1.5.1）量设置面板和盒子设置页的标题栏、分类、第一组是否在同一位置，差半个像素以上即失败
+CHROME=/path/to/chromium node scripts/ui-shots.mjs out/ui-shots [viewer|box|twins]  # 特斯拉 773×601、1256×560、1920×1200、手机；twins（1.5.1）量设置面板和盒子设置页的标题栏、分类、第一组是否在同一位置，差半个像素以上即失败
 ```
 
 需要 `playwright-core` 和一个 Chromium；全部本地 mock，不碰盒子和手机。每个形状打印标签/说明字号、行高和有无横向溢出。

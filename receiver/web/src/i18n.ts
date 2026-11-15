@@ -19,10 +19,6 @@ const messages = {
   // No token: the page asks the box for it when it opens (boot.ts, receiver-access.json) and did not get it. Until
   // 1.4.3 this told the driver to tap a button the box page does not have (1.5.0).
   access: ['未取得盒子的访问许可', 'No access to the box'], accessHint: ['请检查盒子电源和 AutoPlay 热点，然后刷新本页。', 'Check the box’s power and the AutoPlay hotspot, then reload this page.'],
-  fullscreen: ['无边框模式', 'Borderless mode'],
-  borderlessOn: ['已开启', 'On'],
-  checkingNetwork: ['正在检查网络', 'Checking network'],
-  teslaFullscreenOffline: ['无法连接视频网站，暂时无法开启无边框模式', 'Can’t reach the video site; borderless mode is unavailable for now'],
   apply: ['应用并重连', 'Apply and reconnect'], applyNow: ['应用', 'Apply'],
   advanced: ['画质与兼容', 'Quality and compatibility'],
   nightMode: ['夜间模式', 'Night mode'], nightSchedule: ['日落到日出', 'Sunset to sunrise'], nightSystem: ['跟随系统', 'System'], nightDay: ['始终白天', 'Always day'], nightNight: ['始终夜间', 'Always night'],

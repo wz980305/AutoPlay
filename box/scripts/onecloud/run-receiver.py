@@ -135,8 +135,8 @@ def main():
     parser.add_argument("--viewer-port", type=int, default=0,
                         help="port of the viewer page (default: the saved config's, else 18443)")
     # Tesla mode (constant on this box; the flag stays so that a lab receiver can run without it, D8): every sound
-    # over the car's own Bluetooth (the receiver offers no audio and no microphone) and the Tesla browser's fullscreen.
-    parser.add_argument("--tesla", action="store_true", help="Tesla mode: car Bluetooth audio and the Tesla browser's fullscreen")
+    # over the car's own Bluetooth (the receiver offers no audio and no microphone).
+    parser.add_argument("--tesla", action="store_true", help="Tesla mode: every sound over the car's Bluetooth")
     parser.add_argument("--idle-release", type=int, default=300,
                         help="end wireless CarPlay after this many seconds without a viewer page (0: never)")
     parser.add_argument("--no-wireless", action="store_true",

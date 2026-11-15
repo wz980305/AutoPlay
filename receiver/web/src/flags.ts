@@ -8,6 +8,7 @@
  * v1.2.0; docs/AUDIO.md says why it went.
  */
 
-/** The Tesla browser's ways: no DOM fullscreen (a page shown without the address bar comes through a listed video
- *  site, tesla-fullscreen.ts), the tab frozen in reverse gear or another app (the revive path in main.ts). */
+/** The Tesla browser's ways: no DOM fullscreen (the page stays in the browser's window; the video-site hop to a page
+ *  without the address bar, 「无边框模式」, went in 1.6.6: it did nothing for driving), the tab frozen in reverse gear or
+ *  another app (the revive path in main.ts). */
 export const TESLA = true;
