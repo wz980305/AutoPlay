@@ -2,7 +2,7 @@
 
 格式参考 Keep a Changelog；版本号从 0.1.0 起，1.0 之前不承诺兼容性。每节第一段是盒子「程序更新」里显示的摘要（最多四行），写短。
 
-## [Unreleased]
+## [1.6.8] — 2026-11-18 — 车机打开的地址不带端口
 
 车机里打开「https://你的域名/」即可，地址栏只显示域名、不带端口。端口没有变，带端口的旧地址和书签照样能用。
 
@@ -14,6 +14,7 @@
 - LuCI 用 `http://100.96.0.1/`（一直如此）；`https://100.96.0.1/` 对 Wi-Fi 上的设备现在是投屏页。uhttpd 开着 `redirect_https` 的盒子不转 443，地址仍带端口。
 - 测试：规则的内容、和联网检测分开装、装不上或 LuCI 只走 HTTPS 时的退路（`test_tesla_openwrt`），给车主的地址（`test_openwrt`、`test_status_and_reset`）。`box/tests/net/test_page_redirect.py` 在真内核里装这两条规则：两个网络命名空间当盒子和车，443 到投屏页，18443、80（LuCI）和别名地址不受影响（要 root、nft、pyroute2，CI 不跑）。`box/tests/net/receiver_lab.py` 把接收端真正的网页服务（Ktor/Netty、TLS）放在规则后面，用 curl 和 WebSocket 握手经两个地址各问一遍：17 项都对；对着 1.6.7 的接收端代码，不带端口的 HTTP/2 POST 是 403，正是这次修的那一条。
 - 还没有在车上试过（`docs/TEST.md` 第 4 节第 8 条）。
+- 版本：接收端、网页包、OpenWrt 包 1.6.8；LuCI 依赖 `autoplay (>=1.6.8)`；安装说明改名 `AutoPlay-1.6.8-安装使用说明.md`。从 1.6.7 在「AutoPlay 设置 → 更新」点「立即升级」即可；之后在车机上打开 `https://<域名>/` 并重新收藏。
 
 ## [1.6.7] — 2026-11-16 — 升级后开着的页面自己换成新版本，诊断记录里有声音的两行
 
