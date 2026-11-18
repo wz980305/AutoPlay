@@ -60,7 +60,7 @@ EOF
          --hotspot /tmp/lab-handoff.json --java /usr/lib/autoplay-jre/bin/java --settings-port 18080 \
          --no-wireless --web-host 0.0.0.0 > /tmp/receiver.log 2>&1 &
      pid=$!; sleep 40
-     python3 -c "import ssl,urllib.request; c=ssl._create_unverified_context(); print(urllib.request.urlopen(\"https://127.0.0.1:17989/\", context=c, timeout=10).read()[:2000].decode(errors=\"replace\").count(\"<script\"), \"script tags in the viewer page\")" 2>&1 | tail -1
+     python3 -c "import ssl,urllib.request; c=ssl._create_unverified_context(); print(urllib.request.urlopen(\"https://127.0.0.1:18443/\", context=c, timeout=10).read()[:2000].decode(errors=\"replace\").count(\"<script\"), \"script tags in the viewer page\")" 2>&1 | tail -1
      grep -v "\[cds\]" /tmp/receiver.log | tail -12
      kill $pid; rm -f $d/identity.pk8 $d/certificate.p7b'
 

@@ -36,23 +36,16 @@ class OpenWrtOfflineTests(unittest.TestCase):
         self.assertNotIn('443', rules, 'the checks never depend on the page rules')
 
     def test_page_rules(self):
-        # 1.6.8 (the owner, 2026-11-16): https://<name>/ - a browser shows no port only for 443 - and the old
-        # 18443, both led to the viewer on the box's own address, from the LAN only.
-        rules = tesla.page_rules('br-lan', '100.96.0.1', 17989)
-        self.assertEqual(rules.splitlines(), [
-            f'add rule ip {tesla.TABLE} inbound iifname "br-lan" ip daddr 100.96.0.1 tcp dport 443 redirect to :17989',
-            f'add rule ip {tesla.TABLE} inbound iifname "br-lan" ip daddr 100.96.0.1 tcp dport 18443 redirect to :17989'])
-        self.assertTrue(rules.endswith('\n'))
-        # a box still (or again) on 18443 needs no rule for it; LuCI on HTTPS only keeps 443
-        self.assertEqual(tesla.page_rules('br-lan', '100.96.0.1', 18443).count('add rule'), 1)
-        self.assertIn('tcp dport 443 redirect to :18443', tesla.page_rules('br-lan', '100.96.0.1', 18443))
-        self.assertEqual(tesla.page_rules('br-lan', '100.96.0.1', 17989, bare=False).splitlines(), [
-            f'add rule ip {tesla.TABLE} inbound iifname "br-lan" ip daddr 100.96.0.1 tcp dport 18443 redirect to :17989'])
-        self.assertEqual(tesla.page_rules('br-lan', '100.96.0.1', 18443, bare=False), '')
+        # 1.6.8 (the owner, 2026-11-16): https://<name>/ - a browser shows no port only for 443 - led to the viewer
+        # on the box's own address, from the LAN only. The viewer's port is not changed (the owner, 2026-11-18).
+        rules = tesla.page_rules('br-lan', '100.96.0.1', 18443)
+        self.assertEqual(rules, f'add rule ip {tesla.TABLE} inbound iifname "br-lan" ip daddr 100.96.0.1 '
+                                'tcp dport 443 redirect to :18443\n')
+        self.assertIn('redirect to :19500', tesla.page_rules('br-lan', '100.96.0.1', 19500), "an owner's own port")
         # the alias of the checks (port 80 there is the settings page) is not touched
         self.assertNotIn('100.96.0.2', rules)
-        for bad in (('br-lan; flush ruleset', '100.96.0.1', 17989), ('br-lan', 'name.example', 17989),
-                    ('br-lan', '100.96.0.1', 443), ('br-lan', '100.96.0.1', 80), ('br-lan', '100.96.0.1', '17989 ; x')):
+        for bad in (('br-lan; flush ruleset', '100.96.0.1', 18443), ('br-lan', 'name.example', 18443),
+                    ('br-lan', '100.96.0.1', 443), ('br-lan', '100.96.0.1', 80), ('br-lan', '100.96.0.1', '18443 ; x')):
             with self.assertRaises(ValueError, msg=bad):
                 tesla.page_rules(*bad)
 
@@ -64,26 +57,26 @@ class OpenWrtOfflineTests(unittest.TestCase):
             run = Mock(return_value=Mock(stdout=json.dumps({'values': SECTIONS}), returncode=0))
             controller = tesla.OfflineChecks(directory, run)
             status = {}
-            controller.start(NETWORK, NAME, PORT, status, 17989)
+            controller.start(NETWORK, NAME, PORT, status, 18443)
             self.assertTrue(controller.active)
             self.assertTrue(controller.bare)
             self.assertIsNone(controller.page_note)
             loaded = [c.kwargs['input'] for c in self.calls(run, 'nft') if c.args[0][1:] == ['-f', '-']]
             self.assertEqual(len(loaded), 2, 'the checks in one load, the page in another')
             self.assertIn('tcp dport 80 redirect to :18080', loaded[0])
-            self.assertNotIn('17989', loaded[0])
-            self.assertEqual(loaded[1], tesla.page_rules('br-lan', '100.96.0.1', 17989))
+            self.assertNotIn('18443', loaded[0])
+            self.assertEqual(loaded[1], tesla.page_rules('br-lan', '100.96.0.1', 18443))
             controller.restore()
             self.assertFalse(controller.bare, 'the table is gone with the service')
 
-            # nft refuses the page rules: the checks stay, the address keeps its port
+            # nft refuses the page rule: the checks stay, the address keeps its port
             def refuse(argv, **kwargs):
                 if argv[:3] == ['nft', '-f', '-'] and 'dport 443' in kwargs.get('input', ''):
                     raise tesla.subprocess.CalledProcessError(1, argv)
                 return Mock(stdout=json.dumps({'values': SECTIONS}), returncode=0)
             controller = tesla.OfflineChecks(directory, Mock(side_effect=refuse))
             status = {}
-            controller.start(NETWORK, NAME, PORT, status, 17989)
+            controller.start(NETWORK, NAME, PORT, status, 18443)
             self.assertTrue(controller.active)
             self.assertNotIn('tesla_error', status)
             self.assertFalse(controller.bare)
@@ -100,13 +93,13 @@ class OpenWrtOfflineTests(unittest.TestCase):
                 return Mock(stdout=json.dumps({'values': SECTIONS}), returncode=0)
             run = Mock(side_effect=answer)
             controller = tesla.OfflineChecks(directory, run)
-            controller.start(NETWORK, NAME, PORT, {}, 17989)
+            controller.start(NETWORK, NAME, PORT, {}, 18443)
             self.assertTrue(controller.active)
             self.assertFalse(controller.bare)
             self.assertIn('redirect_https', controller.page_note)
             loaded = [c.kwargs['input'] for c in self.calls(run, 'nft') if c.args[0][1:] == ['-f', '-']]
-            self.assertNotIn('dport 443', ''.join(loaded))
-            self.assertIn('tcp dport 18443 redirect to :17989', loaded[1], 'the old address still answers')
+            self.assertEqual(len(loaded), 1, 'the checks only')
+            self.assertNotIn('dport 443', loaded[0])
             self.assertIn(['uci', '-q', 'get', 'uhttpd.main.redirect_https'], [c.args[0] for c in self.calls(run, 'uci')])
             controller.restore()
 

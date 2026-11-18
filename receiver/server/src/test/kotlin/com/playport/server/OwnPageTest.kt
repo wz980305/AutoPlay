@@ -20,25 +20,24 @@ class OwnPageTest {
     /** 1.6.8: port 443 of the box leads to this server, so the Tesla opens https://name/ (the owner, 2026-11-16). */
     @Test fun thePageOpenedWithoutAPortIsAccepted() {
         // HTTP/1.1: `Host: car.example.com`, for which Ktor names the scheme's port
-        assertTrue(WebHub.ownPage("https://car.example.com", "car.example.com:443", "same-origin", 17989))
+        assertTrue(WebHub.ownPage("https://car.example.com", "car.example.com:443", "same-origin", 18443))
         // HTTP/2: `:authority: car.example.com`, for which Ktor 3.6 names the port the server listens on
-        assertTrue(WebHub.ownPage("https://car.example.com", "car.example.com:17989", "same-origin", 17989))
-        assertTrue(WebHub.ownPage("https://car.example.com", "CAR.example.com:17989", null, 17989))
-        assertTrue(WebHub.ownPage("https://car.example.com:443", "car.example.com:17989", null, 17989))
-        // the port itself, and the one of 1.6.7 and before (led here as well), as ever
-        assertTrue(WebHub.ownPage("https://car.example.com:17989", "car.example.com:17989", "same-origin", 17989))
-        assertTrue(WebHub.ownPage("https://car.example.com:18443", "car.example.com:18443", "same-origin", 17989))
+        assertTrue(WebHub.ownPage("https://car.example.com", "car.example.com:18443", "same-origin", 18443))
+        assertTrue(WebHub.ownPage("https://car.example.com", "CAR.example.com:18443", null, 18443))
+        assertTrue(WebHub.ownPage("https://car.example.com:443", "car.example.com:18443", null, 18443))
+        // the port itself, as ever
+        assertTrue(WebHub.ownPage("https://car.example.com:18443", "car.example.com:18443", "same-origin", 18443))
     }
 
     @Test fun withoutAPortOnlyThisHostOverHttpsOnItsOwnPort() {
-        assertFalse(WebHub.ownPage("https://evil.example", "car.example.com:17989", null, 17989))          // another host
-        assertFalse(WebHub.ownPage("https://car.example.com", "car.example.com:17989", "cross-site", 17989))
-        assertFalse(WebHub.ownPage("https://car.example.com", "car.example.com:17989", "same-site", 17989))
-        assertFalse(WebHub.ownPage("http://car.example.com", "car.example.com:17989", null, 17989))        // plain HTTP (LuCI's port 80)
-        assertFalse(WebHub.ownPage("http://car.example.com:443", "car.example.com:17989", null, 17989))
-        assertFalse(WebHub.ownPage("https://car.example.com:8443", "car.example.com:17989", null, 17989))   // another port
-        assertFalse(WebHub.ownPage("https://car.example.com", "car.example.com:18080", null, 17989))       // not this server's port
-        assertFalse(WebHub.ownPage("https://car.example.com", "car.example.com:17989", null))              // the port not known
+        assertFalse(WebHub.ownPage("https://evil.example", "car.example.com:18443", null, 18443))          // another host
+        assertFalse(WebHub.ownPage("https://car.example.com", "car.example.com:18443", "cross-site", 18443))
+        assertFalse(WebHub.ownPage("https://car.example.com", "car.example.com:18443", "same-site", 18443))
+        assertFalse(WebHub.ownPage("http://car.example.com", "car.example.com:18443", null, 18443))        // plain HTTP (LuCI's port 80)
+        assertFalse(WebHub.ownPage("http://car.example.com:443", "car.example.com:18443", null, 18443))
+        assertFalse(WebHub.ownPage("https://car.example.com:8443", "car.example.com:18443", null, 18443))   // another port
+        assertFalse(WebHub.ownPage("https://car.example.com", "car.example.com:18080", null, 18443))       // not this server's port
+        assertFalse(WebHub.ownPage("https://car.example.com", "car.example.com:18443", null))              // the port not known
     }
 
     @Test fun anotherSiteIsRefused() {

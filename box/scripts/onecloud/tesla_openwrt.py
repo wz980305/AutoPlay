@@ -7,7 +7,7 @@ signal (tesla_only_box_delta.md D4, R3): only the upstream probe's status text c
 (DuckDNS or autoplay.lan) is answered here too, by one address= record (D2).
 
 Since 1.6.8 the same table also leads port 443 of the box's own address to the CarPlay page, so the Tesla opens
-https://<name>/ and shows the name alone, and port 18443 (the page's port until 1.6.7) with it: page_rules().
+https://<name>/ and shows the name alone: page_rules().
 """
 import ipaddress
 import json
@@ -66,21 +66,20 @@ def redirect_rules(device, alias, port):
             f'add rule ip {TABLE} inbound iifname "{device}" ip daddr {alias} tcp dport 80 redirect to :{port}\n')
 
 
-def page_rules(device, address, viewer, bare=True):
+def page_rules(device, address, viewer):
     """The CarPlay page on the box's own address (1.6.8; the owner, 2026-11-16: the address bar should show the
     name and no port). A browser leaves the port out only when it is the scheme's own, 443, and uhttpd holds that
-    one on every address; so port 443 of this address, coming in from the LAN, is led to the viewer here (bare)
-    and uhttpd is left as it is: LuCI stays on port 80, as the guide has always said, and its HTTPS no longer
-    answers on this address for the devices on the Wi-Fi. 18443, the viewer's port until 1.6.7, is led there too,
-    so a bookmark or a page left open on the old address keeps working. Added to redirect_rules()'s table."""
+    one on every address; so port 443 of this address, coming in from the LAN, is led to the viewer here and
+    uhttpd is left as it is: LuCI stays on port 80, as the guide has always said, and its HTTPS no longer answers
+    on this address for the devices on the Wi-Fi. The viewer's own port is not changed and keeps answering (the
+    owner, 2026-11-18). Added to redirect_rules()'s table."""
     if not device or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-' for c in device):
         raise ValueError('Invalid LAN device')
     ipaddress.IPv4Address(address)
     if not viewer_port.valid(viewer):
         raise ValueError('Invalid viewer port')
-    ports = ([443] if bare else []) + ([viewer_port.LEGACY] if int(viewer) != viewer_port.LEGACY else [])
-    return ''.join(f'add rule ip {TABLE} inbound iifname "{device}" ip daddr {address} tcp dport {port} '
-                   f'redirect to :{int(viewer)}\n' for port in ports)
+    return (f'add rule ip {TABLE} inbound iifname "{device}" ip daddr {address} tcp dport 443 '
+            f'redirect to :{int(viewer)}\n')
 
 
 def wan_available(run=subprocess.run, connect=socket.create_connection):
@@ -173,12 +172,11 @@ class OfflineChecks:
         if viewer is None:
             return
         try:
-            bare = not self.luci_https_only()
-            rules = page_rules(network['device'], str(network['address'].ip), viewer, bare)
-            if rules:
-                self.command(['nft', '-f', '-'], input=rules)
-            self.bare = bare
-            self.page_note = None if bare else 'LuCI sends HTTP to HTTPS (uhttpd redirect_https): port 443 left to it'
+            if self.luci_https_only():
+                self.page_note = 'LuCI sends HTTP to HTTPS (uhttpd redirect_https): port 443 left to it'
+                return
+            self.command(['nft', '-f', '-'], input=page_rules(network['device'], str(network['address'].ip), viewer))
+            self.bare = True
         except Exception as error:   # noqa: BLE001 - whatever it is, the checks stay
             self.page_note = type(error).__name__ + ': ' + str(error)[:120]
 

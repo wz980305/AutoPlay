@@ -38,7 +38,7 @@ The F50 runs a vendor 5.4 kernel; OpenWrt's `bluez-daemon` pulls in 6.12 kernel 
 ## Using it
 
 - Settings page: `http://100.96.0.1:18080/` (`http://100.96.0.2/` redirects there).
-- Car browser: `https://<your domain>/` — a DuckDNS name or your own domain hosted at Tencent DNSPod, both with a Let's Encrypt certificate and no warning; without a domain it is `https://autoplay.lan/`, with a certificate warning. No port since 1.6.8 (the box leads port 443 of its own address to the viewer; the viewer's port 17989 and the former 18443 open as well). LuCI is at `http://100.96.0.1/`; https on that address is now the viewer.
+- Car browser: `https://<your domain>/` — a DuckDNS name or your own domain hosted at Tencent DNSPod, both with a Let's Encrypt certificate and no warning; without a domain it is `https://autoplay.lan/`, with a certificate warning. No port since 1.6.8 (the box leads port 443 of its own address to the viewer; `:18443` opens as before). LuCI is at `http://100.96.0.1/`; https on that address is now the viewer.
 - LuCI Services → AutoPlay: overview (one line each for Bluetooth, iPhone, certificate and update, with the reason); "network" shows the AP and the subnet; "iPhone" invites or removes and sets the idle release; "Custom domain" picks DuckDNS or DNSPod and takes the credentials; "Program update" checks, upgrades, sets the mirror.
 - The Tesla's Wi-Fi needs "stay connected while driving", otherwise it drops the Wi-Fi as soon as the car leaves Park. If the car cannot see the AP, check in LuCI → Network → Wireless that the 5 GHz radio is on 149–165 (set to CN / 149 at install).
 

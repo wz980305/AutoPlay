@@ -57,8 +57,8 @@ msgstr "盒子的局域网是 %s（安装时设定：特斯拉的浏览器打不
 msgid "CarPlay screen port"
 msgstr "CarPlay 画面端口"
 
-msgid "The HTTPS port of the CarPlay page. Empty is 17989 (18443 until 1.6.7), or the port an older install saved; a change takes about a minute and interrupts CarPlay briefly. It must differ from 18080, 80, 443 and 7000. The Tesla opens the name without any port: the box leads port 443 of its own address to this one, and 18443 too."
-msgstr "CarPlay 画面的 HTTPS 端口。留空为 17989（1.6.7 及以前是 18443），或旧版保存过的端口；修改约 1 分钟生效，CarPlay 会短暂中断。不能与 18080、80、443、7000 相同。特斯拉打开域名时不用带端口：盒子把自己地址上的 443 转到这个端口，18443 也一样。"
+msgid "The HTTPS port of the CarPlay page. Empty is 18443, or the port an older install saved; a change takes about a minute and interrupts CarPlay briefly. It must differ from 18080, 80, 443 and 7000. The Tesla opens the name without any port: the box leads port 443 of its own address to this one."
+msgstr "CarPlay 画面的 HTTPS 端口。留空为 18443，或旧版保存过的端口；修改约 1 分钟生效，CarPlay 会短暂中断。不能与 18080、80、443、7000 相同。特斯拉打开域名时不用带端口：盒子把自己地址上的 443 转到这个端口。"
 
 msgid "Diagnostics"
 msgstr "诊断"

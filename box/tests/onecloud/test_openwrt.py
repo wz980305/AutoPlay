@@ -16,40 +16,22 @@ from settings_page import SettingsPage
 import supervisor_openwrt
 from supervisor_openwrt import (read_config, trusted_networks, shared_lan_conflict, waiting_trust, waiting_warning,
                                obsolete_options, legacy_dns_cleanup, lan_warning, box_name, receiver_command,
-                               page_port, page_entries, SETTINGS_PORT, OBSOLETE_OPTIONS, DEFAULTS)
+                               page_entries, SETTINGS_PORT, OBSOLETE_OPTIONS, DEFAULTS)
 
 
 class ViewerPortConfigTests(unittest.TestCase):
     def test_default_is_empty(self):
-        # Empty lets the supervisor adopt an owner's older state/receiver/config.json port; 17989 is the fallback.
+        # Empty lets the supervisor adopt an owner's older state/receiver/config.json port; 18443 is the fallback.
         self.assertEqual(read_config("")["viewer_port"], "")
 
     def test_parsed(self):
         self.assertEqual(read_config("autoplay.main.viewer_port='19000'")["viewer_port"], "19000")
 
-    def test_the_old_default_moves_to_17989_but_not_while_an_update_is_being_checked(self):
-        # 1.6.8 (the owner, 2026-11-16). update.py writes phase "installing" before apk runs and the new supervisor
-        # starts under it: a version that fails the check is replaced by the one before, which must find 18443.
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "state").mkdir()
-            carried = read_config("autoplay.main.viewer_port='18443'")
-            journal = root / "state/update-journal.json"
-            journal.write_text(json.dumps({"phase": "installing", "target": "1.6.8", "previous": "1.6.7"}))
-            self.assertEqual(page_port(carried, root), (18443, False))
-            for phase in ("done", "rolled-back", "failed"):
-                journal.write_text(json.dumps({"phase": phase}))
-                self.assertEqual(page_port(carried, root), (17989, True), phase)
-            journal.unlink()
-            self.assertEqual(page_port(carried, root), (17989, True))
-            self.assertEqual(page_port(read_config(""), root), (17989, True), "a new box")
-            self.assertEqual(page_port(read_config("autoplay.main.viewer_port='19000'"), root), (19000, True))
-
     def test_the_address_has_no_port_once_443_leads_to_the_page(self):
-        self.assertEqual(page_entries("car.example.com", "100.96.0.1", 17989, True),
+        self.assertEqual(page_entries("car.example.com", "100.96.0.1", 18443, True),
                          ["https://car.example.com/", "https://100.96.0.1/"])
-        self.assertEqual(page_entries("car.example.com", "100.96.0.1", 17989, False),
-                         ["https://car.example.com:17989/", "https://100.96.0.1:17989/"])
+        self.assertEqual(page_entries("car.example.com", "100.96.0.1", 18443, False),
+                         ["https://car.example.com:18443/", "https://100.96.0.1:18443/"])
 
 # Shape of `ubus call network.wireless status` on OpenWrt 25.12 (two radios, a 2.4 GHz AP listed first).
 WIRELESS = {

@@ -18,11 +18,11 @@ cd box && python3 -m unittest discover -s tests/onecloud        # 286 个（1.6.
 # 蓝牙桥：test_reason、test_relay 等 7 个可直接跑；test_bluez、test_recovery、test_power（盒子经 D-Bus 上电，1.6.3 起）需要 dbus-daemon 和 dbus-next 0.2.3
 cd box && python3 -m unittest discover -s tests/bluetooth       # 没有 dbus-next 时那三个模块报 import 错误，是环境问题
 
-# 443 / 18443 到投屏页的转发（1.6.8）：两个网络命名空间当盒子和车，装盒子装的那几条 nft 规则，看每个地址到了谁那里
+# 443 到投屏页的转发（1.6.8）：两个网络命名空间当盒子和车，装盒子装的那两条 nft 规则，看每个地址到了谁那里
 cd box && python3 -m unittest discover -s tests/net             # 需要 root、nft、unshare、pyroute2；缺一样就跳过，CI 不跑
 # 同样的两个命名空间，盒子一侧换成接收端真正的网页服务（Ktor/Netty、TLS，`LabServeTest`），车一侧用 curl 和 WebSocket 握手
-# 经 https://<域名>/、:17989、:18443 各问一遍，再从别的网站、http 来源、别的端口、错令牌问一遍（必须被拒绝）。Ktor 升级后重跑。
-(cd receiver && ./gradlew :server:test) && sudo python3 box/tests/net/receiver_lab.py   # 20 行，全 ok 时退出码 0；CI 不跑
+# 经 https://<域名>/ 和 :18443 各问一遍，再从别的网站、http 来源、别的端口、错令牌问一遍（必须被拒绝）。Ktor 升级后重跑。
+(cd receiver && ./gradlew :server:test) && sudo python3 box/tests/net/receiver_lab.py   # 17 行，全 ok 时退出码 0；CI 不跑
 ```
 
 测试身份全是合成数据。裁剪前后的基线在 `box/docs/TEST-BASELINE.md`（375 → 225 是删掉的 Debian/N1/有线/STA 测试减去新模块的测试；1.2.0 为 263，删除上游刷机脚本及其 4 个测试文件后为 238，1.3.0 起仍为 238，1.4.0 为 239，1.4.1 为 243，1.4.2 为 249，1.4.3 为 256，1.5.0 为 269，1.5.1 为 270，1.5.3 为 276）。
@@ -109,10 +109,10 @@ sh -n openwrt/autoplay/files/autoplay.init && sh -n box/scripts/build-bundle.sh
 2. iOS 27 深浅色：iOS 27 手机上夜间模式能切换（日志 `appearance updates=true`），iOS 26 仍靠 `setNightMode`；2,2 / 1,1 的取值来自 dashplay-tesla 的实车观察，Apple 没有文档。
 3. duck/unduck：页面不再有可压低的声音（1.3.0），`grep 'audio duckAudio'` 只用来确认 iPhone 仍把压低音乐的事交给了蓝牙那边。
 4. 配对存储：第一次新配对后 `state/receiver/pairings.properties.bak` 出现；故意清空主文件后下次启动要回退到 `.bak`。
-5. DSCP：盒子上 `tcpdump -v` 看 17989（投屏页端口）的流量 TOS 是否 0x88。
+5. DSCP：盒子上 `tcpdump -v` 看 18443 的流量 TOS 是否 0x88。
 6. 触摸释放：手指按着时挂倒挡冻结页面，日志应出现 `viewer client=N paused with a finger down: lifting it`，iPhone 上不能留下按住的按钮。
 7. 页面跟上盒子的版本（1.6.7）：车机里开着 CarPlay 页面，在别处把盒子升级；回到车里，页面应在连上盒子后自己重新载入一次，诊断记录里有 `ev=12 newer=1`，其后的 `build=` 是新版本的；CarPlay 不应重新连接。
-8. 不带端口的地址（1.6.8，都还没有在车上试过）：车机浏览器打开 `https://<域名>/`，应出现投屏页、没有证书警告、地址栏里只有域名，画面、触摸、「AutoPlay」面板里改设置（会发 POST）都正常；`https://<域名>:18443/`（旧书签）和 `https://<域名>:17989/` 也能打开；`http://100.96.0.1/` 仍是 LuCI。从 1.6.7 在线升级后的第一次启动端口仍是 18443，再启动一次后 LuCI「网络」里是 17989，`logread`/`supervisor.log` 里有 `CarPlay page on https://<name>/`。盒子上 `nft list table ip autoplay_tesla_checks` 应有 `tcp dport 443 redirect to :17989` 和 `tcp dport 18443 redirect to :17989` 两条。
+8. 不带端口的地址（1.6.8，都还没有在车上试过）：车机浏览器打开 `https://<域名>/`，应出现投屏页、没有证书警告、地址栏里只有域名，画面、触摸、「AutoPlay」面板里改设置（会发 POST）都正常；`https://<域名>:18443/`（旧书签）照样能打开；`http://100.96.0.1/` 仍是 LuCI；「AutoPlay 设置 → 网络 → 在车机浏览器打开」给的是不带端口的地址。`supervisor.log` 里有 `CarPlay page on https://<name>/`；盒子上 `nft list table ip autoplay_tesla_checks` 应有 `tcp dport 443 redirect to :18443` 一条。
 
 技术路径 §八的问题：
 

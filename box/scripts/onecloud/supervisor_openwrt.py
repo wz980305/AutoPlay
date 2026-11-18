@@ -49,9 +49,9 @@ import viewer_port
 # uci autoplay.main: the seven owner-editable keys (tesla_only_box_delta.md section 5). Everything else is a
 # constant below; keys of older releases are ignored and cleaned up (obsolete_options).
 DEFAULTS = {"enabled": "1",
-            # The CarPlay page's HTTPS port. Empty is 17989 (18443 until 1.6.7), or the port an older install
-            # saved in state/receiver/config.json (adopted once); it must differ from SETTINGS_PORT, 80, 443 and
-            # 7000. The Tesla need not know it: port 443 of the box leads to the page (tesla_openwrt.page_rules).
+            # The CarPlay page's HTTPS port. Empty is 18443, or the port an older install saved in
+            # state/receiver/config.json (adopted once); it must differ from SETTINGS_PORT, 80, 443 and 7000.
+            # The Tesla need not name it: port 443 of the box leads to the page (tesla_openwrt.page_rules).
             "viewer_port": "",
             # Seconds without a viewer page before wireless CarPlay is ended, so an iPhone near a box left on
             # does not keep sending its screen (0: never; then a reopened page shows the picture at once).
@@ -258,15 +258,6 @@ def own_config(config):
 def box_name(ddns):
     """The name the head unit opens: the DuckDNS name, else the local one (D11)."""
     return own_domain.name_of(ddns) if ddns else LOCAL_NAME
-
-
-def page_port(config, root):
-    """(port, settle) of the CarPlay page, as viewer_port.choose(). Empty in the uci means 17989, or an owner's
-    older state/receiver/config.json value: an update keeps it. A box that carries the default of 1.6.7 and before
-    (18443) moves to 17989 once - not at the start an online update is checking (its journal says "installing"
-    until recover() or the updater closes it), so that a version sent back finds its port where it was."""
-    being_checked = update.read(update.journal_path(root)).get("phase") == "installing"
-    return viewer_port.choose(config.get("viewer_port", ""), Path(root) / "state", hold=being_checked)
 
 
 def page_entries(name, host, viewer, bare):
@@ -550,7 +541,9 @@ def main():
     root = args.root.resolve()
     shown = subprocess.run(["uci", "-q", "show", "autoplay"], capture_output=True, text=True, timeout=10).stdout
     config = read_config(shown)
-    viewer, port_settles = page_port(config, root)
+    # Empty in the uci means 18443, or an owner's older state/receiver/config.json value: an update keeps it.
+    viewer = (int(config["viewer_port"]) if str(config.get("viewer_port", "")).isdigit()
+              else viewer_port.resolve(root / "state"))
     if viewer == SETTINGS_PORT or not viewer_port.valid(viewer):
         raise ValueError("Invalid autoplay.main.viewer_port")
     idle_release = int(config["idle_release"]) if config["idle_release"].isdigit() else 300
@@ -614,14 +607,9 @@ def main():
     # Keep the uci mirroring the effective port, so the LuCI link and field show it (an owner's older
     # state/receiver/config.json value is adopted once; the uci survives package updates).
     if str(viewer) != config.get("viewer_port", ""):
-        if config.get("viewer_port") == str(viewer_port.LEGACY):
-            say(f"CarPlay page port: {viewer_port.LEGACY} (the default until 1.6.7) becomes {viewer}; "
-                f"{viewer_port.LEGACY} keeps answering")
         subprocess.run(["uci", "set", f"autoplay.main.viewer_port={viewer}"], check=False, capture_output=True, timeout=10)
         subprocess.run(["uci", "commit", "autoplay"], check=False, capture_output=True, timeout=10)
         config["viewer_port"] = str(viewer)
-    if port_settles:
-        viewer_port.settle(state)
     platform = OpenWrtPlatform(run=RUN)
     platform.bluetooth_state = state
     have_identity = identity_ok()

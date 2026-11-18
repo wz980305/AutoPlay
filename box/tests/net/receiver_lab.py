@@ -3,11 +3,11 @@
 https://<name>/ (1.6.8). A lab run, NOT a test on an F50 or a Tesla, and not run by CI.
 
 Two throwaway network namespaces joined by a veth pair. The "box" has 100.96.0.1/24, loads redirect_rules() and
-page_rules() as the box does, and runs the receiver's WebHub on Ktor/Netty with TLS on 17989 (LabServeTest in
+page_rules() as the box does, and runs the receiver's WebHub on Ktor/Netty with TLS on 18443 (LabServeTest in
 receiver/server: the real routes, no CarPlay). The "car" asks with curl and a raw WebSocket handshake: the page, the
 token file, a settings POST over HTTP/2 and HTTP/1.1, and the picture channel, each through the name without a port
-(443), through 17989 and through the old 18443; then the same from another site, a plain-http origin, another port
-and with a wrong token, which must all be refused.
+(443) and through the port itself; then the same from another site, a plain-http origin, another port and with a
+wrong token, which must all be refused.
 
 Why it exists: over HTTP/2 a browser sends `:authority: name` for https://name/ and Ktor 3.6 then reports the port
 the server listens on, not 443; until 1.6.8 WebHub.ownPage refused such a POST as another site's (403). Run it again
@@ -16,7 +16,7 @@ after a Ktor upgrade.
     cd receiver && ./gradlew :server:test        # once, with the network: the build's packages
     sudo python3 box/tests/net/receiver_lab.py   # root, nft, unshare, curl with HTTP/2, pyroute2 (pip)
 
-Prints one line per request and ends with 0 when every answer is the expected kind.
+Prints one line per request and ends with 0 when every answer is the expected one.
 """
 import base64
 import os
@@ -34,7 +34,7 @@ import tesla_openwrt as tesla   # noqa: E402
 
 BOX, ALIAS, CAR, NAME = '100.96.0.1', '100.96.0.2', '100.96.0.50', 'car.example.com'
 TOKEN = '0123456789abcdef0123456789abcdef'   # LabServeTest's
-VIEWER, SETTINGS = 17989, 18080
+VIEWER, SETTINGS = 18443, 18080
 
 
 def interface(name, address, also=()):
@@ -117,7 +117,7 @@ def car():
     def post(base, origin, *more, token=TOKEN, version='--http2'):
         return curl(f'{base}/api/location?token={token}', version, *body, '-H', f'Origin: {origin}', *more)
 
-    bare, direct, old = f'https://{NAME}', f'https://{NAME}:{VIEWER}', f'https://{NAME}:18443'
+    bare, direct = f'https://{NAME}', f'https://{NAME}:{VIEWER}'
     # A POST that passes the own-page check ends in 503 here: the lab has no CarPlay to switch the location of.
     rows = [
         ('page, no port, HTTP/2', curl(bare + '/', '--http2'), '2 200'),
@@ -127,18 +127,15 @@ def car():
         ('setting, no port, HTTP/2', post(bare, bare, *same), '2 503'),
         ('setting, no port, HTTP/1.1', post(bare, bare, *same, version='--http1.1'), '1.1 503'),
         ('setting, no port, HTTP/2, an older browser (no Sec-Fetch-Site)', post(bare, bare), '2 503'),
-        ('setting, port 17989, HTTP/2', post(direct, direct, *same), '2 503'),
-        ('setting, port 17989, HTTP/1.1', post(direct, direct, *same, version='--http1.1'), '1.1 503'),
-        ('setting, old port 18443, HTTP/2', post(old, old, *same), '2 503'),
-        ('setting, old port 18443, HTTP/1.1', post(old, old, *same, version='--http1.1'), '1.1 503'),
+        ('setting, port 18443, HTTP/2', post(direct, direct, *same), '2 503'),
+        ('setting, port 18443, HTTP/1.1', post(direct, direct, *same, version='--http1.1'), '1.1 503'),
         ('setting from another site', post(bare, 'https://evil.example'), '2 403'),
         ('setting from another site (Sec-Fetch-Site)', post(bare, bare, '-H', 'Sec-Fetch-Site: cross-site'), '2 403'),
         ('setting from the plain-http name', post(bare, f'http://{NAME}'), '2 403'),
         ('setting from another port of the name', post(bare, f'https://{NAME}:8443'), '2 403'),
         ('setting with a wrong token', post(bare, bare, *same, token='f' * 32), '2 403'),
         ('picture channel, no port', websocket(443, bare, NAME), '101 hello'),
-        ('picture channel, port 17989', websocket(VIEWER, direct, f'{NAME}:{VIEWER}'), '101 hello'),
-        ('picture channel, old port 18443', websocket(18443, old, f'{NAME}:18443'), '101 hello'),
+        ('picture channel, port 18443', websocket(VIEWER, direct, f'{NAME}:{VIEWER}'), '101 hello'),
         ('picture channel from another site', websocket(443, 'https://evil.example', NAME), '101 closed 1008'),
     ]
     wrong = 0

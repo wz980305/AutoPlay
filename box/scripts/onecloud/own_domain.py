@@ -1,6 +1,6 @@
 """Optional: an own name with a Let's Encrypt certificate. The only route verified on a Tesla (F50 2026-10-14,
 again 2026-11-02): its browser opens https://<name>:18443/ without a certificate warning (tesla_only_box_delta.md 0;
-since 1.6.8 the address is https://<name>/, viewer_port.py).
+since 1.6.8 the address is https://<name>/, tesla_openwrt.page_rules).
 Off unless the owner enters a name in LuCI. Two DNS providers (uci dns_provider):
 
 - duckdns (default): a DuckDNS sub-domain and its token (uci duckdns_domain / duckdns_token). The public DuckDNS

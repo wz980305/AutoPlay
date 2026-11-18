@@ -34,7 +34,7 @@ return view.extend({
 	render: function(data) {
 		var host = window.location.hostname;
 		var port = '18080';
-		var viewer = uci.get('autoplay', 'main', 'viewer_port') || '17989';
+		var viewer = uci.get('autoplay', 'main', 'viewer_port') || '18443';
 		var m, s, o;
 
 		m = new form.Map('autoplay', _('AutoPlay'),
@@ -84,8 +84,8 @@ return view.extend({
 
 		o = s.taboption('network', form.Value, 'viewer_port', _('CarPlay screen port'));
 		o.datatype = 'port';
-		o.placeholder = '17989';
-		o.description = _('The HTTPS port of the CarPlay page. Empty is 17989 (18443 until 1.6.7), or the port an older install saved; a change takes about a minute and interrupts CarPlay briefly. It must differ from 18080, 80, 443 and 7000. The Tesla opens the name without any port: the box leads port 443 of its own address to this one, and 18443 too.');
+		o.placeholder = '18443';
+		o.description = _('The HTTPS port of the CarPlay page. Empty is 18443, or the port an older install saved; a change takes about a minute and interrupts CarPlay briefly. It must differ from 18080, 80, 443 and 7000. The Tesla opens the name without any port: the box leads port 443 of its own address to this one.');
 
 		o = s.taboption('network', form.DummyValue, '_debug', _('Diagnostics'));
 		o.cfgvalue = function() { return _('Download diagnostics on the AutoPlay settings page (Advanced). Saving changes here restarts the service and interrupts CarPlay briefly.'); };
