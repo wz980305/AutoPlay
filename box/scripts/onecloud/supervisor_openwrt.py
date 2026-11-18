@@ -261,9 +261,9 @@ def box_name(ddns):
 
 
 def page_entries(name, host, viewer, bare):
-    """The CarPlay page's addresses, the name first. bare: port 443 of this box leads to the page (1.6.8,
-    tesla_openwrt.page_rules), so the address the owner is given has no port and the Tesla's address bar shows the
-    name alone; the port itself keeps answering either way."""
+    """The CarPlay page's addresses, the name first. bare: port 443 of host leads to the page (since 1.6.9 host is
+    AutoPlay's own address, tesla_openwrt.page_rules), so the address the owner is given has no port and the
+    Tesla's address bar shows the name alone; the port itself keeps answering either way."""
     port = "" if bare else f":{viewer}"
     return [f"https://{name}{port}/", f"https://{host}{port}/"]
 
@@ -759,9 +759,6 @@ def main():
         renewed = ensure_keystore(state)
         status.update(ssid=network["ssid"], home=f"http://{host}:{SETTINGS_PORT}/",
                       entries=page_entries(name, host, viewer, False))
-        if ddns:
-            maintainer.append(own_domain.Maintainer(root, ddns, host, stopped, say, tesla=True, wake_file=WAN_UP_FILE))
-            maintainer[0].start()
         guard["certificate"](certificate_status)
         refresh_network_warning(network["device"], status, base_warning)
         trusted[:] = trusted_networks(network)
@@ -770,11 +767,18 @@ def main():
         # The Tesla's connectivity checks are answered for as long as the box runs (D4): the LAN never flips
         # with the SIM's signal, only the upstream status text does. A failure is a status reason, never fatal.
         offline_checks.start(network, name, SETTINGS_PORT, status, viewer)
+        # 1.6.9: the name points at AutoPlay's own address, whose 443 leads to the page (tesla_openwrt.page_rules);
+        # the router's address is left as OpenWrt has it. Without that the name stays on the router's address and
+        # the page keeps its port.
+        page_host = offline_checks.page_host or host
         if offline_checks.bare:
-            status.update(entries=page_entries(name, host, viewer, True))
-            say(f"CarPlay page on https://<name>/ (port 443 leads to {viewer})")
+            status.update(entries=page_entries(name, page_host, viewer, True))
+            say(f"CarPlay page on https://<name>/ ({page_host}:443 leads to {viewer})")
         elif offline_checks.page_note:
             say(f"CarPlay page on port {viewer} only: {offline_checks.page_note}")
+        if ddns:   # DuckDNS points where the box's own DNS points (a DNSPod record is the owner's, own_domain.py)
+            maintainer.append(own_domain.Maintainer(root, ddns, page_host, stopped, say, tesla=True, wake_file=WAN_UP_FILE))
+            maintainer[0].start()
         guard["tesla"](tesla_status)
         diagnostics.start(stopped, diagnostics.DiagLog(state / "diag"), RUN / "receiver.log", platform, status,
                           state=state)

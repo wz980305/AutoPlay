@@ -18,7 +18,7 @@ cd box && python3 -m unittest discover -s tests/onecloud        # 286 个（1.6.
 # 蓝牙桥：test_reason、test_relay 等 7 个可直接跑；test_bluez、test_recovery、test_power（盒子经 D-Bus 上电，1.6.3 起）需要 dbus-daemon 和 dbus-next 0.2.3
 cd box && python3 -m unittest discover -s tests/bluetooth       # 没有 dbus-next 时那三个模块报 import 错误，是环境问题
 
-# 443 到投屏页的转发（1.6.8）：两个网络命名空间当盒子和车，装盒子装的那两条 nft 规则，看每个地址到了谁那里
+# 100.96.0.2 的 443 到投屏页的转发（1.6.9）：两个网络命名空间当盒子和车，装盒子装的那两条 nft 规则，看每个地址到了谁那里；100.96.0.1 的 80 和 443 必须仍是 LuCI
 cd box && python3 -m unittest discover -s tests/net             # 需要 root、nft、unshare、pyroute2；缺一样就跳过，CI 不跑
 # 同样的两个命名空间，盒子一侧换成接收端真正的网页服务（Ktor/Netty、TLS，`LabServeTest`），车一侧用 curl 和 WebSocket 握手
 # 经 https://<域名>/ 和 :18443 各问一遍，再从别的网站、http 来源、别的端口、错令牌问一遍（必须被拒绝）。Ktor 升级后重跑。
@@ -112,7 +112,7 @@ sh -n openwrt/autoplay/files/autoplay.init && sh -n box/scripts/build-bundle.sh
 5. DSCP：盒子上 `tcpdump -v` 看 18443 的流量 TOS 是否 0x88。
 6. 触摸释放：手指按着时挂倒挡冻结页面，日志应出现 `viewer client=N paused with a finger down: lifting it`，iPhone 上不能留下按住的按钮。
 7. 页面跟上盒子的版本（1.6.7）：车机里开着 CarPlay 页面，在别处把盒子升级；回到车里，页面应在连上盒子后自己重新载入一次，诊断记录里有 `ev=12 newer=1`，其后的 `build=` 是新版本的；CarPlay 不应重新连接。
-8. 不带端口的地址（1.6.8，都还没有在车上试过）：车机浏览器打开 `https://<域名>/`，应出现投屏页、没有证书警告、地址栏里只有域名，画面、触摸、「AutoPlay」面板里改设置（会发 POST）都正常；`https://<域名>:18443/`（旧书签）照样能打开；`http://100.96.0.1/` 仍是 LuCI；「AutoPlay 设置 → 网络 → 在车机浏览器打开」给的是不带端口的地址。`supervisor.log` 里有 `CarPlay page on https://<name>/`；盒子上 `nft list table ip autoplay_tesla_checks` 应有 `tcp dport 443 redirect to :18443` 一条。
+8. 不带端口的地址（1.6.8、1.6.9，都还没有在车上试过）：车机浏览器打开 `https://<域名>/`，应出现投屏页、没有证书警告、地址栏里只有域名，画面、触摸、「AutoPlay」面板里改设置（会发 POST）都正常；`https://<域名>:18443/`（旧书签）照样能打开；`http://100.96.0.1/` 和 `https://100.96.0.1/` 都是 LuCI；「AutoPlay 设置 → 网络 → 在车机浏览器打开」给的是 `https://<域名>/` 和 `https://100.96.0.2/`。`supervisor.log` 里有 `CarPlay page on https://<name>/ (100.96.0.2:443 leads to 18443)`；盒子上 `nft list table ip autoplay_tesla_checks` 应有 `ip daddr 100.96.0.2 tcp dport 443 redirect to :18443` 一条，`uci show dhcp | grep <域名>` 是 `/<域名>/100.96.0.2`；车机连上热点后不应掉线（联网检测照旧）。
 
 技术路径 §八的问题：
 

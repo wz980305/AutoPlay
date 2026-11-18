@@ -32,7 +32,7 @@ state = root / "state"
 (root / "version.txt").write_text("1.5.0\n")   # what a release build carries (update.bundled_version)
 
 BASE = dict(mode="openwrt", ssid="AutoPlay-5G", home="http://100.96.0.1:18080/", identity=True,
-            entries=["https://car.example.com/", "https://100.96.0.1/"], name="car.example.com",
+            entries=["https://car.example.com/", "https://100.96.0.2/"], name="car.example.com",
             own_name="car.example.com", version="1.3.0")
 PHONES = {"02:00:00:00:00:01": "小王的 iPhone", "02:00:00:00:00:02": "家人的 iPhone"}
 LIVE = {"bluetooth": ("on", None), "identity": ("provided", None), "phone": ("live", None),

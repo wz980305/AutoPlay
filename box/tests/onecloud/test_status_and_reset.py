@@ -430,10 +430,12 @@ class PageLayoutTests(unittest.TestCase):
         # its own address first in the list as well
         net = self.pane(self.page.render("", "100.96.0.1:18080"), "net")
         self.assertLess(net.index("https://100.96.0.1<wbr>:18443/"), net.index("https://mycar.duckdns.org<wbr>:18443/"))
-        # 1.6.8: port 443 of the box leads to the page, so the addresses carry no port; the same choice by name
-        self.status.update(entries=["https://mycar.duckdns.org/", "https://100.96.0.1/"])
-        for host, entry in (("mycar.duckdns.org:18080", "https://mycar.duckdns.org/"), ("100.96.0.1:18080", "https://100.96.0.1/"),
-                            ("", "https://mycar.duckdns.org/")):
+        # 1.6.8: port 443 leads to the page, so the addresses carry no port; the same choice by name. Since 1.6.9
+        # that is AutoPlay's own address, 100.96.0.2: the router's address is LuCI's, and a page opened there goes
+        # back to the name.
+        self.status.update(entries=["https://mycar.duckdns.org/", "https://100.96.0.2/"])
+        for host, entry in (("mycar.duckdns.org:18080", "https://mycar.duckdns.org/"), ("100.96.0.2:18080", "https://100.96.0.2/"),
+                            ("100.96.0.1:18080", "https://mycar.duckdns.org/"), ("", "https://mycar.duckdns.org/")):
             html = self.page.render("", host)
             self.assertIn(f'<a class="done icon out back" href="{entry}" aria-label="返回">', html, host)
             self.assertIn(f'<a class="done out fwd" href="{entry}">CarPlay 画面</a>', html, host)

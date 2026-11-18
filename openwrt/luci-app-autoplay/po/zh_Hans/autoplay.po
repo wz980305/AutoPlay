@@ -57,8 +57,8 @@ msgstr "盒子的局域网是 %s（安装时设定：特斯拉的浏览器打不
 msgid "CarPlay screen port"
 msgstr "CarPlay 画面端口"
 
-msgid "The HTTPS port of the CarPlay page. Empty is 18443, or the port an older install saved; a change takes about a minute and interrupts CarPlay briefly. It must differ from 18080, 80, 443 and 7000. The Tesla opens the name without any port: the box leads port 443 of its own address to this one."
-msgstr "CarPlay 画面的 HTTPS 端口。留空为 18443，或旧版保存过的端口；修改约 1 分钟生效，CarPlay 会短暂中断。不能与 18080、80、443、7000 相同。特斯拉打开域名时不用带端口：盒子把自己地址上的 443 转到这个端口。"
+msgid "The HTTPS port of the CarPlay page. Empty is 18443, or the port an older install saved; a change takes about a minute and interrupts CarPlay briefly. It must differ from 18080, 80, 443 and 7000. The Tesla opens the name without any port: the name points at AutoPlay's own address 100.96.0.2, whose port 443 leads to this one; the router's 100.96.0.1 is left as it is."
+msgstr "CarPlay 画面的 HTTPS 端口。留空为 18443，或旧版保存过的端口；修改约 1 分钟生效，CarPlay 会短暂中断。不能与 18080、80、443、7000 相同。特斯拉打开域名时不用带端口：域名指向 AutoPlay 自己的地址 100.96.0.2，它的 443 转到这个端口；路由器的 100.96.0.1 保持原样。"
 
 msgid "Diagnostics"
 msgstr "诊断"
@@ -102,8 +102,8 @@ msgstr "下面这个域名由哪家 DNS 服务商管理。不填域名时，特�
 msgid "Own domain (DNSPod)"
 msgstr "自己的域名（DNSPod）"
 
-msgid "A full domain you manage in Tencent Cloud DNS (DNSPod), e.g. car.example.com. AutoPlay obtains the Let's Encrypt certificate with a DNS-01 challenge through the DNSPod API and answers the name locally for the Tesla; also add an A record for it pointing at 100.96.0.1 in the DNSPod console, so the name resolves through a public resolver too. The Tesla opens https://car.example.com/ without a warning."
-msgstr "你在腾讯云 DNS（DNSPod）里管理的完整域名，例如 car.example.com。AutoPlay 通过 DNSPod API 完成 DNS-01 验证申请 Let's Encrypt 证书，并在本地为特斯拉解析这个域名；建议同时在 DNSPod 控制台加一条指向 100.96.0.1 的 A 记录。特斯拉打开 https://car.example.com/ 不会有警告。"
+msgid "A full domain you manage in Tencent Cloud DNS (DNSPod), e.g. car.example.com. AutoPlay obtains the Let's Encrypt certificate with a DNS-01 challenge through the DNSPod API and answers the name locally for the Tesla; also add an A record for it pointing at 100.96.0.2 in the DNSPod console, so the name resolves through a public resolver too. The Tesla opens https://car.example.com/ without a warning."
+msgstr "你在腾讯云 DNS（DNSPod）里管理的完整域名，例如 car.example.com。AutoPlay 通过 DNSPod API 完成 DNS-01 验证申请 Let's Encrypt 证书，并在本地为特斯拉解析这个域名；建议同时在 DNSPod 控制台加一条指向 100.96.0.2 的 A 记录。特斯拉打开 https://car.example.com/ 不会有警告。"
 
 msgid "DNSPod API ID"
 msgstr "DNSPod API ID"

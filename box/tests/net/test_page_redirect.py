@@ -3,9 +3,10 @@
 Two throwaway network namespaces joined by a veth pair stand for the box and the car. The box side has the LAN
 address 100.96.0.1/24 and the alias 100.96.0.2, loads the rules exactly as the box does (nft -f -), and runs
 stand-ins that say which listener a connection reached and on which local port: the viewer, uhttpd on 80 and 443,
-and the settings page. The car side connects to each address. What this shows (1.6.8): port 443 of the box's
-own address reaches the viewer, which sees its own port (what Ktor calls localPort); the viewer's port itself,
-LuCI's port 80 and everything on the alias are left alone.
+and the settings page. The car side connects to each address. What this shows (1.6.9): port 443 of the alias,
+AutoPlay's own address that the own name points at, reaches the viewer, which sees its own port (what Ktor calls
+localPort); port 80 there still answers the Tesla's checks; the router's address is exactly as before, LuCI on 80
+and 443.
 
 Needs root, nft, unshare and pyroute2 (pip install pyroute2); skipped otherwise, and not run by CI:
 
@@ -70,7 +71,7 @@ def box(viewer, bare):
         serve(port, name)
     subprocess.run(['nft', '-f', '-'], input=tesla.redirect_rules('br-lan', ALIAS, SETTINGS), text=True, check=True)
     if bare:
-        subprocess.run(['nft', '-f', '-'], input=tesla.page_rules('br-lan', BOX, viewer), text=True, check=True)
+        subprocess.run(['nft', '-f', '-'], input=tesla.page_rules('br-lan', ALIAS, viewer), text=True, check=True)
     print('ready', flush=True)
     time.sleep(120)
 
@@ -121,24 +122,24 @@ def lab(viewer, bare):
 @unittest.skipUnless(IPRoute and os.geteuid() == 0 and shutil.which('nft') and shutil.which('unshare'),
                      'needs root, nft, unshare and pyroute2')
 class PageRedirectTests(unittest.TestCase):
-    def test_the_name_without_a_port_reaches_the_viewer(self):
+    def test_the_name_without_a_port_reaches_the_viewer_and_the_router_is_untouched(self):
         seen = lab(18443, True)
-        self.assertEqual(seen[(BOX, 443)], 'viewer@18443')      # https://<name>/
-        self.assertEqual(seen[(BOX, 18443)], 'viewer@18443')    # the port itself, as ever
-        self.assertEqual(seen[(BOX, 80)], 'luci@80', 'LuCI stays where the guide says it is')
-        self.assertEqual(seen[(BOX, SETTINGS)], f'settings@{SETTINGS}')
+        self.assertEqual(seen[(ALIAS, 443)], 'viewer@18443')    # https://<name>/: the name points at the alias
         self.assertEqual(seen[(ALIAS, 80)], f'settings@{SETTINGS}', "the Tesla's checks, as before")
-        self.assertEqual(seen[(ALIAS, 443)], 'luci-https@443', 'the alias is not touched')
+        self.assertEqual(seen[(BOX, 18443)], 'viewer@18443')    # the port itself, as ever
+        self.assertEqual(seen[(BOX, 443)], 'luci-https@443', "the router's address: LuCI over HTTPS, as shipped")
+        self.assertEqual(seen[(BOX, 80)], 'luci@80')
+        self.assertEqual(seen[(BOX, SETTINGS)], f'settings@{SETTINGS}')
 
     def test_a_port_of_the_owners_own_choice(self):
         seen = lab(19500, True)
-        self.assertEqual(seen[(BOX, 443)], 'viewer@19500')
+        self.assertEqual(seen[(ALIAS, 443)], 'viewer@19500')
         self.assertEqual(seen[(BOX, 19500)], 'viewer@19500')
-        self.assertEqual(seen[(BOX, 18443)], 'ConnectionRefusedError')
+        self.assertEqual(seen[(BOX, 443)], 'luci-https@443')
 
-    def test_without_the_page_rule_443_is_lucis(self):
-        # LuCI on HTTPS only (uhttpd redirect_https), or a box before 1.6.8
+    def test_without_the_page_rule_everything_is_as_before_1_6_8(self):
         seen = lab(18443, False)
+        self.assertEqual(seen[(ALIAS, 443)], 'luci-https@443')
         self.assertEqual(seen[(BOX, 443)], 'luci-https@443')
         self.assertEqual(seen[(BOX, 18443)], 'viewer@18443')
         self.assertEqual(seen[(ALIAS, 80)], f'settings@{SETTINGS}')

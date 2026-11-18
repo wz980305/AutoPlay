@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """The receiver's real web server behind the box's real redirect rules, asked the way a browser asks it through
-https://<name>/ (1.6.8). A lab run, NOT a test on an F50 or a Tesla, and not run by CI.
+https://<name>/ (1.6.8; since 1.6.9 the name points at the alias). A lab run, NOT a test on an F50 or a Tesla,
+and not run by CI.
 
-Two throwaway network namespaces joined by a veth pair. The "box" has 100.96.0.1/24, loads redirect_rules() and
-page_rules() as the box does, and runs the receiver's WebHub on Ktor/Netty with TLS on 18443 (LabServeTest in
+Two throwaway network namespaces joined by a veth pair. The "box" has 100.96.0.1/24 and the alias 100.96.0.2,
+loads redirect_rules() and page_rules() on the alias as the box does, and runs the receiver's WebHub on Ktor/Netty with TLS on 18443 (LabServeTest in
 receiver/server: the real routes, no CarPlay). The "car" asks with curl and a raw WebSocket handshake: the page, the
 token file, a settings POST over HTTP/2 and HTTP/1.1, and the picture channel, each through the name without a port
 (443) and through the port itself; then the same from another site, a plain-http origin, another port and with a
@@ -58,7 +59,7 @@ def interface(name, address, also=()):
 def box():
     interface('br-lan', BOX, [ALIAS])
     subprocess.run(['nft', '-f', '-'], input=tesla.redirect_rules('br-lan', ALIAS, SETTINGS), text=True, check=True)
-    subprocess.run(['nft', '-f', '-'], input=tesla.page_rules('br-lan', BOX, VIEWER), text=True, check=True)
+    subprocess.run(['nft', '-f', '-'], input=tesla.page_rules('br-lan', ALIAS, VIEWER), text=True, check=True)
     env = dict(os.environ, AUTOPLAY_LAB_PORT=str(VIEWER), AUTOPLAY_LAB_SECONDS=os.environ.get('LAB_SECONDS', '60'))
     os.chdir(REPO / 'receiver')
     # No network in here: the packages are those of an earlier build. cleanTest: the task would otherwise be up to date.
@@ -70,7 +71,7 @@ def curl(url, *extra):
     where = url.split('/')[2]
     port = int(where.split(':')[1]) if ':' in where else 443
     out = subprocess.run(['curl', '-sk', '--noproxy', '*', '-m', '8', '-o', '/dev/null', '-w', '%{http_version} %{http_code}',
-                          '--resolve', f'{NAME}:{port}:{BOX}', *extra, url], capture_output=True, text=True).stdout
+                          '--resolve', f'{NAME}:{port}:{ALIAS}', *extra, url], capture_output=True, text=True).stdout
     return out or 'no answer'
 
 
@@ -79,7 +80,7 @@ def websocket(port, origin, host):
     context = ssl.create_default_context()
     context.check_hostname, context.verify_mode = False, ssl.CERT_NONE   # the lab's self-signed certificate
     context.set_alpn_protocols(['http/1.1'])
-    connection = context.wrap_socket(socket.create_connection((BOX, port), 5), server_hostname=NAME)
+    connection = context.wrap_socket(socket.create_connection((ALIAS, port), 5), server_hostname=NAME)
     key = base64.b64encode(os.urandom(16)).decode()
     connection.sendall((f'GET /ws?token={TOKEN}&page=lab HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\n'
                         f'Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n'

@@ -85,7 +85,7 @@ return view.extend({
 		o = s.taboption('network', form.Value, 'viewer_port', _('CarPlay screen port'));
 		o.datatype = 'port';
 		o.placeholder = '18443';
-		o.description = _('The HTTPS port of the CarPlay page. Empty is 18443, or the port an older install saved; a change takes about a minute and interrupts CarPlay briefly. It must differ from 18080, 80, 443 and 7000. The Tesla opens the name without any port: the box leads port 443 of its own address to this one.');
+		o.description = _('The HTTPS port of the CarPlay page. Empty is 18443, or the port an older install saved; a change takes about a minute and interrupts CarPlay briefly. It must differ from 18080, 80, 443 and 7000. The Tesla opens the name without any port: the name points at AutoPlay\'s own address 100.96.0.2, whose port 443 leads to this one; the router\'s 100.96.0.1 is left as it is.');
 
 		o = s.taboption('network', form.DummyValue, '_debug', _('Diagnostics'));
 		o.cfgvalue = function() { return _('Download diagnostics on the AutoPlay settings page (Advanced). Saving changes here restarts the service and interrupts CarPlay briefly.'); };
@@ -126,7 +126,7 @@ return view.extend({
 		o.depends('dns_provider', 'duckdns');
 
 		o = s.taboption('reach', form.Value, 'own_domain', _('Own domain (DNSPod)'),
-			_('A full domain you manage in Tencent Cloud DNS (DNSPod), e.g. car.example.com. AutoPlay obtains the Let\'s Encrypt certificate with a DNS-01 challenge through the DNSPod API and answers the name locally for the Tesla; also add an A record for it pointing at 100.96.0.1 in the DNSPod console, so the name resolves through a public resolver too. The Tesla opens https://car.example.com/ without a warning.'));
+			_('A full domain you manage in Tencent Cloud DNS (DNSPod), e.g. car.example.com. AutoPlay obtains the Let\'s Encrypt certificate with a DNS-01 challenge through the DNSPod API and answers the name locally for the Tesla; also add an A record for it pointing at 100.96.0.2 in the DNSPod console, so the name resolves through a public resolver too. The Tesla opens https://car.example.com/ without a warning.'));
 		o.placeholder = 'car.example.com';
 		o.depends('dns_provider', 'dnspod');
 

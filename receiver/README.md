@@ -34,7 +34,7 @@ On the box the receiver is not started by hand: `box/scripts/onecloud/run-receiv
 | `--device-name <name>` | `PlayPort` | AirPlay device name shown on the iPhone |
 | `--model`, `--manufacturer` | `playport` | AirPlay model / manufacturer strings |
 | `--airplay-port <port>` | 7000 | AirPlay RTSP port |
-| `--http-port <port>` | 8080 | viewer page and WebSocket (the box sets 18443, and leads port 443 of its own address to it) |
+| `--http-port <port>` | 8080 | viewer page and WebSocket (the box sets 18443, and leads port 443 of AutoPlay's own address, 100.96.0.2, to it) |
 | `--width`, `--height`, `--fps` | 1280, 720, 60 | display negotiated with the phone; the page adapts them at runtime |
 | `--ui-scale <75\|85\|100\|115>` | 85 | CarPlay content size as the physical width told to the phone (350/300/250/200 mm; 85 = 300 mm, the Tesla default) |
 | `--hevc` | off | offer H.265 (the page asks for it when the browser decodes it) |

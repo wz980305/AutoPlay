@@ -1,13 +1,15 @@
 """Optional: an own name with a Let's Encrypt certificate. The only route verified on a Tesla (F50 2026-10-14,
 again 2026-11-02): its browser opens https://<name>:18443/ without a certificate warning (tesla_only_box_delta.md 0;
-since 1.6.8 the address is https://<name>/, tesla_openwrt.page_rules).
+since 1.6.8 the address is https://<name>/, tesla_openwrt.page_rules; since 1.6.9 the name points at 100.96.0.2).
 Off unless the owner enters a name in LuCI. Two DNS providers (uci dns_provider):
 
 - duckdns (default): a DuckDNS sub-domain and its token (uci duckdns_domain / duckdns_token). The public DuckDNS
-  record is pointed at the router's LAN address (100.96.0.1; DuckDNS takes a private address) by update_record().
+  record is pointed where the box's own DNS points the name (DuckDNS takes a private address) by update_record():
+  AutoPlay's own address 100.96.0.2 since 1.6.9, the router's 100.96.0.1 before or when port 443 is not led there.
 - dnspod: a full domain the owner manages in Tencent Cloud DNS (uci own_domain / dnspod_id / dnspod_token). acme.sh's
   dns_dp hook creates the DNS-01 TXT record through the DNSPod API; the A record is the owner's to create in the
-  DNSPod console (recommended: <name> -> 100.96.0.1, so the name also resolves when the car asks a public resolver).
+  DNSPod console (recommended: <name> -> 100.96.0.2 since 1.6.9, so the name also resolves when the car asks a public
+  resolver).
   The DNSPod API token can change every record of the account: keep it to a box the owner controls.
 
 In both cases the box's own dnsmasq answers the name locally for the Tesla (tesla_openwrt.OfflineChecks).

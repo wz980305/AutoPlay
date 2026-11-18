@@ -6,8 +6,9 @@ journalled before changes and restored on exit/restart. Since 2026-10-25 the LAN
 signal (tesla_only_box_delta.md D4, R3): only the upstream probe's status text changes. The own name
 (DuckDNS or autoplay.lan) is answered here too, by one address= record (D2).
 
-Since 1.6.8 the same table also leads port 443 of the box's own address to the CarPlay page, so the Tesla opens
-https://<name>/ and shows the name alone: page_rules().
+Since 1.6.8 the Tesla opens https://<name>/ and shows the name alone: the same table leads port 443 to the CarPlay
+page (page_rules). Since 1.6.9 that is on the alias, AutoPlay's own address, and the own name is answered with the
+alias: the router's address (100.96.0.1) is left exactly as OpenWrt has it, LuCI on 80 and 443 included.
 """
 import ipaddress
 import json
@@ -28,8 +29,10 @@ PROBES = (('223.5.5.5', 443), ('1.12.12.12', 443), ('1.1.1.1', 443))
 PROBE_EVERY = 10
 
 
-def offline_fields(sections, network, host, own_name):
-    """UCI field map; refuse ambiguous multi-dnsmasq layouts rather than modify another LAN."""
+def offline_fields(sections, network, host, own_name, own_on_alias=False):
+    """UCI field map; refuse ambiguous multi-dnsmasq layouts rather than modify another LAN. own_on_alias: the own
+    name is answered with the alias, where page_rules() leads 443 to the CarPlay page (1.6.9); else with the
+    router's address, as before 1.6.8 (the page then has its port in the address)."""
     dns = [key for key, value in sections.items() if value.get('.type') == 'dnsmasq']
     lan = [key for key, value in sections.items()
            if value.get('.type') == 'dhcp' and value.get('interface') == network]
@@ -41,7 +44,7 @@ def offline_fields(sections, network, host, own_name):
         raise ValueError('联网检查别名地址已被 LAN 使用')
     entries = [f'/{name}/{alias}' for name in tesla_checks.TESLA_CHECK_NAMES]
     if own_name:
-        entries.append(f'/{own_name}/{address.ip}')
+        entries.append(f'/{own_name}/{alias if own_on_alias else address.ip}')
     # Preserve unrelated DHCP options, replacing only router and DNS. The box is the router: Teslas left a network
     # without a default route ~30 s after joining (two N1 users, 2026-10-16), as supervisor.hotspot_router.
     existing = sections[lan[0]].get('dhcp_option', [])
@@ -66,19 +69,20 @@ def redirect_rules(device, alias, port):
             f'add rule ip {TABLE} inbound iifname "{device}" ip daddr {alias} tcp dport 80 redirect to :{port}\n')
 
 
-def page_rules(device, address, viewer):
-    """The CarPlay page on the box's own address (1.6.8; the owner, 2026-11-16: the address bar should show the
-    name and no port). A browser leaves the port out only when it is the scheme's own, 443, and uhttpd holds that
-    one on every address; so port 443 of this address, coming in from the LAN, is led to the viewer here and
-    uhttpd is left as it is: LuCI stays on port 80, as the guide has always said, and its HTTPS no longer answers
-    on this address for the devices on the Wi-Fi. The viewer's own port is not changed and keeps answering (the
-    owner, 2026-11-18). Added to redirect_rules()'s table."""
+def page_rules(device, alias, viewer):
+    """The CarPlay page without a port in its address (the owner, 2026-11-16: the address bar should show the name
+    alone). A browser leaves the port out only when it is the scheme's own, 443. On the router's address uhttpd
+    (LuCI) holds 443; 1.6.8 led that one to the page, and one address meant two things (http LuCI, https CarPlay).
+    Since 1.6.9 (the owner, 2026-11-18: no mixing, as little change to the router as can be) it is the alias's 443,
+    AutoPlay's own address, which already answers the Tesla's checks on port 80; the own name points there
+    (offline_fields). uhttpd is not touched and the viewer keeps its own port. Added to redirect_rules()'s table:
+    from the LAN only, gone with the table."""
     if not device or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-' for c in device):
         raise ValueError('Invalid LAN device')
-    ipaddress.IPv4Address(address)
+    ipaddress.IPv4Address(alias)
     if not viewer_port.valid(viewer):
         raise ValueError('Invalid viewer port')
-    return (f'add rule ip {TABLE} inbound iifname "{device}" ip daddr {address} tcp dport 443 '
+    return (f'add rule ip {TABLE} inbound iifname "{device}" ip daddr {alias} tcp dport 443 '
             f'redirect to :{int(viewer)}\n')
 
 
@@ -118,7 +122,7 @@ class OfflineChecks:
         self.upstream = None
         self.probe_stop = threading.Event()
         self.probe_thread = None
-        self.bare = False       # https://<name>/ leads to the CarPlay page (page_rules' 443 is in place)
+        self.page_host = None   # the alias, when https://<name>/ leads to the CarPlay page (page_rules is in place)
         self.page_note = None   # why it does not
 
     def start_query_log(self):
@@ -159,31 +163,27 @@ class OfflineChecks:
         self.command(['uci', 'commit', 'dhcp'])
         self.command(['/etc/init.d/dnsmasq', 'restart'])
 
-    def luci_https_only(self):
-        """uhttpd sends LuCI's plain HTTP on to HTTPS (redirect_https): with 443 led to the CarPlay page, LuCI
-        could then not be opened from the Wi-Fi at all, so 443 is left alone on such a box."""
-        value = self.command(['uci', '-q', 'get', 'uhttpd.main.redirect_https'], check=False).stdout
-        return str(value).strip().lower() in ('1', 'on', 'true', 'yes', 'enabled')
+    @property
+    def bare(self):
+        """https://<name>/ and https://<alias>/ lead to the CarPlay page: the address needs no port."""
+        return self.page_host is not None
 
-    def lead_to_page(self, network, viewer):
+    def lead_to_page(self, network, alias, viewer):
         """page_rules(), after the checks' own rule and never in its way: a Tesla needs its checks answered to stay
         on the Wi-Fi; an address with a port in it only looks worse."""
-        self.bare, self.page_note = False, None
+        self.page_host, self.page_note = None, None
         if viewer is None:
             return
         try:
-            if self.luci_https_only():
-                self.page_note = 'LuCI sends HTTP to HTTPS (uhttpd redirect_https): port 443 left to it'
-                return
-            self.command(['nft', '-f', '-'], input=page_rules(network['device'], str(network['address'].ip), viewer))
-            self.bare = True
+            self.command(['nft', '-f', '-'], input=page_rules(network['device'], alias, viewer))
+            self.page_host = alias
         except Exception as error:   # noqa: BLE001 - whatever it is, the checks stay
             self.page_note = type(error).__name__ + ': ' + str(error)[:120]
 
     def restore(self):
         self.stop_probe()
         self.stop_query_log()
-        self.bare = False
+        self.page_host = None
         if not self.path.exists():
             return
         saved = json.loads(self.path.read_text())
@@ -202,7 +202,9 @@ class OfflineChecks:
         try:
             self.command(['ip', 'addr', 'add', alias + '/32', 'dev', network['device']])
             self.command(['nft', '-f', '-'], input=redirect_rules(network['device'], alias, port))
-            self.lead_to_page(network, viewer)
+            self.lead_to_page(network, alias, viewer)
+            if self.bare:   # the same fields, the own name answered with the alias (journalled above all the same)
+                fields = offline_fields(sections, network['network'], str(network['address']), own_name, True)[1]
             self.start_query_log()
             self.write_fields(fields)
             self.active = True
@@ -232,7 +234,7 @@ class OfflineChecks:
     def start(self, network, own_name, port, status, viewer=None):
         """Answer the checks from now on (always wanted: D4). CarPlay must keep running even if the Tesla
         plumbing cannot be built, so a failure only becomes a status reason (reliability work 6c). viewer: the
-        CarPlay page's port, for the address without one (self.bare says whether that is in place)."""
+        CarPlay page's port, for the address without one (self.page_host says whether and where that is)."""
         self.wanted = True
         try:
             if not self.active:
