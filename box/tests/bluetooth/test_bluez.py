@@ -119,13 +119,21 @@ class BlueZTests(unittest.IsolatedAsyncioTestCase):
         return process
 
     async def result(self, *args, env_extra=None):
-        """Runs the bridge to its end with stdin left open, as the receiver holds it: a closed stdin is the receiver
-        cancelling the invitation (bridge.watch_stdin, 1.4.1), and communicate() closes it at once - five tests of
-        the timeout and busy paths then saw "cancelled by the receiver" instead of what they test (review 2026-11-22)."""
+        """Runs the bridge to its end with stdin left open, as the receiver holds it (finish)."""
         process = await self.launch(*args, env_extra=env_extra)
-        out, err, _ = await asyncio.wait_for(
-            asyncio.gather(process.stdout.read(), process.stderr.read(), process.wait()), 5)
+        out, err = await self.finish(process)
         return process.returncode, out, err
+
+    @staticmethod
+    async def finish(process, timeout=5):
+        """The bridge's output once it has ended, its stdin left open. communicate() closes stdin first, and a closed
+        stdin is the receiver at work: while paging it cancels the invitation (bridge.watch_stdin, 1.4.1), once
+        connected it ends the link. Five tests of the timeout and busy paths saw "cancelled by the receiver" instead
+        of what they test (review 2026-11-22), and test_bluez_disappearance failed in CI when the closed stdin ended
+        the link before BlueZ's disappearance was seen (exit 0, 1.6.10 release run)."""
+        out, err, _ = await asyncio.wait_for(
+            asyncio.gather(process.stdout.read(), process.stderr.read(), process.wait()), timeout)
+        return out, err
 
     async def asyncTearDown(self):
         for process in self.processes:
@@ -181,7 +189,7 @@ class BlueZTests(unittest.IsolatedAsyncioTestCase):
         process = await self.launch('--print-address', env_extra={'BT_BRIDGE_READY_WAIT': '5'})
         await asyncio.sleep(0.6)
         self.data = objects()
-        out, err = await asyncio.wait_for(process.communicate(), 5)
+        out, err = await self.finish(process, 5)
         self.assertEqual((process.returncode, out), (0, b'02:00:00:00:00:01\n'), err)
         self.data[ADAPTER]['org.bluez.Adapter1']['Powered'] = Variant('b', False)
         process = await self.launch('--address', ADDRESS, env_extra={'BT_BRIDGE_READY_WAIT': '5'})
@@ -245,7 +253,7 @@ class BlueZTests(unittest.IsolatedAsyncioTestCase):
             loop.sock_sendall(self.peer, payload), process.stdout.readexactly(len(payload))), 5)
         self.assertEqual(received, payload)
         process.send_signal(signal.SIGTERM)
-        out, err = await asyncio.wait_for(process.communicate(), 5)
+        out, err = await self.finish(process, 5)
         self.assertEqual((process.returncode, out), (143, b''), err)
         self.assertNotIn(b'Traceback', err)
         self.assertTrue(self.disconnected)
@@ -261,7 +269,7 @@ class BlueZTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(self.connected.wait(), 5)
         self.assertEqual(self.powered, [False, True])
         process.send_signal(signal.SIGTERM)
-        out, err = await asyncio.wait_for(process.communicate(), 5)
+        out, err = await self.finish(process, 5)
         self.assertIn(b'retrying after stale-link recovery', err)
         self.assertIn(b'RFCOMM connected', err)
         self.assertNotIn(b'Traceback', err)
@@ -277,7 +285,7 @@ class BlueZTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.device_disconnects, [DEVICE])
         self.assertEqual(self.powered, [])
         process.send_signal(signal.SIGTERM)
-        out, err = await asyncio.wait_for(process.communicate(), 5)
+        out, err = await self.finish(process, 5)
         self.assertIn(b'retrying after cancelling the stale request', err)
         self.assertIn(b'RFCOMM connected', err)
         self.assertNotIn(b'Traceback', err)
@@ -352,7 +360,7 @@ class BlueZTests(unittest.IsolatedAsyncioTestCase):
         process = await self.launch('--address', ADDRESS)
         await asyncio.wait_for(self.connected.wait(), 3)
         await self.bus.release_name('org.bluez')
-        out, err = await asyncio.wait_for(process.communicate(), 5)
+        out, err = await self.finish(process, 5)
         self.assertEqual((process.returncode, out), (1, b''))
         self.assertIn(b'BlueZ disappeared', err)
         self.assertNotIn(b'Traceback', err)
@@ -364,7 +372,7 @@ class BlueZTests(unittest.IsolatedAsyncioTestCase):
             interface='org.bluez.Profile1', member='RequestDisconnection', signature='o', body=[DEVICE]))
         self.assertEqual(reply.message_type, MessageType.METHOD_RETURN)
         self.assertEqual(await asyncio.wait_for(asyncio.get_running_loop().sock_recv(self.peer, 1), 1), b'')
-        out, err = await asyncio.wait_for(process.communicate(), 5)
+        out, err = await self.finish(process, 5)
         self.assertEqual((process.returncode, out), (1, b''))
         self.assertNotIn(b'Traceback', err)
 
@@ -419,7 +427,7 @@ class BlueZTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(self.connected.wait(), 3)
         self.daemon.terminate()
         await self.daemon.wait()
-        out, err = await asyncio.wait_for(process.communicate(), 5)
+        out, err = await self.finish(process, 5)
         self.assertEqual((process.returncode, out), (1, b''))
         self.assertRegex(err, b'D-Bus disconnected|BlueZ disappeared')
         self.assertNotIn(b'Traceback', err)
@@ -433,7 +441,7 @@ class BlueZTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.01)
         reply = await self.send_fd('/org/bluez/hci0/dev_00_00_00_00_00_00')
         self.assertEqual(reply.message_type, MessageType.ERROR)
-        out, err = await asyncio.wait_for(process.communicate(), 4)
+        out, err = await self.finish(process, 4)
         self.assertEqual((process.returncode, out), (1, b''))
         self.assertNotIn(b'Traceback', err)
 

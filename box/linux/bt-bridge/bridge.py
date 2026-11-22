@@ -322,6 +322,12 @@ async def connect(bus, objects, adapter, args, stopped, owner):
         done, _ = await asyncio.wait([worker, closed, signaled, disconnected], return_when=asyncio.FIRST_COMPLETED)
         if worker in done:
             worker.result()
+            # BlueZ ending the link (RequestDisconnection, Release) records why and then stops the relay, so the
+            # relay's end and `closed` come together and which the wait saw first was chance: when it was the relay,
+            # the bridge exited 0 as if the link had simply ended and the reason was lost (CI, 1.6.10 release run;
+            # test_bluez_requested_disconnect_closes_fd). An end of the iPhone's or the receiver's has no reason.
+            if profile.reason:
+                raise BridgeError(profile.reason)
         elif signaled not in done:
             raise BridgeError(profile.reason or 'D-Bus disconnected')
     finally:
