@@ -92,9 +92,9 @@ ERROR_LINE = re.compile(r"\b(ERROR|fatal|Traceback|exited with|hs_err|OutOfMemor
 
 class LogMirror:
     """Logs that survive a power cut: every /var/run/autoplay/*.log (the supervisor, the receiver, the Bluetooth
-    helper; tmpfs is the RAM ring) appended to root/<boot>/ and fsynced once a minute, at once when a copied
-    chunk holds an error line, and at shutdown; at most LOG_FILE_MAX per file and boot. Offsets are kept beside
-    them, so a supervisor restart within the same boot neither repeats nor skips lines (2026-10-12: every
+    helper; tmpfs is the RAM ring) appended to root/<boot>/ and fsynced once a minute, when a child is started again
+    (renew: what the one before it wrote last), and at shutdown; at most LOG_FILE_MAX per file and boot. Offsets are
+    kept beside them, so a supervisor restart within the same boot neither repeats nor skips lines (2026-10-12: every
     drive's logs were lost on power-off; 2026-10-20: a 5 s fsync of 40 MB files wore the SD card).
     """
 
@@ -103,6 +103,9 @@ class LogMirror:
         self.directory = root / boot_id[:8]
         self.state_file = self.directory / ".offsets.json"
         self.wake = threading.Event()   # flush_now() sets it
+        # One cycle at a time: the mirror's own thread, and renew() on the supervisor's.
+        self.lock = threading.Lock()
+        self.offsets, self.handles = {}, {}
 
     def prune(self):
         boots = sorted((d for d in self.root.iterdir() if d.is_dir() and d != self.directory),
@@ -161,20 +164,74 @@ class LogMirror:
             offsets[key] = (stat.st_ino, offset)
         for fd in handles.values():
             os.fsync(fd)
-        self.state_file.write_text(json.dumps(offsets))
+        self.save(offsets)
         return urgent
+
+    def save(self, offsets):
+        """The offsets, replaced whole: a power cut while they were written in place left a cut-off file, read as
+        none at all, and the next start copied every log of this boot a second time."""
+        temporary = self.state_file.with_name(self.state_file.name + ".tmp")
+        temporary.write_text(json.dumps(offsets))
+        temporary.replace(self.state_file)
+
+    def renew(self, name):
+        """RUN/<name>.log is about to begin again for a child that is started anew (platform.start). What the child
+        before it wrote since the last cycle goes to the card first, and the new log is read from its beginning.
+
+        Until 1.6.9 that part was lost with every restart: the log was emptied up to a minute after its last copy,
+        so the kept logs of a receiver that had crashed ended before the reason. A new log that outgrew the old
+        one within the minute was not even seen as new, and its beginning was skipped (review 2026-11-22). The log
+        is emptied here, under the lock, so that no cycle can find the old text with the new offset. A child's
+        first start after a boot finds no log and costs nothing, not even the wait for a cycle under way."""
+        key = name + ".log"
+        path = self.run / key
+        try:
+            if not (path.is_file() and path.stat().st_size) and not self.offsets.get(key, (None, 0))[1]:
+                return
+        except OSError:
+            pass
+        with self.lock:
+            try:
+                if not self.directory.is_dir():
+                    return   # not started: nothing has been copied, nothing to keep in step
+                again = self.offsets.get(key, (None, 0))[1] > 0   # a log of this name has been copied before
+                if path.is_file() and path.stat().st_size:
+                    self.cycle(self.offsets, self.handles)
+                    with path.open("rb") as log:
+                        log.seek(self.offsets.get(key, (None, 0))[1])
+                        rest = log.read(4_000_000)
+                    if rest:   # a last line cut off before its end
+                        self.append(key, rest + b"\n", self.handles)
+                    os.truncate(path, 0)
+                    again = True
+                if again:
+                    self.append(key, f"[log mirror: {key} restarted]\n".encode(), self.handles)
+                    if path.is_file():
+                        self.offsets[key] = (path.stat().st_ino, 0)
+                    else:
+                        self.offsets.pop(key, None)
+                    if key in self.handles:
+                        os.fsync(self.handles[key])
+                    self.save(self.offsets)
+            except Exception as error:   # logging must never keep a child from starting
+                print(f"log mirror: {key} not copied before its restart: {type(error).__name__}", flush=True)
 
     def start(self, stopped, interval=MIRROR_INTERVAL):
         self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         os.utime(self.directory)
         self.prune()
-        offsets = {key: tuple(value) for key, value in self.load().items()}
-        handles = {}
+        with self.lock:
+            self.offsets.update({key: tuple(value) for key, value in self.load().items()})
+        offsets, handles = self.offsets, self.handles
+
+        def cycle():
+            with self.lock:
+                self.cycle(offsets, handles)
 
         def loop():
             while True:
                 try:
-                    self.cycle(offsets, handles)
+                    cycle()
                 except Exception as error:   # logging must never take the service down
                     print(f"log mirror skipped: {type(error).__name__}", flush=True)
                 # Wait a minute, or until an error asks for a flush; a quick second cycle then copies the rest.
@@ -185,11 +242,12 @@ class LogMirror:
                 if woke:
                     stopped.wait(2)
             try:
-                self.cycle(offsets, handles)   # what the shutdown itself logged
+                cycle()   # what the shutdown itself logged
             except Exception:
                 pass
 
-        threading.Thread(target=loop, name="log-mirror", daemon=True).start()
+        self.thread = threading.Thread(target=loop, name="log-mirror", daemon=True)
+        self.thread.start()
 
 
 def net_counters():

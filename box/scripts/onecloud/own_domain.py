@@ -484,16 +484,32 @@ def message(state, name):
     return "。".join(parts)
 
 
+_END = {}   # {chain path: (the file as it was read, its end)}: not_after()
+
+
 def not_after(state):
-    """The installed certificate's end as a Unix time, or None."""
-    out = _openssl("x509", "-noout", "-enddate", "-in", str(Path(state) / "tls" / "own" / "fullchain.pem"))
+    """The installed certificate's end as a Unix time, or None. The status asks every 10 s: openssl is run again
+    only when the file is another one (a renewal replaces it), not six times a minute for a date that changes every
+    two months (review 2026-11-22)."""
+    chain = Path(state) / "tls" / "own" / "fullchain.pem"
+    try:
+        stat = chain.stat()
+    except OSError:
+        return None
+    seen = (stat.st_ino, stat.st_size, stat.st_mtime_ns)
+    kept = _END.get(str(chain))
+    if kept and kept[0] == seen:
+        return kept[1]
+    out = _openssl("x509", "-noout", "-enddate", "-in", str(chain))
     if out.returncode:
         return None
     try:
         import calendar
-        return calendar.timegm(time.strptime(out.stdout.strip().split("=", 1)[1], "%b %d %H:%M:%S %Y %Z"))
+        end = calendar.timegm(time.strptime(out.stdout.strip().split("=", 1)[1], "%b %d %H:%M:%S %Y %Z"))
     except (IndexError, ValueError):
         return None
+    _END[str(chain)] = (seen, end)
+    return end
 
 
 def certificate_state(state, name, now=None, soon_days=30):

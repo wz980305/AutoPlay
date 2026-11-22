@@ -13,13 +13,14 @@ python3 -m unittest discover -s openwrt/tests      # 安装脚本 90-autoplay-te
 # 接收端：1.3.1 起 GitHub Actions 对每次推送跑 ./gradlew build（编译两个模块并跑全部测试），见下文「接收端」
 
 # 盒子侧：设置页、状态模型、守护（supervision）、升级日志与回滚、证书退避、时钟下限、出厂重置、平台、诊断、装机脚本
-cd box && python3 -m unittest discover -s tests/onecloud        # 286 个（1.6.0：+10，提示条是标题加一行、做不成的操作是提示框、恢复出厂设置的错误回到那一页、网络警告的写法、邀请中的手机写在自己那一行、检查失败一句话、403/404、没有填色按钮、对照 HIG 的进度条和自动检查、下载报告进度；1.5.3：+6，检查更新在 GitHub 卡住时接上镜像、整次 60 秒内放弃、刷新的页面带脚本重新载入；1.5.1：+1，两份样式表里决定标题栏位置的数值逐项相同；1.5.0：+13，盒子温度与过热提醒、处理器占用、系统更新保留、坐标系迁移、盒子网页的分类/日夜间/无小字、与设置面板的颜色逐项相同；Python 3.11–3.13 下都通过），通过
+cd box && python3 -m unittest discover -s tests/onecloud        # 305 个（2026-11-22 审查：+12，日志在子进程重启前抄完、联网检测的地址和规则补回、升级前量对存储、对时网址不在联网检测名单里、成功连接后不再提示重新添加、每 10 秒少做的三件事；1.6.9 时 293 个）。1.6.0 时 286 个（1.6.0：+10，提示条是标题加一行、做不成的操作是提示框、恢复出厂设置的错误回到那一页、网络警告的写法、邀请中的手机写在自己那一行、检查失败一句话、403/404、没有填色按钮、对照 HIG 的进度条和自动检查、下载报告进度；1.5.3：+6，检查更新在 GitHub 卡住时接上镜像、整次 60 秒内放弃、刷新的页面带脚本重新载入；1.5.1：+1，两份样式表里决定标题栏位置的数值逐项相同；1.5.0：+13，盒子温度与过热提醒、处理器占用、系统更新保留、坐标系迁移、盒子网页的分类/日夜间/无小字、与设置面板的颜色逐项相同；Python 3.11–3.13 下都通过），通过
 
 # 蓝牙桥：test_reason、test_relay 等 7 个可直接跑；test_bluez、test_recovery、test_power（盒子经 D-Bus 上电，1.6.3 起）需要 dbus-daemon 和 dbus-next 0.2.3
-cd box && python3 -m unittest discover -s tests/bluetooth       # 没有 dbus-next 时那三个模块报 import 错误，是环境问题
+cd box && python3 -m unittest discover -s tests/bluetooth       # 45 个，1 个跳过（JVM 联调，可选）。没有 dbus-next 时那三个模块报 import 错误，是环境问题。2026-11-22 起 CI 也跑（此前不跑，其中 5 个从 1.4.1 起一直失败而没人看到）
 
 # 100.96.0.2 的 443 到投屏页的转发（1.6.9）：两个网络命名空间当盒子和车，装盒子装的那两条 nft 规则，看每个地址到了谁那里；100.96.0.1 的 80 和 443 必须仍是 LuCI
-cd box && python3 -m unittest discover -s tests/net             # 需要 root、nft、unshare、pyroute2；缺一样就跳过，CI 不跑
+cd box && python3 -m unittest discover -s tests/net             # 需要 root、nft、ip、unshare、pyroute2；缺一样就跳过。2026-11-22 起 CI 也跑，在那里跳过算失败
+# 同一目录的 test_keep_plumbing.py：一个命名空间里用真的 ip 和 nft，把 100.96.0.2 和规则表清掉，看 OfflineChecks.keep() 补不补得回来、会不会装两遍
 # 同样的两个命名空间，盒子一侧换成接收端真正的网页服务（Ktor/Netty、TLS，`LabServeTest`），车一侧用 curl 和 WebSocket 握手
 # 经 https://<域名>/ 和 :18443 各问一遍，再从别的网站、http 来源、别的端口、错令牌问一遍（必须被拒绝）。Ktor 升级后重跑。
 (cd receiver && ./gradlew :server:test) && sudo python3 box/tests/net/receiver_lab.py   # 17 行，全 ok 时退出码 0；CI 不跑

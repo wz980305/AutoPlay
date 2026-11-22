@@ -119,8 +119,12 @@ class BlueZTests(unittest.IsolatedAsyncioTestCase):
         return process
 
     async def result(self, *args, env_extra=None):
+        """Runs the bridge to its end with stdin left open, as the receiver holds it: a closed stdin is the receiver
+        cancelling the invitation (bridge.watch_stdin, 1.4.1), and communicate() closes it at once - five tests of
+        the timeout and busy paths then saw "cancelled by the receiver" instead of what they test (review 2026-11-22)."""
         process = await self.launch(*args, env_extra=env_extra)
-        out, err = await asyncio.wait_for(process.communicate(), 5)
+        out, err, _ = await asyncio.wait_for(
+            asyncio.gather(process.stdout.read(), process.stderr.read(), process.wait()), 5)
         return process.returncode, out, err
 
     async def asyncTearDown(self):
@@ -305,6 +309,22 @@ class BlueZTests(unittest.IsolatedAsyncioTestCase):
                     self.assertIn(b'RFCOMM connection timed out', err)
                     self.assertEqual((self.device_disconnects, self.powered), ([], []))
                     self.data[ADAPTER]['org.bluez.Adapter1'][key] = Variant('b', False)
+
+    async def test_closing_stdin_while_paging_cancels_the_invitation(self):
+        # 1.4.1: the receiver cancels an invitation still paging the iPhone by closing the bridge's stdin; the bridge
+        # stops at once (not after its timeout) and says why in one word.
+        self.mode = 'connect-hang'
+        self.data[DEVICE]['org.bluez.Device1']['Connected'] = Variant('b', False)
+        process = await self.launch('--timeout', '30', '--address', ADDRESS)
+        await asyncio.sleep(0.6)
+        self.assertIsNone(process.returncode, 'still paging')
+        process.stdin.close()
+        out, err, _ = await asyncio.wait_for(
+            asyncio.gather(process.stdout.read(), process.stderr.read(), process.wait()), 5)
+        self.assertEqual((process.returncode, out), (1, b''), err)
+        self.assertIn(b'invitation cancelled by the receiver', err)
+        self.assertIn(b'bt-bridge: reason=aborted', err)
+        self.assertNotIn(b'Traceback', err)
 
     async def test_held_request_without_opt_in_still_fails_plainly(self):
         self.mode = 'held-request'

@@ -368,6 +368,29 @@ class ReasonTests(unittest.TestCase):
         self.assertEqual(sup.phone_state({}, reasons=reasons), ("pairing-lost", "pairing-lost"))
         self.assertEqual(sup.phone_state({}, reasons=["page-timeout"]), ("idle", "page-timeout"))
         self.assertEqual(sup.phone_state({"declined": {"AA": 1}}), ("declined", None))
+
+    def test_an_invitation_that_got_through_ends_what_failed_before_it(self):
+        # Review 2026-11-22: the iPhone had forgotten the pairing (two authentication failures), the owner added it
+        # again and drove; when that session ended the page said "delete it and add it again" once more.
+        log = ("bt-bridge: reason=pairing-lost\nbt-bridge: reason=pairing-lost\n"
+               "12:00:01 INFO bt-bridge - bt-bridge: RFCOMM connected\n")
+        self.assertEqual(sup.bridge_reasons(log), [])
+        self.assertEqual(sup.phone_state({}, reasons=sup.bridge_reasons(log)), ("idle", None))
+        later = log + "bt-bridge: reason=page-timeout\n"
+        self.assertEqual(sup.bridge_reasons(later), ["page-timeout"])
+        self.assertEqual(sup.phone_state({}, reasons=sup.bridge_reasons(later)), ("idle", "page-timeout"))
+        self.assertEqual(sup.bridge_reasons(""), [])
+        self.assertEqual(sup.bridge_reasons(None), [])
+
+    def test_only_the_end_of_the_receiver_log_is_read(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "receiver.log"
+            self.assertEqual(sup.log_tail(log), "", "no log yet")
+            log.write_text("bt-bridge: reason=pairing-lost\n" + "x" * 5000 + "\nbt-bridge: reason=page-timeout\n")
+            self.assertEqual(sup.bridge_reasons(sup.log_tail(log)), ["pairing-lost", "page-timeout"])
+            self.assertEqual(sup.bridge_reasons(sup.log_tail(log, limit=100)), ["page-timeout"])
+            self.assertEqual(len(sup.log_tail(log, limit=100)), 100)
+        self.assertGreaterEqual(sup.RECEIVER_LOG_TAIL, 64 << 10)
         self.assertEqual(sup.phone_state({}), ("idle", None))
 
     def test_channel_warning(self):

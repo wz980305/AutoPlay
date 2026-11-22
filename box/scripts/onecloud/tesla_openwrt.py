@@ -86,6 +86,15 @@ def page_rules(device, alias, viewer):
             f'redirect to :{int(viewer)}\n')
 
 
+def has_address(listing, address):
+    """Whether `ip -4 -o addr show dev <device>` lists address (as a /32 or with any other prefix)."""
+    for line in (listing or '').splitlines():
+        fields = line.split()
+        if len(fields) >= 4 and fields[2] == 'inet' and fields[3].split('/')[0] == address:
+            return True
+    return False
+
+
 def wan_available(run=subprocess.run, connect=socket.create_connection):
     """Probe from an up, non-LAN interface with a default route; bypass our offline DNS.
     TCP success proves an upstream path, not the availability of each Tesla service.
@@ -124,6 +133,7 @@ class OfflineChecks:
         self.probe_thread = None
         self.page_host = None   # the alias, when https://<name>/ leads to the CarPlay page (page_rules is in place)
         self.page_note = None   # why it does not
+        self.plumbing = None    # (device, alias, settings port, viewer port) while the checks are answered: keep()
 
     def start_query_log(self):
         if self.platform is None or self.query_process is not None and self.query_process.poll() is None:
@@ -184,6 +194,7 @@ class OfflineChecks:
         self.stop_probe()
         self.stop_query_log()
         self.page_host = None
+        self.plumbing = None
         if not self.path.exists():
             return
         saved = json.loads(self.path.read_text())
@@ -208,10 +219,35 @@ class OfflineChecks:
             self.start_query_log()
             self.write_fields(fields)
             self.active = True
+            self.plumbing = (network['device'], alias, port, viewer)
             self.start_probe()
         except Exception:
             self.restore()
             raise
+
+    def keep(self):
+        """The alias address and the rules are still there; what is gone is put back. Returns what was, for the log.
+
+        Both are made once, at the start, and only this service knows of them. netifd clears a device's addresses
+        when it brings the LAN up again (a network restart, a LAN setting applied in LuCI), and a flushed ruleset
+        takes the table: the Tesla's checks then went unanswered, and since 1.6.9 the address without a port led
+        nowhere, until the service was next started (review 2026-11-22). Asked every 10 s by the supervisor; a
+        check that cannot be made changes nothing."""
+        if not self.active or not self.plumbing:
+            return []
+        device, alias, port, viewer = self.plumbing
+        back = []
+        listed = self.command(['ip', '-4', '-o', 'addr', 'show', 'dev', device], check=False)
+        if listed.returncode == 0 and not has_address(listed.stdout, alias):
+            self.command(['ip', 'addr', 'add', alias + '/32', 'dev', device])
+            back.append('address')
+        table = self.command(['nft', 'list', 'table', 'ip', TABLE], check=False)
+        if table.returncode != 0 and 'No such file' in (table.stderr or ''):
+            self.command(['nft', '-f', '-'], input=redirect_rules(device, alias, port))
+            back.append('rules')
+            if self.page_host:
+                self.command(['nft', '-f', '-'], input=page_rules(device, alias, viewer))
+        return back
 
     def start_probe(self):
         if self.probe_thread is not None and self.probe_thread.is_alive():

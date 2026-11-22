@@ -106,6 +106,77 @@ class OpenWrtOfflineTests(unittest.TestCase):
             self.assertEqual(self.names(run), [f'dhcp.dns.address=/{NAME}/100.96.0.1'])
             controller.restore()
 
+    def test_the_alias_and_the_rules_are_put_back_when_something_took_them(self):
+        # Review 2026-11-22: both were made once at the start. netifd clears the LAN device's addresses when it
+        # brings the interface up again, and nothing put the alias back: no check answered, no page by its name.
+        with tempfile.TemporaryDirectory() as directory:
+            there = {'address': True, 'table': True}
+
+            def system(argv, **kwargs):
+                if argv[:2] == ['ip', '-4']:
+                    lines = ['7: br-lan    inet 100.96.0.1/24 brd 100.96.0.255 scope global br-lan\\       valid_lft forever']
+                    if there['address']:
+                        lines.append('7: br-lan    inet 100.96.0.2/32 scope global br-lan\\       valid_lft forever')
+                    return Mock(stdout='\n'.join(lines) + '\n', stderr='', returncode=0)
+                if argv[:3] == ['nft', 'list', 'table']:
+                    return Mock(stdout='', stderr='' if there['table'] else 'Error: No such file or directory\n',
+                                returncode=0 if there['table'] else 1)
+                if argv[:3] == ['ip', 'addr', 'add']:
+                    there['address'] = True
+                if argv[:3] == ['nft', '-f', '-'] and 'add table' in kwargs.get('input', ''):
+                    there['table'] = True
+                return Mock(stdout=json.dumps({'values': SECTIONS}), stderr='', returncode=0)
+            run = Mock(side_effect=system)
+            controller = tesla.OfflineChecks(directory, run)
+            self.assertEqual(controller.keep(), [], 'nothing to keep before the checks are answered')
+            run.assert_not_called()
+            controller.start(NETWORK, NAME, PORT, {}, 18443)
+            built = len(run.call_args_list)
+            self.assertEqual(controller.keep(), [])
+            self.assertEqual([c.args[0][:3] for c in run.call_args_list[built:]],
+                             [['ip', '-4', '-o'], ['nft', 'list', 'table']], 'two looks, nothing changed')
+
+            there['address'] = False   # netifd brought the LAN up again
+            built = len(run.call_args_list)
+            self.assertEqual(controller.keep(), ['address'])
+            self.assertIn(['ip', 'addr', 'add', '100.96.0.2/32', 'dev', 'br-lan'], [c.args[0] for c in run.call_args_list[built:]])
+            self.assertEqual(controller.keep(), [])
+
+            there['table'] = False     # someone flushed the ruleset
+            built = len(run.call_args_list)
+            self.assertEqual(controller.keep(), ['rules'])
+            loaded = [c.kwargs['input'] for c in run.call_args_list[built:] if c.args[0][:3] == ['nft', '-f', '-']]
+            self.assertEqual(loaded, [tesla.redirect_rules('br-lan', '100.96.0.2', PORT),
+                                      tesla.page_rules('br-lan', '100.96.0.2', 18443)], 'as at the start: checks, then page')
+            self.assertEqual(controller.keep(), [])
+
+            # A look that cannot be made changes nothing: no second address, no rule added twice.
+            def blind(argv, **kwargs):
+                if argv[:2] == ['ip', '-4']:
+                    return Mock(stdout='', stderr='Cannot open netlink socket', returncode=1)
+                if argv[:3] == ['nft', 'list', 'table']:
+                    return Mock(stdout='', stderr='Error: Could not process rule: Resource busy\n', returncode=1)
+                return Mock(stdout='', stderr='', returncode=0)
+            run.side_effect = blind
+            built = len(run.call_args_list)
+            self.assertEqual(controller.keep(), [])
+            self.assertEqual(len(run.call_args_list) - built, 2)
+
+            run.side_effect = system
+            controller.restore()
+            built = len(run.call_args_list)
+            self.assertEqual(controller.keep(), [], 'the service stopped: nothing is put back')
+            self.assertEqual(len(run.call_args_list), built)
+
+    def test_has_address_reads_ip_addr(self):
+        listing = ('7: br-lan    inet 100.96.0.1/24 brd 100.96.0.255 scope global br-lan\\       valid_lft forever\n'
+                   '7: br-lan    inet 100.96.0.2/32 scope global br-lan\\       valid_lft forever\n')
+        self.assertTrue(tesla.has_address(listing, '100.96.0.2'))
+        self.assertTrue(tesla.has_address(listing, '100.96.0.1'))
+        self.assertFalse(tesla.has_address(listing, '100.96.0.20'))
+        self.assertFalse(tesla.has_address('', '100.96.0.2'))
+        self.assertFalse(tesla.has_address(None, '100.96.0.2'))
+
     def test_without_a_viewer_port_nothing_is_added(self):
         with tempfile.TemporaryDirectory() as directory:
             run = Mock(return_value=Mock(stdout=json.dumps({'values': SECTIONS}), returncode=0))

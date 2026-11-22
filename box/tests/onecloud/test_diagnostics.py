@@ -3,6 +3,7 @@ import os
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -194,6 +195,74 @@ class LogMirrorTests(unittest.TestCase):
         offsets = {k: tuple(v) for k, v in again.load().items()}
         again.cycle(offsets, {})
         self.assertTrue((mirror.directory / 'receiver.log').read_text().endswith('restarted]\nfresh\n'))
+
+    def started(self):
+        """A mirror as the supervisor runs it, its minute far away: only what the test asks for is copied."""
+        mirror = diagnostics.LogMirror(self.root, self.run, 'abcdef0123456789')
+        stopped = threading.Event()
+        mirror.start(stopped, interval=3600)
+        self.addCleanup(lambda: (stopped.set(), mirror.wake.set(), mirror.thread.join(5)))   # its last cycle, then the directory goes
+        for _ in range(100):   # its first cycle
+            if mirror.state_file.exists():
+                break
+            time.sleep(0.02)
+        return mirror
+
+    def cycle(self, mirror):
+        with mirror.lock:
+            mirror.cycle(mirror.offsets, mirror.handles)
+
+    def test_a_restarted_child_keeps_what_the_one_before_it_wrote_last(self):
+        # Review 2026-11-22: platform.start() emptied RUN/<name>.log up to a minute after its last copy, so the kept
+        # logs of a crashed receiver ended before the reason; and a new log longer than the old one was not seen as
+        # new, its beginning skipped. renew() (platform.before_start) copies first and starts the log again.
+        receiver = self.run / 'receiver.log'
+        receiver.write_text('started\nsession active\n')
+        mirror = self.started()
+        kept = mirror.directory / 'receiver.log'
+        self.assertEqual(kept.read_text(), 'started\nsession active\n')
+        with receiver.open('a') as log:
+            log.write('Exception in thread main: why it ended\nand a last line cut off')
+        mirror.renew('receiver')
+        self.assertEqual(receiver.read_text(), '', 'the log begins again')
+        with receiver.open('w') as log:   # platform.start()
+            log.write('started again, and this run has written more than the one before it\nsecond line\n')
+        self.cycle(mirror)
+        self.assertEqual(kept.read_text(), 'started\nsession active\nException in thread main: why it ended\n'
+                         'and a last line cut off\n[log mirror: receiver.log restarted]\n'
+                         'started again, and this run has written more than the one before it\nsecond line\n')
+        self.assertEqual(json.loads(mirror.state_file.read_text())['receiver.log'][1], receiver.stat().st_size)
+
+    def test_a_first_start_costs_nothing_and_a_broken_card_never_stops_a_child(self):
+        mirror = self.started()
+        with patch.object(mirror, 'cycle') as cycle:
+            mirror.renew('bluetooth')            # no log yet: a child's first start after a boot
+            (self.run / 'bluetooth.log').write_text('')
+            mirror.renew('bluetooth')            # an empty one
+            cycle.assert_not_called()
+        self.assertFalse((mirror.directory / 'bluetooth.log').exists())
+        (self.run / 'bluetooth.log').write_text('line\n')
+        with patch.object(mirror, 'cycle', side_effect=OSError('card gone')), patch('builtins.print') as said:
+            mirror.renew('bluetooth')            # must return, whatever the card does
+        self.assertIn('not copied before its restart', said.call_args.args[0])
+        # Before start() nothing has been copied and nothing is touched.
+        idle = diagnostics.LogMirror(self.root, self.run, 'fedcba9876543210')
+        idle.renew('bluetooth')
+        self.assertEqual((self.run / 'bluetooth.log').read_text(), 'line\n')
+        self.assertFalse(idle.directory.exists())
+
+    def test_offsets_are_replaced_whole(self):
+        # A power cut while .offsets.json was written in place left a cut-off file, read as no offsets: the next
+        # start copied every log of the boot a second time.
+        (self.run / 'receiver.log').write_text('one\n')
+        mirror = diagnostics.LogMirror(self.root, self.run, 'abcdef0123456789')
+        mirror.directory.mkdir()
+        replaced = []
+        real = Path.replace
+        with patch.object(Path, 'replace', autospec=True, side_effect=lambda a, b: (replaced.append((a.name, Path(b).name)), real(a, b))[1]):
+            mirror.cycle({}, {})
+        self.assertEqual(replaced, [('.offsets.json.tmp', '.offsets.json')])
+        self.assertEqual(sorted(p.name for p in mirror.directory.iterdir()), ['.offsets.json', 'receiver.log'])
 
     @patch('diagnostics.subprocess.run')
     def test_only_run_logs_are_kept(self, run):

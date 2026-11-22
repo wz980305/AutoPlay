@@ -12,7 +12,7 @@ import tempfile
 import threading
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/onecloud"))
 import boxnet
@@ -276,6 +276,32 @@ class MaintainerTests(unittest.TestCase):
             own_domain.write_status(self.state, name=self.name, phase='retry')
             with patch.object(own_domain, 'certificate_for', return_value=True):
                 self.assertEqual(self.maintainer().check_certificate(), own_domain.CERT_CHECK)
+
+    def test_the_certificates_end_is_read_once_per_file(self):
+        # Review 2026-11-22: the status asked openssl for the end date every 10 s.
+        chain = self.state / "tls" / "own" / "fullchain.pem"
+        self.assertIsNone(own_domain.not_after(self.state), "no certificate: openssl is not even asked")
+        chain.parent.mkdir(parents=True, exist_ok=True)
+        chain.write_text("first")
+        answer = Mock(returncode=0, stdout="notAfter=Jan 11 08:00:00 2027 GMT\n")
+        with patch.object(own_domain, "_openssl", return_value=answer) as openssl:
+            first = own_domain.not_after(self.state)
+            self.assertEqual(time.strftime("%Y-%m-%d", time.gmtime(first)), "2027-01-11")
+            self.assertEqual(own_domain.not_after(self.state), first)
+            self.assertEqual(openssl.call_count, 1)
+            # A renewal replaces the file: read again.
+            renewed = chain.with_name("fullchain.new")
+            renewed.write_text("second, renewed")
+            renewed.replace(chain)
+            answer.stdout = "notAfter=Mar 12 08:00:00 2027 GMT\n"
+            self.assertEqual(time.strftime("%Y-%m-%d", time.gmtime(own_domain.not_after(self.state))), "2027-03-12")
+            self.assertEqual(openssl.call_count, 2)
+            # What could not be read is asked again, not remembered.
+            chain.write_text("third, unreadable")
+            answer.returncode = 1
+            self.assertIsNone(own_domain.not_after(self.state))
+            self.assertIsNone(own_domain.not_after(self.state))
+            self.assertEqual(openssl.call_count, 4)
 
     def test_certificate_state_for_the_status_model(self):
         self.assertEqual(own_domain.certificate_state(self.state, None)["state"], "self_signed")

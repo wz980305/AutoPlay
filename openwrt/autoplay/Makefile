@@ -11,7 +11,7 @@ PKG_VERSION:=1.6.9
 PKG_RELEASE:=1
 PKG_LICENSE:=GPL-3.0-only
 PKG_SOURCE:=autoplay-bundle-$(PKG_VERSION).tar
-# The fork's own releases (github.com/wz980305/AutoPlay; none is attached yet, so the bundle is built locally).
+# The fork's own releases (github.com/wz980305/AutoPlay): each carries the bundle its packages were built from.
 PKG_SOURCE_URL:=https://github.com/wz980305/AutoPlay/releases/download/v$(PKG_VERSION)/
 # scripts/bump-autoplay.sh sets the hash of the release bundle; a local bundle (build-packages.sh) overrides it.
 PKG_HASH:=skip
@@ -33,9 +33,9 @@ define Package/autoplay
 endef
 
 define Package/autoplay/description
-  Receives wireless CarPlay from an iPhone (Bluetooth + Wi-Fi) and shows it, with sound and touch, in the
-  car's web browser on the router's network. The MFi identity is not included: put it in
-  /opt/autoplay/identity/offline-mfi/ yourself.
+  Receives wireless CarPlay from an iPhone (Bluetooth + Wi-Fi) and shows it, with touch, in the car's web
+  browser on the router's network; every sound plays over the car's own Bluetooth. The MFi identity is not
+  included: put it in /opt/autoplay/identity/offline-mfi/ yourself.
 endef
 
 define Package/autoplay/conffiles

@@ -78,6 +78,7 @@ FORBIDDEN = re.compile(r"^(kernel|kmod-|bluez)")   # never through an online upd
 CHECK_EVERY = 24 * 3600
 BACKUP = "autoplay-update-backup.tar.gz"   # beside the program directory: the owner's data before the last update
 CACHE = "autoplay-update-cache"            # beside the program directory: the previous packages, until the next boot proves the new ones
+NEEDED_FREE = 200 << 20                    # bytes free beside the program directory before an update starts
 JOURNAL = "state/update-journal.json"      # what an install is doing, for recovery at the next supervisor start (reliability_audit #8)
 STATUS_FILE = Path("/var/run/autoplay/status.json")   # the supervisor's status (status_model.py): the health check reads it
 
@@ -732,8 +733,12 @@ def install(root, openwrt=None, key=KEY):
                               "请按安装说明手动升级")
         if carplay_in_use(root):
             raise UpdateError("CarPlay 正在使用中，请停车并断开后再升级。")
-        if shutil.disk_usage(tempfile.gettempdir()).free < 200 << 20:
-            raise UpdateError("临时空间不足 200 MB，无法下载")
+        # Where the room must be: beside the program directory, where the backup and both package sets (this
+        # release, and the installed one for the way back) are kept and apk unpacks. Until 1.6.9 the temporary
+        # directory was measured, a RAM disk nothing of an update is written to: a full card was found out only
+        # when a download failed half-way (review 2026-11-22).
+        if shutil.disk_usage(root.parent).free < NEEDED_FREE:
+            raise UpdateError(f"存储空间不足 {NEEDED_FREE >> 20} MB，无法升级")
         status("backup", "正在备份配对、证书和设置")
         saved = backup(root, openwrt)
         with tempfile.TemporaryDirectory(prefix="autoplay-update.") as work:
@@ -791,7 +796,13 @@ def launch(root, openwrt=None):
 
 # Plain HTTP on purpose: its Date header needs no clock, while HTTPS fails on a clock off by months. The F50 has no
 # battery-backed clock: it starts from its last saved time, and without a SIM NTP never gets through.
-CLOCK_URLS = ("http://www.baidu.com/", "http://connectivitycheck.gstatic.com/generate_204")
+# None of these may be a name the box answers itself for the Tesla (tesla_checks.TESLA_CHECK_NAMES, which the
+# box's own resolver gets from its dnsmasq like every client): until 1.6.9 both were (www.baidu.com and
+# connectivitycheck.gstatic.com), so the box read its own clock back from its own web server and always found it
+# right (review 2026-11-22; test_update asserts the two lists stay apart). baidu.com without the www is not such a
+# name; the other two are the checks iPhones and Windows make, reachable in mainland China as well.
+CLOCK_URLS = ("http://baidu.com/", "http://captive.apple.com/hotspot-detect.html",
+              "http://www.msftconnecttest.com/connecttest.txt")
 CLOCK_SLACK = 600
 
 

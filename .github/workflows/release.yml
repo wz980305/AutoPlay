@@ -39,6 +39,25 @@ jobs:
           python3 -m unittest discover -s tools/f50
           sh -n openwrt/autoplay/files/autoplay.init && sh -n openwrt/autoplay/files/90-autoplay-tesla
           sh -n box/scripts/build-bundle.sh && sh -n box/scripts/release.sh && sh -n openwrt/scripts/build-packages.sh
+      # Two suites nothing ran until 1.6.9: five of the bridge's tests had been failing unseen since 1.4.1 (their
+      # helper closed the bridge's stdin, which since then cancels the invitation; review 2026-11-22).
+      - name: Bluetooth bridge against a private D-Bus and a mock BlueZ
+        run: |
+          python3 -m pip install --quiet --require-hashes -r box/linux/bt-bridge/requirements.txt
+          command -v dbus-daemon >/dev/null || { sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends dbus; }
+          (cd box && python3 -m unittest discover -s tests/bluetooth)
+      - name: the nft rules and their upkeep in a real kernel (network namespaces)
+        run: |
+          python3 -m pip install --quiet pyroute2==0.9.7
+          for tool in nft ip unshare; do command -v "$tool" >/dev/null || need=1; done
+          [ -z "${need:-}" ] || { sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends nftables iproute2 util-linux; }
+          # Root, with this job's Python (sudo drops PATH and the library path setup-python gives it).
+          log="$RUNNER_TEMP/net-tests.log"
+          (cd box && sudo env "PATH=$PATH" "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" python3 -m unittest discover -s tests/net -v) > "$log" 2>&1 \
+            || { cat "$log"; exit 1; }
+          cat "$log"
+          # These tests skip themselves where a tool is missing: here that would be a pass that tested nothing.
+          ! grep -q "skipped" "$log" || { echo "the network tests did not run" >&2; exit 1; }
       - name: viewer checks and type check
         working-directory: receiver/web
         run: |

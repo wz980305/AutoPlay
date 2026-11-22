@@ -9,7 +9,6 @@ at start the clock is moved forward to it when it is behind. It never moves the 
 A second time source (the viewer page's Date.now() over the WebSocket, the iPhone's AirPlay time) would need a
 channel the receiver does not offer the box today: a receiver-side task (docs/STATUS-MODEL.md).
 """
-import os
 from pathlib import Path
 import time
 import state as state_files

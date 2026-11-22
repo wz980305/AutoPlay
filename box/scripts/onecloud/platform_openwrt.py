@@ -268,11 +268,16 @@ class OpenWrtPlatform:
         self.children = []
         self.bluetooth_state = None     # state/ directory, set by the supervisor
         self.cpu = CpuMeter()
+        # Called with a child's name before its log begins again (the supervisor: diagnostics.LogMirror.renew).
+        self.before_start = None
 
     boot_id = staticmethod(boot_id)
 
     def start(self, name, argv):
-        """Start a child in its own session with its stdout/stderr in RUN/<name>.log."""
+        """Start a child in its own session with its stdout/stderr in RUN/<name>.log, which begins again: what the
+        child before it left there is kept first (before_start)."""
+        if self.before_start:
+            self.before_start(name)
         with (self.run / (name + ".log")).open("w") as log:
             child = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log,
                                      stderr=subprocess.STDOUT, start_new_session=True)

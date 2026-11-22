@@ -329,7 +329,7 @@ class SettingsPage:
             self.pairing.reset_all()   # BlueZ forgets the iPhones too (best effort: BlueZ may be down)
         except Exception:   # noqa: BLE001
             pass
-        removed = factory_reset.wipe(self.root, identity=identity, uci=self.uci)
+        factory_reset.wipe(self.root, identity=identity, uci=self.uci)
         threading.Timer(1.0, self.on_change, args=("factory reset",)).start()
         return ("已恢复出厂设置" + ("并删除认证文件" if identity else "")
                 + "：盒子正在重新启动，之后请重新添加 iPhone。")

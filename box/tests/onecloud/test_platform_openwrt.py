@@ -57,6 +57,17 @@ class ChildTests(unittest.TestCase):
         self.assertIsNotNone(b.poll())
         self.assertEqual(self.platform.children, [])
 
+    def test_before_start_is_told_before_the_log_begins_again(self):
+        # The supervisor hooks diagnostics.LogMirror.renew here: what the child before left in the log is kept first.
+        log = Path(self.tmp.name) / 'receiver.log'
+        log.write_text('why the one before it ended\n')
+        seen = []
+        self.platform.before_start = lambda name: seen.append((name, log.read_text()))
+        child = self.platform.start('receiver', [sys.executable, '-c', 'print("new run")'])
+        child.wait(5)
+        self.assertEqual(seen, [('receiver', 'why the one before it ended\n')])
+        self.assertEqual(log.read_text(), 'new run\n')
+
     def test_forget_child_drops_an_exited_child(self):
         child = self.platform.start('x', [sys.executable, '-c', 'pass'])
         child.wait(5)

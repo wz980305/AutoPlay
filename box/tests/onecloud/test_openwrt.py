@@ -341,6 +341,26 @@ class SharedLanTests(unittest.TestCase):
                 supervisor_openwrt.refresh_network_warning("br-lan", status, "", Path(tmp) / "n.json")
         self.assertEqual(ui.parts(status["warning"]), ("暂时无法检查特斯拉网段冲突", "稍后会自动重试。"))
 
+    def test_the_ruleset_is_read_only_for_a_tailscale_interface(self):
+        # Review 2026-11-22: `nft list ruleset` ran every 10 s on every box, and only a Tailscale interface is
+        # judged by it.
+        def system(with_tailscale):
+            def run(argv, **kwargs):
+                listed.append(argv[0])
+                text = ADDRESSES + ("9: tailscale0    inet 100.101.102.103/32 scope global tailscale0\n" if with_tailscale else "")
+                return supervisor_openwrt.subprocess.CompletedProcess(argv, 0, text if argv[0] == "ip" else "table inet fw4 {}\n", "")
+            return run
+        for with_tailscale, programs in ((False, ["ip"]), (True, ["ip", "nft"])):
+            listed, status = [], {}
+            with tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(supervisor_openwrt.subprocess, "run", side_effect=system(with_tailscale)):
+                supervisor_openwrt.refresh_network_warning("br-lan", status, "", Path(tmp) / "n.json")
+            self.assertEqual(listed, programs)
+            self.assertEqual(status["warning"], "", "a ruleset without Tailscale's drop: no warning either way")
+        self.assertFalse(supervisor_openwrt.has_tailscale(ADDRESSES))
+        self.assertFalse(supervisor_openwrt.has_tailscale(""))
+        self.assertTrue(supervisor_openwrt.has_tailscale("9: tailscale0    inet 100.101.102.103/32 scope global tailscale0\n"))
+
     def test_the_warning_file_is_written_only_on_change(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "network-status.json"

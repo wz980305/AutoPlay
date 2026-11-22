@@ -13,6 +13,7 @@ import tarfile
 import tempfile
 import threading
 import time
+import types
 import unittest
 from unittest.mock import patch
 
@@ -93,6 +94,18 @@ class ClockTests(unittest.TestCase):
                 raise date
             return self.Reply(date)
         return open_
+
+    def test_the_clock_is_never_asked_of_a_name_the_box_answers_itself(self):
+        # Review 2026-11-22: both servers were Tesla check names, which the box's dnsmasq answers with the box's
+        # own address for every client, the box included: the "server's" Date was the box's own clock.
+        import tesla_checks
+        import urllib.parse
+        self.assertGreaterEqual(len(update.CLOCK_URLS), 2)
+        for url in update.CLOCK_URLS:
+            parts = urllib.parse.urlsplit(url)
+            self.assertEqual(parts.scheme, 'http', 'HTTPS needs the clock it is asked for')
+            for name in tesla_checks.TESLA_CHECK_NAMES:   # dnsmasq's address=/name/ covers the name's sub-domains too
+                self.assertFalse(parts.hostname == name or parts.hostname.endswith('.' + name), url)
 
     def test_a_clock_months_behind_is_set_from_the_date_header(self):
         set_to = []
@@ -391,6 +404,24 @@ class SignedReleaseTests(unittest.TestCase):
         with patch.object(update, 'apk_version', lambda name: '2026.10.20-r1'):
             self.assertEqual(update.install(self.root, True, self.pub), 0)
             self.assertIn('已是最新', json.loads((self.root / 'state/update-status.json').read_text())['message'])
+
+    def test_no_install_without_room_where_the_update_is_kept(self):
+        # Review 2026-11-22: the room was measured in the temporary directory (a RAM disk on the box), while the
+        # backup, both package sets and apk's unpacking are beside the program directory.
+        self.publish({'format': 1, 'version': '2026.10.20', 'online': True})
+        asked = []
+
+        def usage(path):
+            asked.append(Path(path))
+            return types.SimpleNamespace(total=1 << 30, used=(1 << 30) - (150 << 20), free=150 << 20)
+
+        with patch.object(update, 'apk_version', lambda name: '2026.10.19.1-r1'), \
+                patch.object(update.shutil, 'disk_usage', usage), patch.object(update, 'backup') as backup:
+            self.assertEqual(update.install(self.root, True, self.pub), 1)
+        self.assertEqual(asked, [self.root.parent])
+        self.assertEqual(json.loads((self.root / 'state/update-status.json').read_text())['message'],
+                         '存储空间不足 200 MB，无法升级')
+        backup.assert_not_called()
 
     def openwrt_install(self, simulation_extra='', comes_up=(True,), old_published=True, installed='autoplay'):
         # Larger than fetch()'s default limit, as real packages are (37 MB; lab, 2026-10-19).

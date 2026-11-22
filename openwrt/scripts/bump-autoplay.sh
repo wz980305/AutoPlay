@@ -6,7 +6,9 @@
 set -eu
 version=${1:?Usage: bump-autoplay.sh VERSION autoplay-bundle-VERSION.tar}
 bundle=${2:?Usage: bump-autoplay.sh VERSION autoplay-bundle-VERSION.tar}
-echo "$version" | grep -Eq '^[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}(\.[0-9]+)?$' || { echo "version like 2026.10.12" >&2; exit 1; }
+# AutoPlay's own numbers (1.6.9), as release.sh takes them; DashPlay's dates (2026.10.12) fit too. Until 1.6.9 only
+# the dates did, and every AutoPlay version was refused (review 2026-11-22).
+echo "$version" | grep -Eq '^[0-9]+(\.[0-9]+)+$' || { echo "version like 1.6.9" >&2; exit 1; }
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 if [ -f "$here/../autoplay/Makefile" ]; then makefile="$here/../autoplay/Makefile"; else makefile="$here/../../openwrt/autoplay/Makefile"; fi
 tar -tf "$bundle" ./supervisor_openwrt.py >/dev/null 2>&1 || { echo "$bundle is not an AutoPlay program bundle" >&2; exit 1; }

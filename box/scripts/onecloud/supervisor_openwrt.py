@@ -210,6 +210,12 @@ def shared_lan_conflict(ip_addresses, lan_device, ruleset=None):
     return ""
 
 
+def has_tailscale(ip_addresses):
+    """`ip -4 -o addr show` lists a Tailscale interface: the only case shared_lan_conflict reads the ruleset for."""
+    return any(len(fields) >= 4 and fields[2] == "inet" and fields[1].startswith("tailscale")
+               for fields in (line.split() for line in (ip_addresses or "").splitlines()))
+
+
 def refresh_network_warning(lan_device, status, base_warning="", path=None):
     """Read live routes without changing them; publish only a warning for settings and LuCI. Written only when
     the text changes (the file is on tmpfs, but LuCI polls it; reliability_audit #11)."""
@@ -217,11 +223,15 @@ def refresh_network_warning(lan_device, status, base_warning="", path=None):
         addresses = subprocess.run(["ip", "-4", "-o", "addr", "show"], capture_output=True, text=True, timeout=5)
         if addresses.returncode:
             raise OSError("ip failed")
-        try:
-            nft = subprocess.run(["nft", "list", "ruleset"], capture_output=True, text=True, timeout=10)
-            ruleset = nft.stdout if nft.returncode == 0 else None
-        except (OSError, subprocess.SubprocessError):
-            ruleset = None
+        # The ruleset is read only for what shared_lan_conflict judges by it, a Tailscale interface: every 10 s the
+        # whole of fw4's rules was listed for nothing on a box without one (review 2026-11-22).
+        ruleset = None
+        if has_tailscale(addresses.stdout):
+            try:
+                nft = subprocess.run(["nft", "list", "ruleset"], capture_output=True, text=True, timeout=10)
+                ruleset = nft.stdout if nft.returncode == 0 else None
+            except (OSError, subprocess.SubprocessError):
+                ruleset = None
         warning = shared_lan_conflict(addresses.stdout, lan_device, ruleset)
     except (OSError, subprocess.SubprocessError):
         warning = "暂时无法检查特斯拉网段冲突：稍后会自动重试。"
@@ -308,12 +318,35 @@ def helper_reason(log_text, code=None):
     return f"helper-exit-{code}" if code is not None else "helper-exit"
 
 
-BRIDGE_REASON = re.compile(r"bt-bridge: reason=([a-z-]+)")
+BRIDGE_REASON = re.compile(r"bt-bridge: (?:reason=([a-z-]+)|(RFCOMM connected))")
+# The receiver's log is read every 10 s for these and grows for as long as the receiver runs: its end is enough.
+RECEIVER_LOG_TAIL = 256 << 10
 
 
 def bridge_reasons(log_text):
-    """The `bt-bridge: reason=<word>` lines of the receiver log, oldest first (linux/bt-bridge/bridge.py)."""
-    return BRIDGE_REASON.findall(log_text or "")
+    """The `bt-bridge: reason=<word>` lines of the receiver log, oldest first (linux/bt-bridge/bridge.py), since
+    the last invitation that got through (`RFCOMM connected`): an authenticated link ends whatever failed before
+    it. Until 1.6.9 two authentication failures stayed the newest reasons after the owner had added the iPhone
+    again and used CarPlay, and the page went back to "delete it and add it again" when that session ended
+    (review 2026-11-22)."""
+    reasons = []
+    for reason, connected in BRIDGE_REASON.findall(log_text or ""):
+        if connected:
+            reasons.clear()
+        else:
+            reasons.append(reason)
+    return reasons
+
+
+def log_tail(path, limit=RECEIVER_LOG_TAIL):
+    """The last `limit` bytes of a log as text, "" when it cannot be read."""
+    try:
+        with open(path, "rb") as log:
+            log.seek(0, os.SEEK_END)
+            log.seek(max(0, log.tell() - limit))
+            return log.read().decode(errors="replace")
+    except OSError:
+        return ""
 
 
 def pairing_lost(reasons, limit=2):
@@ -637,7 +670,7 @@ def main():
 
     bluetooth = BluetoothManager(platform, root, state, status, say)
     receiver = ReceiverManager(platform, status, say, viewer, command)
-    guard = {name: supervision.Guard(name, say) for name in ("tesla", "warning", "wifi", "certificate", "system", "phone", "update")}
+    guard = {name: supervision.Guard(name, say) for name in ("tesla", "plumbing", "warning", "wifi", "certificate", "system", "phone", "update")}
 
     def wifi_status(network, reason=None):
         if network:
@@ -676,6 +709,10 @@ def main():
                 status.set("system", current["state"], None if current.get("reason") == "hot" else current.get("reason"), **extra)
 
     def tesla_status():
+        # The alias address and the rules, put back when something took them (a network restart): OfflineChecks.keep.
+        back = guard["plumbing"](offline_checks.keep)
+        if back:
+            say("Tesla checks: put back the " + " and the ".join(back) + " (something had removed them)")
         offline_checks.refresh(status)
         if status.get("tesla_error"):
             status.set("tesla", "failed", "plumbing: " + str(status.get("tesla_error"))[:80])
@@ -686,11 +723,7 @@ def main():
 
     def phone_status():
         presence = state_files.load_json(state / "receiver/phone-presence.json", {}) or {}
-        try:
-            log = (RUN / "receiver.log").read_text(errors="replace")
-        except OSError:
-            log = ""
-        phone, reason = phone_state(presence, reasons=bridge_reasons(log)[-5:])
+        phone, reason = phone_state(presence, reasons=bridge_reasons(log_tail(RUN / "receiver.log"))[-5:])
         status.set("phone", phone, reason, active=presence.get("active"))
 
     try:
@@ -700,6 +733,8 @@ def main():
         # analysed after the power is cut.
         mirror = diagnostics.LogMirror(state / "logs", RUN, platform.boot_id())
         mirror.start(stopped)
+        # A child started again begins its log again: what the one before it wrote last (why it ended) is kept first.
+        platform.before_start = mirror.renew
 
         # Bluetooth at once, beside the Wi-Fi: the F50's controller takes ~10 s to come up, about as long as
         # its Wi-Fi. The board helper is always ours (the F50 is the only target).
