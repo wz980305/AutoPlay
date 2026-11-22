@@ -328,6 +328,8 @@ class CarPlayServer(val config: ServerConfig, private val configStore: ConfigSto
                     }.joinToString(",")
                 }
                 log.info("CarPlay resource ownership: {}", resources)
+                // 1.6.10: the call, Siri and navigation states of the same command (CarPlayModes).
+                CarPlayModes.appStates(params)?.let { log.info("CarPlay app states: {}", it) }
             }
             // duckAudio / unduckAudio (media_performance_audit #2): the iPhone wants the music under a prompt or Siri
             // lower, then back. The page plays both when music goes through it (after Siri; any car-music-off setup),

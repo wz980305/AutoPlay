@@ -115,6 +115,8 @@ sh -n openwrt/autoplay/files/autoplay.init && sh -n box/scripts/build-bundle.sh
 7. 页面跟上盒子的版本（1.6.7）：车机里开着 CarPlay 页面，在别处把盒子升级；回到车里，页面应在连上盒子后自己重新载入一次，诊断记录里有 `ev=12 newer=1`，其后的 `build=` 是新版本的；CarPlay 不应重新连接。
 8. 不带端口的地址（1.6.8、1.6.9，都还没有在车上试过）：车机浏览器打开 `https://<域名>/`，应出现投屏页、没有证书警告、地址栏里只有域名，画面、触摸、「AutoPlay」面板里改设置（会发 POST）都正常；`https://<域名>:18443/`（旧书签）照样能打开；`http://100.96.0.1/` 和 `https://100.96.0.1/` 都是 LuCI；「AutoPlay 设置 → 网络 → 在车机浏览器打开」给的是 `https://<域名>/` 和 `https://100.96.0.2/`。`supervisor.log` 里有 `CarPlay page on https://<name>/ (100.96.0.2:443 leads to 18443)`；盒子上 `nft list table ip autoplay_tesla_checks` 应有 `ip daddr 100.96.0.2 tcp dport 443 redirect to :18443` 一条，`uci show dhcp | grep <域名>` 是 `/<域名>/100.96.0.2`；车机连上热点后不应掉线（联网检测照旧）。
 
+9. 挂断电话后的声音（1.6.10）：打着电话连上 CarPlay、把声音切到车上、挂断，再在 CarPlay 里放 Apple Music。车机自带的 Apple Music 退出登录前后各试一次；每次下载诊断记录，看 `CarPlay app states` 里 `call=` 何时变成 `none`、其后 `CarPlay resource ownership` 里 iPhone 有没有拿走音频（resourceID=2,entity=1），再对照车机媒体栏当时的来源（`docs/AUDIO.md` 第七节）。
+
 技术路径 §八的问题：
 
 - iPhone 加入 F50 热点后，会不会走 F50 的 SIM 卡上网（流量费 + 挤占带宽）。

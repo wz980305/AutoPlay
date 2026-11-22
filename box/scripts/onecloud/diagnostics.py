@@ -32,7 +32,10 @@ KEEP = re.compile(r"viewer stats|Receive: (video|audio)|session (active|ended)|d
                   # 1.6.7: the only two lines the receiver has about sound (the iPhone taking or giving back the main
                   # audio, and asking for the music to be lowered under a prompt). The drive record of 2026-11-15 had
                   # nothing to say on the owner's "no sound after the Tesla's own Apple Music" (docs/AUDIO.md §六).
-                  r"|resource ownership|audio (un)?duckAudio")
+                  r"|resource ownership|audio (un)?duckAudio"
+                  # 1.6.10: the iPhone's call, Siri and navigation states, logged with the ownership (2026-11-22:
+                  # sound gone after a call, and the record could not say when the call had ended).
+                  r"|CarPlay app states")
 LINE_CHARS = 300
 # The page's own report is the longest line and its end is what explains a frozen picture (stalls, lag, revived,
 # location); cut at 300 it ended in the middle of "height" (1.4.3).
